@@ -96,7 +96,7 @@ validate_gatekeeper_context() {
   output_file="$(make_temp_file)"
 
   if [[ "$DRY_RUN" == true ]]; then
-    printf '+ %q %q %q %q\n' spctl -a -vv -t open "$artifact_path"
+    printf '+ %q %q %q %q %q %q\n' spctl -a -vv -t open "$artifact_path"
     return 0
   fi
 

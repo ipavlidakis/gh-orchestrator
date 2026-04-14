@@ -49,6 +49,8 @@ export GITHUB_TOKEN="github_pat_or_app_token"
 
 This reads `Config/Release.local.json` and writes artifacts under `build/release/<version>-<build>/`.
 
+If you are using the Codex desktop app, the project environment now exposes a `Release` action that prompts for the same `version` and `build` values and then runs the same script.
+
 ## Upload to GitHub Releases
 
 ```bash

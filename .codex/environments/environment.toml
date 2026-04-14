@@ -9,3 +9,9 @@ script = ""
 name = "Run"
 icon = "run"
 command = "./script/build_and_run.sh"
+
+[[actions]]
+name = "Release"
+icon = "tool"
+command = "./script/release_prompt.sh"
+platform = "darwin"

@@ -693,6 +693,26 @@
   - Added `App/Resources/Assets.xcassets/AppIcon.appiconset` with generated macOS icon sizes from the provided source image.
   - Added a matching `AccentColor.colorset` so the new asset catalog does not emit an extra missing-accent warning during normal builds.
 
+### T30: Codex Release Action
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T26`
+- goal: expose the release workflow through the Codex environment actions UI.
+- scope:
+  - add a small release wrapper script that prompts for `version` and `build`.
+  - wire `.codex/environments/environment.toml` to expose a dedicated Release action.
+  - keep the action pointed at the existing release script rather than duplicating release logic.
+- deliverables:
+  - interactive release wrapper script
+  - environment action entry
+  - verification notes
+- verification:
+  - 2026-04-15: `bash -n script/release_prompt.sh` and `bash -n script/release_dmg.sh` both succeeded.
+  - 2026-04-15: `printf '1.0.2\n102\n' | ./script/release_prompt.sh --dry-run --allow-dirty` succeeded, confirming the wrapper prompts for `version` / `build` and forwards the release flags correctly.
+- notes:
+  - Added a new Codex environment `Release` action in `.codex/environments/environment.toml` that points at `./script/release_prompt.sh`.
+  - The wrapper keeps `version` and `build` as prompt-time inputs while reusing the existing release pipeline and local JSON configuration.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
