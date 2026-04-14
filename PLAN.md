@@ -33,8 +33,8 @@
 ## Task Board
 
 ### T01: Repo Contract And Execution Bootstrap
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `none`
 - goal: create the repo-level collaboration and local run foundations so every later task has a stable workflow.
 - scope:
@@ -52,12 +52,15 @@
   - environment config
   - `AGENTS.md`
 - verification:
-  - `tuist generate` succeeds.
-  - `./script/build_and_run.sh --verify` completes once the app target exists.
+  - 2026-04-14: `tuist generate --no-open` succeeded.
+  - 2026-04-14: `./script/build_and_run.sh --verify` succeeded.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded.
+- notes:
+  - Generated workspace and project files are intentionally gitignored; rerun `tuist generate --no-open` after manifest changes.
 
 ### T02: Core Domain Models And Settings Schema
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T01`
 - goal: define stable data types used across parsing, aggregation, persistence, and UI.
 - scope:
@@ -72,11 +75,14 @@
   - core model files in the local package
   - settings validation helpers
 - verification:
-  - unit tests cover repository parsing, trimming, duplicate elimination policy, and polling interval clamping.
+  - 2026-04-14: `swift test --package-path Packages/GHOrchestratorCore` succeeded.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after integrating the package models.
+- notes:
+  - Duplicate repositories are collapsed case-insensitively while preserving the first user-entered spelling.
 
 ### T03: Process Runner And GH CLI Health Checks
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T01`, `T02`
 - goal: provide the low-level process execution surface and CLI availability/authentication checks.
 - scope:
@@ -92,7 +98,10 @@
   - process-running service code
   - health-check service code
 - verification:
-  - unit tests with mocked runner cover: binary missing, logged out, authenticated, and generic command failure.
+  - 2026-04-14: `swift test --package-path Packages/GHOrchestratorCore` succeeded with mocked coverage for missing binary, logged out, authenticated, and generic command failure.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after integrating the process and `gh` health services.
+- notes:
+  - `gh auth status` is scoped to `--hostname github.com` so health mapping matches the fixed authentication decision.
 
 ### T04: GraphQL PR Fetch And Snapshot Mapping
 - status: `todo`
