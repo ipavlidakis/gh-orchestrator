@@ -58,28 +58,40 @@ struct MenuBarPlaceholderView: View {
         case .idle, .loading:
             EmptyView()
 
+        case .notConfigured:
+            StateMessageView(
+                title: "GitHub not configured",
+                message: "This build is missing a GitHub OAuth client ID. Open Settings for configuration details."
+            )
+
+        case .signedOut:
+            StateMessageView(
+                title: "Sign in with GitHub",
+                message: "Open Settings and start the GitHub sign-in flow to load your pull requests."
+            )
+
+        case .authorizing:
+            StateMessageView(
+                title: "Finishing sign-in",
+                message: "Complete the GitHub sign-in flow in your browser. The dashboard will refresh automatically when the app receives the callback."
+            )
+
         case .empty:
             StateMessageView(
                 title: "No open pull requests",
                 message: "No matching pull requests were found in the configured repositories."
             )
 
-        case .ghMissing:
-            StateMessageView(
-                title: "Install GitHub CLI",
-                message: "Open Settings to see the exact setup commands before loading the dashboard."
-            )
-
-        case .loggedOut:
-            StateMessageView(
-                title: "Sign in with gh",
-                message: "Open Settings and run `gh auth login` to let the app fetch GitHub data."
-            )
-
         case .noRepositoriesConfigured:
             StateMessageView(
                 title: "Configure repositories",
                 message: "Add one or more `owner/repo` entries in Settings to populate the dashboard."
+            )
+
+        case .authFailure(let message):
+            StateMessageView(
+                title: "Authentication failed",
+                message: message
             )
 
         case .commandFailure(let message):

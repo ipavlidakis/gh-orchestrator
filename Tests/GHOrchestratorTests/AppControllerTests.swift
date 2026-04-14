@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Synchronization
 import XCTest
 @testable import GHOrchestrator
@@ -6,42 +7,41 @@ import GHOrchestratorCore
 
 @MainActor
 final class AppControllerTests: XCTestCase {
-    func testAppControllerSeedsAndPropagatesCliHealthIntoSettingsModel() async {
-        let dataSource = MutableDashboardDataSource(
-            health: .authenticated(username: "octocat")
-        )
+    func testAppControllerSeedsAndPropagatesAuthenticationStateIntoSettingsAndDashboardModels() async {
+        let authController = MutableAuthController(state: .authenticated(username: "octocat"))
+        let dataSource = MutableDashboardDataSource()
         let controller = AppController(
             settingsStore: configuredSettingsStore(),
             dataSource: dataSource,
+            authController: authController,
             sleeper: CancellingSleeper()
         )
 
         XCTAssertEqual(
-            controller.settingsModel.cliHealth,
+            controller.settingsModel.authenticationState,
+            .authenticated(username: "octocat")
+        )
+        XCTAssertEqual(
+            controller.dashboardModel.authenticationState,
             .authenticated(username: "octocat")
         )
 
-        await waitUntil("initial dashboard refresh") {
-            dataSource.currentLoadCount() == 1
+        authController.state = .signedOut
+
+        await waitUntil("settings model authentication state update") {
+            controller.settingsModel.authenticationState == .signedOut
         }
 
-        dataSource.setHealth(.loggedOut)
-        controller.dashboardModel.refresh()
-
-        await waitUntil("settings model cliHealth update") {
-            controller.settingsModel.cliHealth == .loggedOut
-        }
-
-        XCTAssertEqual(controller.dashboardModel.cliHealth, .loggedOut)
+        XCTAssertEqual(controller.dashboardModel.authenticationState, .signedOut)
+        XCTAssertEqual(controller.dashboardModel.state, .signedOut)
     }
 
     func testManualRefreshActionTriggersDashboardRefreshThroughSettingsModel() async {
-        let dataSource = MutableDashboardDataSource(
-            health: .authenticated(username: "octocat")
-        )
+        let dataSource = MutableDashboardDataSource()
         let controller = AppController(
             settingsStore: configuredSettingsStore(),
             dataSource: dataSource,
+            authController: MutableAuthController(state: .authenticated(username: "octocat")),
             sleeper: CancellingSleeper()
         )
 
@@ -58,12 +58,44 @@ final class AppControllerTests: XCTestCase {
         }
     }
 
+    func testSettingsAuthActionsDelegateToAuthController() {
+        let authController = MutableAuthController(state: .signedOut)
+        let controller = AppController(
+            settingsStore: configuredSettingsStore(),
+            dataSource: MutableDashboardDataSource(),
+            authController: authController,
+            sleeper: CancellingSleeper()
+        )
+
+        controller.settingsModel.requestSignIn()
+        controller.settingsModel.requestSignOut()
+
+        XCTAssertEqual(authController.signInCount, 1)
+        XCTAssertEqual(authController.signOutCount, 1)
+    }
+
+    func testAppControllerForwardsIncomingURLsToAuthController() {
+        let authController = MutableAuthController(state: .signedOut)
+        let controller = AppController(
+            settingsStore: configuredSettingsStore(),
+            dataSource: MutableDashboardDataSource(),
+            authController: authController,
+            sleeper: CancellingSleeper()
+        )
+        let callbackURL = URL(string: "ghorchestrator://oauth/callback?code=abc&state=123")!
+
+        controller.handleIncomingURL(callbackURL)
+
+        XCTAssertEqual(authController.handledURLs, [callbackURL])
+    }
+
     func testAppControllerAppliesDockIconPreferenceAtLaunchAndWhenSettingsChange() async {
         let store = configuredSettingsStore(hideDockIcon: true)
         let dockIconController = RecordingDockIconVisibilityController()
         let controller = AppController(
             settingsStore: store,
-            dataSource: MutableDashboardDataSource(health: .authenticated(username: "octocat")),
+            dataSource: MutableDashboardDataSource(),
+            authController: MutableAuthController(state: .authenticated(username: "octocat")),
             sleeper: CancellingSleeper(),
             dockIconVisibilityController: dockIconController
         )
@@ -124,45 +156,50 @@ final class AppControllerTests: XCTestCase {
 }
 
 private final class MutableDashboardDataSource: DashboardDataSource, @unchecked Sendable {
-    private struct State {
-        var health: GitHubCLIHealth
-        var loadCount = 0
-    }
-
-    private let state: Mutex<State>
+    private let loadCount = Mutex(0)
     private let sections: [RepositorySection]
 
-    init(
-        health: GitHubCLIHealth,
-        sections: [RepositorySection] = []
-    ) {
-        self.state = Mutex(State(health: health))
+    init(sections: [RepositorySection] = []) {
         self.sections = sections
     }
 
-    func setHealth(_ health: GitHubCLIHealth) {
-        state.withLock { currentState in
-            currentState.health = health
-        }
-    }
-
-    func cliHealth() -> GitHubCLIHealth {
-        state.withLock { currentState in
-            currentState.health
-        }
-    }
-
     func loadSections(for _: AppSettings) async throws -> [RepositorySection] {
-        state.withLock { currentState in
-            currentState.loadCount += 1
+        loadCount.withLock { count in
+            count += 1
         }
+
         return sections
     }
 
     func currentLoadCount() -> Int {
-        state.withLock { currentState in
-            currentState.loadCount
+        loadCount.withLock { count in
+            count
         }
+    }
+}
+
+@MainActor
+@Observable
+private final class MutableAuthController: GitHubAuthControlling {
+    var state: GitHubAuthenticationState
+    private(set) var handledURLs: [URL] = []
+    private(set) var signInCount = 0
+    private(set) var signOutCount = 0
+
+    init(state: GitHubAuthenticationState) {
+        self.state = state
+    }
+
+    func startSignIn() {
+        signInCount += 1
+    }
+
+    func handleCallbackURL(_ url: URL) {
+        handledURLs.append(url)
+    }
+
+    func signOut() {
+        signOutCount += 1
     }
 }
 

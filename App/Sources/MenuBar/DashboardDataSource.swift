@@ -1,30 +1,21 @@
 import GHOrchestratorCore
 
 protocol DashboardDataSource: Sendable {
-    func cliHealth() -> GitHubCLIHealth
     func loadSections(for settings: AppSettings) async throws -> [RepositorySection]
 }
 
 struct LiveDashboardDataSource: DashboardDataSource {
-    let healthClient: any GHCLIClient
     let snapshotService: any PullRequestSnapshotFetching
     let actionsService: any ActionsJobsEnriching
     let aggregationService: any RepositorySectionAggregating
 
     init(
-        healthClient: any GHCLIClient = ProcessGHCLIClient(),
-        snapshotService: any PullRequestSnapshotFetching = GHPullRequestSnapshotService(),
-        actionsService: any ActionsJobsEnriching = ActionsJobsEnrichmentService(),
+        client: any GitHubAPIClient = URLSessionGitHubAPIClient(),
         aggregationService: any RepositorySectionAggregating = RepositorySectionAggregationService()
     ) {
-        self.healthClient = healthClient
-        self.snapshotService = snapshotService
-        self.actionsService = actionsService
+        self.snapshotService = GHPullRequestSnapshotService(client: client)
+        self.actionsService = ActionsJobsEnrichmentService(client: client)
         self.aggregationService = aggregationService
-    }
-
-    func cliHealth() -> GitHubCLIHealth {
-        healthClient.health()
     }
 
     func loadSections(for settings: AppSettings) async throws -> [RepositorySection] {

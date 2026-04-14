@@ -34,11 +34,14 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             statusContexts: []
         )
 
-        let client = MockActionsGHCLIClient(outputsByEndpoint: [
-            "repos/cli/cli/actions/runs/321/jobs": .success(fixtureOutput(named: "completed_jobs"))
-        ])
-
-        let service = ActionsJobsEnrichmentService(client: client)
+        let service = makeActionsService(
+            results: [
+                .success(
+                    data: fixtureData(named: "completed_jobs", subdirectory: "ActionsJobs"),
+                    response: makeHTTPResponse(url: "https://api.github.com/repos/cli/cli/actions/runs/321/jobs", statusCode: 200)
+                )
+            ]
+        )
         let items = try await service.buildPullRequestItems(
             from: [RepositoryPullRequestSnapshot(repository: repository, pullRequests: [snapshot])]
         )
@@ -84,11 +87,14 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             statusContexts: []
         )
 
-        let client = MockActionsGHCLIClient(outputsByEndpoint: [
-            "repos/cli/cli/actions/runs/555/jobs": .success(fixtureOutput(named: "queued_jobs"))
-        ])
-
-        let service = ActionsJobsEnrichmentService(client: client)
+        let service = makeActionsService(
+            results: [
+                .success(
+                    data: fixtureData(named: "queued_jobs", subdirectory: "ActionsJobs"),
+                    response: makeHTTPResponse(url: "https://api.github.com/repos/cli/cli/actions/runs/555/jobs", statusCode: 200)
+                )
+            ]
+        )
         let items = try await service.buildPullRequestItems(
             from: [RepositoryPullRequestSnapshot(repository: repository, pullRequests: [snapshot])]
         )
@@ -145,11 +151,14 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             ]
         )
 
-        let client = MockActionsGHCLIClient(outputsByEndpoint: [
-            "repos/cli/cli/actions/runs/321/jobs": .success(fixtureOutput(named: "completed_jobs"))
-        ])
-
-        let service = ActionsJobsEnrichmentService(client: client)
+        let service = makeActionsService(
+            results: [
+                .success(
+                    data: fixtureData(named: "completed_jobs", subdirectory: "ActionsJobs"),
+                    response: makeHTTPResponse(url: "https://api.github.com/repos/cli/cli/actions/runs/321/jobs", statusCode: 200)
+                )
+            ]
+        )
         let items = try await service.buildPullRequestItems(
             from: [RepositoryPullRequestSnapshot(repository: repository, pullRequests: [snapshot])]
         )
@@ -200,17 +209,27 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             statusContexts: []
         )
 
-        let client = MockActionsGHCLIClient(outputsByEndpoint: [
-            "repos/cli/cli/actions/runs/321/jobs": .success(fixtureOutput(named: "completed_jobs"))
-        ])
-
+        let transport = StubGitHubHTTPTransport(
+            results: [
+                .success(
+                    data: fixtureData(named: "completed_jobs", subdirectory: "ActionsJobs"),
+                    response: makeHTTPResponse(url: "https://api.github.com/repos/cli/cli/actions/runs/321/jobs", statusCode: 200)
+                )
+            ]
+        )
+        let client = URLSessionGitHubAPIClient(
+            transport: transport,
+            credentialStore: StubGitHubCredentialStore()
+        )
         let service = ActionsJobsEnrichmentService(client: client)
+
         let items = try await service.buildPullRequestItems(
             from: [RepositoryPullRequestSnapshot(repository: repository, pullRequests: [snapshot])]
         )
+        let requests = await transport.recordedRequests()
 
         XCTAssertEqual(items.first?.workflowRuns.count, 1)
-        XCTAssertEqual(client.recordedEndpoints, ["repos/cli/cli/actions/runs/321/jobs"])
+        XCTAssertEqual(requests.map { $0.url?.absoluteString }, ["https://api.github.com/repos/cli/cli/actions/runs/321/jobs"])
     }
 
     func testActionsStepLinkBuilderFallsBackToJobURLWhenStepNumberIsInvalid() {
@@ -253,17 +272,14 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             statusContexts: []
         )
 
-        let client = MockActionsGHCLIClient(outputsByEndpoint: [
-            "repos/cli/cli/actions/runs/321/jobs": .success(
-                ProcessOutput(
-                    exitCode: 1,
-                    standardOutput: #"{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded for user ID 472467."}]}"#,
-                    standardError: "gh: API rate limit exceeded for user ID 472467."
+        let service = makeActionsService(
+            results: [
+                .success(
+                    data: Data(#"{"message":"API rate limit exceeded for user ID 472467."}"#.utf8),
+                    response: makeHTTPResponse(url: "https://api.github.com/repos/cli/cli/actions/runs/321/jobs", statusCode: 403)
                 )
-            )
-        ])
-
-        let service = ActionsJobsEnrichmentService(client: client)
+            ]
+        )
 
         do {
             _ = try await service.buildPullRequestItems(
@@ -281,65 +297,13 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
     }
 }
 
-private final class MockActionsGHCLIClient: GHCLIClient, @unchecked Sendable {
-    enum StubResult {
-        case success(ProcessOutput)
-        case failure(Error)
-    }
-
-    private let outputsByEndpoint: [String: StubResult]
-    private(set) var recordedEndpoints: [String] = []
-
-    init(outputsByEndpoint: [String: StubResult]) {
-        self.outputsByEndpoint = outputsByEndpoint
-    }
-
-    func run(arguments: [String]) throws -> ProcessOutput {
-        guard let endpoint = arguments.last else {
-            XCTFail("Missing endpoint in arguments: \(arguments)")
-            return ProcessOutput(exitCode: 1, standardOutput: "", standardError: "missing endpoint")
-        }
-
-        recordedEndpoints.append(endpoint)
-
-        guard let result = outputsByEndpoint[endpoint] else {
-            XCTFail("No stub registered for endpoint: \(endpoint)")
-            return ProcessOutput(exitCode: 1, standardOutput: "", standardError: "missing stub")
-        }
-
-        switch result {
-        case .success(let output):
-            return output
-        case .failure(let error):
-            throw error
-        }
-    }
-
-    func health() -> GitHubCLIHealth {
-        .authenticated(username: "octocat")
-    }
-}
-
-private func fixtureOutput(named name: String) -> ProcessOutput {
-    ProcessOutput(
-        exitCode: 0,
-        standardOutput: fixtureString(named: name),
-        standardError: ""
+private func makeActionsService(
+    results: [StubGitHubHTTPTransport.Result]
+) -> ActionsJobsEnrichmentService {
+    let client = URLSessionGitHubAPIClient(
+        transport: StubGitHubHTTPTransport(results: results),
+        credentialStore: StubGitHubCredentialStore()
     )
-}
 
-private func fixtureString(named name: String) -> String {
-    let directURL = Bundle.module.url(forResource: name, withExtension: "json")
-    let nestedURL = Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "ActionsJobs")
-    let fixturesURL = Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Fixtures/ActionsJobs")
-
-    guard let url = directURL ?? nestedURL ?? fixturesURL else {
-        fatalError("Missing fixture \(name).json")
-    }
-
-    guard let data = try? Data(contentsOf: url), let string = String(data: data, encoding: .utf8) else {
-        fatalError("Unable to load fixture \(name).json")
-    }
-
-    return string
+    return ActionsJobsEnrichmentService(client: client)
 }

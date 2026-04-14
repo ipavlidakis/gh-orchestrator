@@ -23,9 +23,9 @@ extension ActionsJobsEnrichmentError: LocalizedError {
 }
 
 public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
-    public let client: any GHCLIClient
+    public let client: any GitHubAPIClient
 
-    public init(client: any GHCLIClient = ProcessGHCLIClient()) {
+    public init(client: any GitHubAPIClient = URLSessionGitHubAPIClient()) {
         self.client = client
     }
 
@@ -36,7 +36,7 @@ public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
 
         for repositorySnapshot in snapshots {
             for snapshot in repositorySnapshot.pullRequests {
-                let workflowRuns = try workflowRuns(for: snapshot)
+                let workflowRuns = try await workflowRuns(for: snapshot)
                 let externalChecks = externalChecks(for: snapshot)
 
                 items.append(
@@ -70,23 +70,39 @@ public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
 }
 
 extension ActionsJobsEnrichmentService {
-    private func workflowRuns(for snapshot: PullRequestSnapshotItem) throws -> [WorkflowRunItem] {
+    private func workflowRuns(for snapshot: PullRequestSnapshotItem) async throws -> [WorkflowRunItem] {
         let references = deduplicatedWorkflowRunReferences(from: snapshot.checkRuns)
 
-        return try references.map { reference in
-            let jobs = try fetchJobs(
-                repository: snapshot.repository,
-                runID: reference.id
-            )
+        return try await withThrowingTaskGroup(of: (Int, WorkflowRunItem).self) { group in
+            for (index, reference) in references.enumerated() {
+                group.addTask {
+                    let jobs = try await fetchJobs(
+                        repository: snapshot.repository,
+                        runID: reference.id
+                    )
 
-            return WorkflowRunItem(
-                id: reference.id,
-                name: reference.workflowName ?? reference.checkName,
-                status: reference.status,
-                conclusion: reference.conclusion,
-                detailsURL: reference.url ?? reference.fallbackDetailsURL,
-                jobs: jobs
-            )
+                    return (
+                        index,
+                        WorkflowRunItem(
+                            id: reference.id,
+                            name: reference.workflowName ?? reference.checkName,
+                            status: reference.status,
+                            conclusion: reference.conclusion,
+                            detailsURL: reference.url ?? reference.fallbackDetailsURL,
+                            jobs: jobs
+                        )
+                    )
+                }
+            }
+
+            var results: [(Int, WorkflowRunItem)] = []
+            for try await result in group {
+                results.append(result)
+            }
+
+            return results
+                .sorted { $0.0 < $1.0 }
+                .map(\.1)
         }
     }
 
@@ -156,38 +172,10 @@ extension ActionsJobsEnrichmentService {
     private func fetchJobs(
         repository: ObservedRepository,
         runID: Int
-    ) throws -> [ActionJobItem] {
-        let output: ProcessOutput
-
+    ) async throws -> [ActionJobItem] {
         do {
-            output = try client.run(arguments: [
-                "api",
-                "--hostname",
-                "github.com",
-                "repos/\(repository.fullName)/actions/runs/\(runID)/jobs",
-            ])
-        } catch {
-            throw ActionsJobsEnrichmentError.workflowJobsRequestFailed(
-                repository: repository,
-                runID: runID,
-                message: error.localizedDescription
-            )
-        }
-
-        guard output.exitCode == 0 else {
-            throw ActionsJobsEnrichmentError.workflowJobsRequestFailed(
-                repository: repository,
-                runID: runID,
-                message: output.combinedOutput.isEmpty
-                    ? "gh api exited with code \(output.exitCode)"
-                    : GitHubAPIErrorMessageFormatter.normalize(output.combinedOutput)
-            )
-        }
-
-        do {
-            let response = try GitHubJSONCoders.restDecoder.decode(
-                ActionsJobsResponseDTO.self,
-                from: Data(output.standardOutput.utf8)
+            let response: ActionsJobsResponseDTO = try await client.get(
+                "/repos/\(repository.fullName)/actions/runs/\(runID)/jobs"
             )
 
             return response.jobs.map { job in
@@ -210,8 +198,23 @@ extension ActionsJobsEnrichmentService {
                     }
                 )
             }
+        } catch let error as GitHubAPIClientError {
+            switch error {
+            case .invalidResponse(let message):
+                throw ActionsJobsEnrichmentError.invalidWorkflowJobsResponse(
+                    repository: repository,
+                    runID: runID,
+                    message: message
+                )
+            default:
+                throw ActionsJobsEnrichmentError.workflowJobsRequestFailed(
+                    repository: repository,
+                    runID: runID,
+                    message: error.displayMessage
+                )
+            }
         } catch {
-            throw ActionsJobsEnrichmentError.invalidWorkflowJobsResponse(
+            throw ActionsJobsEnrichmentError.workflowJobsRequestFailed(
                 repository: repository,
                 runID: runID,
                 message: error.localizedDescription

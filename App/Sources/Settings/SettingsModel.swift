@@ -1,6 +1,6 @@
 import Foundation
-import Observation
 import GHOrchestratorCore
+import Observation
 
 @Observable
 final class SettingsModel {
@@ -8,6 +8,8 @@ final class SettingsModel {
 
     let store: SettingsStore
     private let manualRefreshAction: (() -> Void)?
+    private let signInAction: (() -> Void)?
+    private let signOutAction: (() -> Void)?
 
     var repositoryText: String {
         didSet {
@@ -25,7 +27,7 @@ final class SettingsModel {
 
     private(set) var pollingIntervalValidationMessage: String?
 
-    var cliHealth: GitHubCLIHealth
+    var authenticationState: GitHubAuthenticationState
     var hideDockIcon: Bool {
         didSet {
             syncHideDockIcon()
@@ -34,12 +36,16 @@ final class SettingsModel {
 
     init(
         store: SettingsStore = SettingsStore(),
-        cliHealth: GitHubCLIHealth = .missing,
-        manualRefreshAction: (() -> Void)? = nil
+        authenticationState: GitHubAuthenticationState = .signedOut,
+        manualRefreshAction: (() -> Void)? = nil,
+        signInAction: (() -> Void)? = nil,
+        signOutAction: (() -> Void)? = nil
     ) {
         self.store = store
-        self.cliHealth = cliHealth
+        self.authenticationState = authenticationState
         self.manualRefreshAction = manualRefreshAction
+        self.signInAction = signInAction
+        self.signOutAction = signOutAction
         self.repositoryText = Self.repositoryText(from: store.settings.observedRepositories)
         self.repositoryValidationMessages = []
         self.pollingIntervalText = String(store.settings.pollingIntervalSeconds)
@@ -51,21 +57,35 @@ final class SettingsModel {
         store.settings
     }
 
-    var cliHealthDescription: String {
-        switch cliHealth {
-        case .missing:
-            return "gh CLI is not installed"
-        case .loggedOut:
-            return "gh CLI is installed, but not logged in"
+    var authenticationDescription: String {
+        switch authenticationState {
+        case .notConfigured:
+            return "OAuth is not configured for this build"
+        case .signedOut:
+            return "Not signed in"
+        case .authorizing:
+            return "Waiting for GitHub sign-in to finish"
         case .authenticated(let username):
             return "Signed in as \(username)"
-        case .commandFailure(let message):
-            return "gh CLI health check failed: \(message)"
+        case .authFailure(let message):
+            return "Authentication failed: \(message)"
         }
     }
 
     var hasManualRefreshAction: Bool {
         manualRefreshAction != nil
+    }
+
+    var canStartSignIn: Bool {
+        signInAction != nil && authenticationState != .authorizing && authenticationState != .notConfigured
+    }
+
+    var canSignOut: Bool {
+        if case .authenticated = authenticationState {
+            return signOutAction != nil
+        }
+
+        return false
     }
 
     var observedRepositories: [ObservedRepository] {
@@ -86,6 +106,14 @@ final class SettingsModel {
 
     func requestManualRefresh() {
         manualRefreshAction?()
+    }
+
+    func requestSignIn() {
+        signInAction?()
+    }
+
+    func requestSignOut() {
+        signOutAction?()
     }
 
     @discardableResult

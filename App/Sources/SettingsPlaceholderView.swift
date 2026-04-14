@@ -15,7 +15,7 @@ private enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
         case .general:
             return "General"
         case .github:
-            return "GitHub CLI"
+            return "GitHub"
         case .repositories:
             return "Repositories"
         }
@@ -55,7 +55,7 @@ struct SettingsWindowView: View {
                 case .general:
                     GeneralSettingsPane(model: model)
                 case .github:
-                    GitHubCLISettingsPane(model: model)
+                    GitHubSettingsPane(model: model)
                 case .repositories:
                     RepositorySettingsPane(model: model)
                 }
@@ -182,19 +182,19 @@ private struct GeneralSettingsPane: View {
     }
 }
 
-private struct GitHubCLISettingsPane: View {
-    let model: SettingsModel
+private struct GitHubSettingsPane: View {
+    @Bindable var model: SettingsModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             SettingsGroup(title: "Connection") {
                 SettingsRow(title: "Status") {
-                    Text(model.cliHealthDescription)
+                    Text(model.authenticationDescription)
                         .foregroundStyle(statusColor)
                         .multilineTextAlignment(.trailing)
                 }
 
-                switch model.cliHealth {
+                switch model.authenticationState {
                 case .authenticated(let username):
                     Divider()
 
@@ -203,47 +203,91 @@ private struct GitHubCLISettingsPane: View {
                         bodyText: "Signed in as \(username).\nThe dashboard can fetch GitHub data with this account."
                     )
 
-                case .missing:
+                    Divider()
+
+                    SettingsRow(
+                        title: "Actions",
+                        subtitle: "Remove the stored GitHub session from this Mac."
+                    ) {
+                        Button("Sign Out") {
+                            model.requestSignOut()
+                        }
+                        .disabled(!model.canSignOut)
+                    }
+                case .notConfigured:
                     Divider()
 
                     SettingsTextBlock(
-                        title: "Setup",
-                        bodyText: "Install GitHub CLI, then sign in."
+                        title: "OAuth not configured",
+                        bodyText: "This build does not include a GitHub OAuth client ID. Set `GH_ORCHESTRATOR_GITHUB_CLIENT_ID` in the app environment or provide `GitHubOAuthClientID` in the app configuration before signing in."
+                    )
+                case .signedOut:
+                    Divider()
+
+                    SettingsTextBlock(
+                        title: "Sign in",
+                        bodyText: "Start GitHub sign-in in your browser, then return to GHOrchestrator when GitHub redirects back to the app."
                     )
 
                     Divider()
 
-                    CommandListView(commands: ["brew install gh", "gh auth login"])
-
-                case .loggedOut:
+                    SettingsRow(
+                        title: "Actions",
+                        subtitle: "Launch the GitHub OAuth flow in the default browser."
+                    ) {
+                        Button("Sign in with GitHub") {
+                            model.requestSignIn()
+                        }
+                        .disabled(!model.canStartSignIn)
+                    }
+                case .authorizing:
                     Divider()
 
                     SettingsTextBlock(
-                        title: "Setup",
-                        bodyText: "GitHub CLI is installed, but no active login was found."
+                        title: "Authorizing",
+                        bodyText: "Finish the GitHub sign-in flow in your browser. GHOrchestrator will update automatically when the OAuth callback returns."
                     )
 
                     Divider()
 
-                    CommandListView(commands: ["gh auth login"])
-
-                case .commandFailure(let message):
+                    SettingsRow(
+                        title: "Progress",
+                        subtitle: "Waiting for GitHub to redirect back to the app."
+                    ) {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                case .authFailure(let message):
                     Divider()
 
                     SettingsTextBlock(
-                        title: "Health check failed",
-                        bodyText: "\(message)\nIf needed, re-run `gh --version` and `gh auth status` from Terminal."
+                        title: "Authentication failed",
+                        bodyText: message
                     )
+
+                    Divider()
+
+                    SettingsRow(
+                        title: "Actions",
+                        subtitle: "Start a new GitHub sign-in attempt."
+                    ) {
+                        Button("Sign in with GitHub") {
+                            model.requestSignIn()
+                        }
+                        .disabled(!model.canStartSignIn)
+                    }
                 }
             }
         }
     }
 
     private var statusColor: Color {
-        switch model.cliHealth {
+        switch model.authenticationState {
         case .authenticated:
             return .green
-        case .missing, .loggedOut, .commandFailure:
+        case .authorizing:
+            return .accentColor
+        case .notConfigured, .signedOut, .authFailure:
             return .secondary
         }
     }

@@ -8,10 +8,12 @@ final class MenuBarDashboardModel {
     enum State: Equatable {
         case idle
         case loading
+        case notConfigured
+        case signedOut
+        case authorizing
         case empty
-        case ghMissing
-        case loggedOut
         case noRepositoriesConfigured
+        case authFailure(String)
         case commandFailure(String)
         case loaded([RepositorySection])
     }
@@ -34,7 +36,7 @@ final class MenuBarDashboardModel {
     private var stateBeforeLoading: State = .idle
 
     var state: State = .idle
-    var cliHealth: GitHubCLIHealth = .missing
+    var authenticationState: GitHubAuthenticationState
     var isMenuVisible = false
     var expandedChecksPullRequestIDs = Set<String>()
     var expandedCommentPullRequestIDs = Set<String>()
@@ -58,11 +60,13 @@ final class MenuBarDashboardModel {
     init(
         settingsStore: SettingsStore = SettingsStore(),
         dataSource: any DashboardDataSource = LiveDashboardDataSource(),
-        sleeper: any DashboardSleepProviding = TaskSleepProvider()
+        sleeper: any DashboardSleepProviding = TaskSleepProvider(),
+        authenticationState: GitHubAuthenticationState = .signedOut
     ) {
         self.settingsStore = settingsStore
         self.dataSource = dataSource
         self.sleeper = sleeper
+        self.authenticationState = authenticationState
 
         self.settingsStore.onSettingsChange = { [weak self] oldSettings, newSettings in
             Task { @MainActor in
@@ -103,12 +107,38 @@ final class MenuBarDashboardModel {
         }
     }
 
+    func setAuthenticationState(_ authenticationState: GitHubAuthenticationState) {
+        guard self.authenticationState != authenticationState else {
+            return
+        }
+
+        self.authenticationState = authenticationState
+        refresh()
+    }
+
     func refresh() {
         let settings = settingsStore.settings
 
         refreshTask?.cancel()
         refreshGeneration += 1
         let generation = refreshGeneration
+
+        switch authenticationState {
+        case .notConfigured:
+            state = .notConfigured
+            return
+        case .signedOut:
+            state = .signedOut
+            return
+        case .authorizing:
+            state = .authorizing
+            return
+        case .authFailure(let message):
+            state = .authFailure(message)
+            return
+        case .authenticated:
+            break
+        }
 
         guard !settings.observedRepositories.isEmpty else {
             state = .noRepositoriesConfigured
@@ -121,22 +151,6 @@ final class MenuBarDashboardModel {
             stateBeforeLoading = state
         }
         state = .loading
-        let health = dataSource.cliHealth()
-        cliHealth = health
-
-        switch health {
-        case .missing:
-            state = .ghMissing
-            return
-        case .loggedOut:
-            state = .loggedOut
-            return
-        case .commandFailure(let message):
-            state = .commandFailure(message)
-            return
-        case .authenticated:
-            break
-        }
 
         refreshTask = Task { [dataSource] in
             do {
@@ -196,15 +210,6 @@ final class MenuBarDashboardModel {
         expandedCommentPullRequestIDs.formIntersection(visibleIDs)
 
         state = sections.isEmpty ? .empty : .loaded(sections)
-    }
-
-    private func cancelRefresh(restorePreviousState: Bool = false) {
-        refreshTask?.cancel()
-        refreshTask = nil
-
-        if restorePreviousState, case .loading = state {
-            state = stateBeforeLoading
-        }
     }
 
     private func restartPolling() {

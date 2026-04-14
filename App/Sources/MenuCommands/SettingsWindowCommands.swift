@@ -31,6 +31,7 @@ struct SettingsWindowCommandHandler {
 }
 
 extension SettingsWindowCommandHandler {
+    @MainActor
     static func live(
         dashboardModel: MenuBarDashboardModel,
         openSettings: @escaping @MainActor () -> Void,

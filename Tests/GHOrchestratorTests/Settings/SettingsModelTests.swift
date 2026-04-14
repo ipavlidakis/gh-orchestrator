@@ -17,6 +17,32 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(refreshCount, 1)
     }
 
+    func testAuthenticationDescriptionAndActionsReflectState() {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        var signInCount = 0
+        var signOutCount = 0
+        let model = SettingsModel(
+            store: store,
+            authenticationState: .signedOut,
+            signInAction: { signInCount += 1 },
+            signOutAction: { signOutCount += 1 }
+        )
+
+        XCTAssertEqual(model.authenticationDescription, "Not signed in")
+        XCTAssertTrue(model.canStartSignIn)
+        XCTAssertFalse(model.canSignOut)
+
+        model.requestSignIn()
+        XCTAssertEqual(signInCount, 1)
+
+        model.authenticationState = .authenticated(username: "octocat")
+        XCTAssertEqual(model.authenticationDescription, "Signed in as octocat")
+        XCTAssertTrue(model.canSignOut)
+
+        model.requestSignOut()
+        XCTAssertEqual(signOutCount, 1)
+    }
+
     func testInvalidRepositoryInputSurfacesValidationMessagesAndPersistsValidEntries() {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         let model = SettingsModel(store: store)

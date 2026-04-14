@@ -407,8 +407,8 @@
   - Legacy `GHCLIClient`, `GHPullRequestSnapshotService`, and `ActionsJobsEnrichmentService` still exist for compatibility; `T16` should switch those services to `URLSessionGitHubAPIClient` and remove `gh`-specific request execution afterward.
 
 ### T16: Snapshot And Actions Pipeline Migration
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T15`
 - goal: preserve existing dashboard data behavior while removing `gh`.
 - scope:
@@ -418,11 +418,15 @@
 - deliverables:
   - migrated snapshot and Actions enrichment services
 - verification:
-  - pending
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after migrating the snapshot and Actions enrichment services from `gh` subprocess execution to the direct GitHub API client.
+- notes:
+  - `GHPullRequestSnapshotService` now posts the existing GraphQL query through `URLSessionGitHubAPIClient`, and `ActionsJobsEnrichmentService` now fetches workflow jobs from `/repos/{owner}/{repo}/actions/runs/{runID}/jobs` via authenticated REST.
+  - Fixture-backed service tests were converted to transport-backed tests so request bodies, endpoints, and preserved error messages are verified at the HTTP seam.
+  - App-side dashboard/auth coordination still lags behind the package migration: `DashboardDataSource` and UI health/state remain `gh`-oriented until `T17` and `T18` migrate them to `GitHubAuthenticationState` and the OAuth session flow.
 
 ### T17: App OAuth Flow And Shared State
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T14`, `T15`
 - goal: wire browser login into the app target.
 - scope:
@@ -434,11 +438,18 @@
   - app-target OAuth coordination and callback wiring
   - shared authenticated app state updates
 - verification:
-  - pending
+  - 2026-04-15: `tuist generate --no-open` succeeded after registering the OAuth callback URL scheme and wiring the app-side auth flow.
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded with the app-compatible auth/transport layer in place.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after adding the app-owned auth coordinator, callback URL handling, and auth-state propagation tests.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after the app OAuth wiring changes.
+- notes:
+  - Added an app-owned `GitHubAuthController` that reads source-build OAuth configuration, launches browser sign-in, validates callback state, exchanges the code through the core client, and supports sign-out.
+  - Callback delivery uses a macOS Apple-event URL handler plus app-local notification bridging instead of SwiftUI scene-level `onOpenURL`, which kept the menu-bar app compatible with hosted unit tests.
+  - `AppController` now shares auth state into both the dashboard and settings models and forwards callback URLs to the auth controller.
 
 ### T18: Settings And Menu-Bar UI Migration
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T17`
 - goal: replace all `gh`-centric UI states and copy.
 - scope:
@@ -448,11 +459,17 @@
 - deliverables:
   - migrated settings and menu-bar auth UI
 - verification:
-  - pending
+  - 2026-04-15: `tuist generate --no-open` succeeded after the app manifest and SwiftUI settings/menu scenes were updated for OAuth auth states.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded with updated dashboard, settings, and auth-controller tests.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after the auth-oriented settings and menu-bar UI migration.
+- notes:
+  - The Settings `GitHub` pane now shows sign-in/sign-out actions, connected-account state, source-build not-configured messaging, and auth-failure messaging without any `gh` CLI instructions.
+  - The menu-bar dashboard now uses `GitHubAuthenticationState`-driven empty/error states (`notConfigured`, `signedOut`, `authorizing`, `authFailure`) instead of `ghMissing` / `loggedOut`.
+  - `T19` should treat the new app-side auth and UI tests as the baseline and only add extra fixtures or mocks where coverage is still missing, rather than reworking the migrated state model again.
 
 ### T19: Verification And Fixture Refresh
-- status: `todo`
-- owner: `unassigned`
+- status: `in_progress`
+- owner: `codex-main`
 - depends_on: `T16`, `T17`, `T18`
 - goal: re-establish package/app verification under the new auth and transport model.
 - scope:

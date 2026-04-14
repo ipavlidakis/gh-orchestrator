@@ -255,6 +255,23 @@ public enum GitHubAPIClientError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
+extension GitHubAPIClientError {
+    var displayMessage: String {
+        switch self {
+        case .missingSession:
+            return "No GitHub session is available."
+        case .transportFailed(let message):
+            return message
+        case .requestFailed(_, let message):
+            return message
+        case .graphQLRequestFailed(let messages):
+            return messages.joined(separator: " ")
+        case .invalidResponse(let message):
+            return message
+        }
+    }
+}
+
 public protocol GitHubHTTPTransport: Sendable {
     func data(for request: URLRequest) async throws -> (Data, URLResponse)
 }

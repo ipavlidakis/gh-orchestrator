@@ -1,52 +1,106 @@
+import Foundation
+import GHOrchestratorCore
 import Observation
 
 @MainActor
 @Observable
 final class AppController {
     let settingsStore: SettingsStore
+    let authController: any GitHubAuthControlling
     let dashboardModel: MenuBarDashboardModel
     let settingsModel: SettingsModel
     private let dockIconVisibilityController: any DockIconVisibilityControlling
 
+    @ObservationIgnored
+    private var callbackObserver: NSObjectProtocol?
+
     init(
         settingsStore: SettingsStore = SettingsStore(),
-        dataSource: any DashboardDataSource = LiveDashboardDataSource(),
+        dataSource: (any DashboardDataSource)? = nil,
+        authController: (any GitHubAuthControlling)? = nil,
         sleeper: any DashboardSleepProviding = TaskSleepProvider(),
         dockIconVisibilityController: any DockIconVisibilityControlling = DockIconVisibilityController()
     ) {
         self.settingsStore = settingsStore
         self.dockIconVisibilityController = dockIconVisibilityController
+
+        let credentialStore = KeychainGitHubCredentialStore()
+        let apiClient = URLSessionGitHubAPIClient(credentialStore: credentialStore)
+        let resolvedAuthController = authController ?? GitHubAuthController(
+            apiClient: apiClient,
+            credentialStore: credentialStore
+        )
+        let resolvedDataSource = dataSource ?? LiveDashboardDataSource(client: apiClient)
+
+        self.authController = resolvedAuthController
         self.dashboardModel = MenuBarDashboardModel(
             settingsStore: settingsStore,
-            dataSource: dataSource,
-            sleeper: sleeper
+            dataSource: resolvedDataSource,
+            sleeper: sleeper,
+            authenticationState: resolvedAuthController.state
         )
         self.settingsModel = SettingsModel(
             store: settingsStore,
-            cliHealth: dashboardModel.cliHealth,
+            authenticationState: resolvedAuthController.state,
             manualRefreshAction: { [dashboardModel] in
                 dashboardModel.refresh()
+            },
+            signInAction: { [resolvedAuthController] in
+                resolvedAuthController.startSignIn()
+            },
+            signOutAction: { [resolvedAuthController] in
+                resolvedAuthController.signOut()
             }
         )
 
-        observeDashboardHealth()
+        GitHubAuthURLHandler.shared.installIfNeeded()
+        observeIncomingURLs()
+        observeAuthenticationState()
         observeDockIconPreference()
         Task { @MainActor [weak self] in
             self?.applyDockIconPreference()
         }
     }
 
-    private func observeDashboardHealth() {
+    func handleIncomingURL(_ url: URL) {
+        authController.handleCallbackURL(url)
+    }
+
+    deinit {
+        if let callbackObserver {
+            NotificationCenter.default.removeObserver(callbackObserver)
+        }
+    }
+
+    private func observeAuthenticationState() {
         withObservationTracking {
-            _ = dashboardModel.cliHealth
+            _ = authController.state
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else {
                     return
                 }
 
-                self.settingsModel.cliHealth = self.dashboardModel.cliHealth
-                self.observeDashboardHealth()
+                let state = self.authController.state
+                self.settingsModel.authenticationState = state
+                self.dashboardModel.setAuthenticationState(state)
+                self.observeAuthenticationState()
+            }
+        }
+    }
+
+    private func observeIncomingURLs() {
+        callbackObserver = NotificationCenter.default.addObserver(
+            forName: .gitHubOAuthCallbackReceived,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let url = notification.object as? URL else {
+                return
+            }
+
+            Task { @MainActor [weak self] in
+                self?.handleIncomingURL(url)
             }
         }
     }

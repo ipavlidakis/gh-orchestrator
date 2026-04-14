@@ -13,7 +13,17 @@ let project = Project(
             product: .app,
             bundleId: "com.ipavlidakis.GHOrchestrator",
             deploymentTargets: .macOS("15.0"),
-            infoPlist: .default,
+            infoPlist: .extendingDefault(with: [
+                "CFBundleURLTypes": .array([
+                    .dictionary([
+                        "CFBundleURLName": .string("GHOrchestrator OAuth Callback"),
+                        "CFBundleURLSchemes": .array([
+                            .string("ghorchestrator")
+                        ])
+                    ])
+                ]),
+                "GitHubOAuthClientID": .string("")
+            ]),
             sources: ["App/Sources/**"],
             resources: [],
             dependencies: [

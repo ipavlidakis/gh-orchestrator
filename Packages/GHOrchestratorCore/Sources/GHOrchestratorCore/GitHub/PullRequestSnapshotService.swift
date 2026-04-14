@@ -23,9 +23,9 @@ extension PullRequestSnapshotServiceError: LocalizedError {
 }
 
 public struct GHPullRequestSnapshotService: PullRequestSnapshotFetching {
-    public let client: any GHCLIClient
+    public let client: any GitHubAPIClient
 
-    public init(client: any GHCLIClient = ProcessGHCLIClient()) {
+    public init(client: any GitHubAPIClient = URLSessionGitHubAPIClient()) {
         self.client = client
     }
 
@@ -39,7 +39,7 @@ public struct GHPullRequestSnapshotService: PullRequestSnapshotFetching {
         return try await withThrowingTaskGroup(of: (Int, RepositoryPullRequestSnapshot).self) { group in
             for (index, repository) in repositories.enumerated() {
                 group.addTask {
-                    let snapshot = try self.fetchRepositorySnapshot(for: repository)
+                    let snapshot = try await self.fetchRepositorySnapshot(for: repository)
                     return (index, snapshot)
                 }
             }
@@ -124,50 +124,32 @@ extension GHPullRequestSnapshotService {
     }
     """
 
-    func fetchRepositorySnapshot(for repository: ObservedRepository) throws -> RepositoryPullRequestSnapshot {
-        let output: ProcessOutput
-
+    func fetchRepositorySnapshot(for repository: ObservedRepository) async throws -> RepositoryPullRequestSnapshot {
         do {
-            output = try client.run(arguments: [
-                "api",
-                "graphql",
-                "--hostname",
-                "github.com",
-                "-f",
-                "query=\(Self.searchQuery)",
-                "-f",
-                "searchQuery=\(searchQuery(for: repository))",
-            ])
-        } catch {
-            throw PullRequestSnapshotServiceError.repositoryRequestFailed(
-                repository: repository,
-                message: error.localizedDescription
+            let response: PullRequestSearchResponseDTO.SearchDataDTO = try await client.graphQL(
+                query: Self.searchQuery,
+                variables: SearchQueryVariables(searchQuery: searchQuery(for: repository))
             )
-        }
-
-        guard output.exitCode == 0 else {
-            throw PullRequestSnapshotServiceError.repositoryRequestFailed(
-                repository: repository,
-                message: output.combinedOutput.isEmpty
-                    ? "gh api graphql exited with code \(output.exitCode)"
-                    : GitHubAPIErrorMessageFormatter.normalize(output.combinedOutput)
-            )
-        }
-
-        let payload = Data(output.standardOutput.utf8)
-
-        do {
-            let decoder = GitHubJSONCoders.graphQLDecoder
-            let response = try decoder.decode(PullRequestSearchResponseDTO.self, from: payload)
-            let items = try response.data.search.nodes.compactMap { node in
+            let items = try response.search.nodes.compactMap { node in
                 try mapNode(node, repository: repository)
             }
 
             return RepositoryPullRequestSnapshot(repository: repository, pullRequests: items)
-        } catch let error as PullRequestSnapshotServiceError {
-            throw error
+        } catch let error as GitHubAPIClientError {
+            switch error {
+            case .invalidResponse(let message):
+                throw PullRequestSnapshotServiceError.invalidResponse(
+                    repository: repository,
+                    message: message
+                )
+            default:
+                throw PullRequestSnapshotServiceError.repositoryRequestFailed(
+                    repository: repository,
+                    message: error.displayMessage
+                )
+            }
         } catch {
-            throw PullRequestSnapshotServiceError.invalidResponse(
+            throw PullRequestSnapshotServiceError.repositoryRequestFailed(
                 repository: repository,
                 message: error.localizedDescription
             )
@@ -326,4 +308,8 @@ extension GHPullRequestSnapshotService {
             workflowName: workflowRun.workflow?.name
         )
     }
+}
+
+private struct SearchQueryVariables: Encodable, Sendable {
+    let searchQuery: String
 }
