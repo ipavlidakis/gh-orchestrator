@@ -4,6 +4,7 @@ import SwiftUI
 
 struct MenuBarPlaceholderView: View {
     let model: MenuBarDashboardModel
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -110,10 +111,6 @@ struct MenuBarPlaceholderView: View {
             }
             .frame(maxHeight: 520)
         }
-    }
-
-    private func openSettings() {
-        NSApplication.shared.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
     private func openURL(_ url: URL) {

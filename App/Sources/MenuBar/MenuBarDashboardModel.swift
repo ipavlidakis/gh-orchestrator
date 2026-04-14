@@ -64,13 +64,16 @@ final class MenuBarDashboardModel {
         self.dataSource = dataSource
         self.sleeper = sleeper
 
-        self.settingsStore.onSettingsChange = { [weak self] in
+        self.settingsStore.onSettingsChange = { [weak self] oldSettings, newSettings in
             Task { @MainActor in
                 guard let self else {
                     return
                 }
 
-                if !self.isMenuVisible {
+                let repositoriesChanged = oldSettings.observedRepositories != newSettings.observedRepositories
+                let pollingIntervalChanged = oldSettings.pollingIntervalSeconds != newSettings.pollingIntervalSeconds
+
+                if !self.isMenuVisible, (repositoriesChanged || pollingIntervalChanged) {
                     self.refresh()
                     self.restartPolling()
                 }

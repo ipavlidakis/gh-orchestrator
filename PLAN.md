@@ -226,7 +226,7 @@
   - Opening the menu stops future background polling but does not cancel an already-running hidden refresh.
 
 ### T09: Menu Bar UI
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T08`
 - goal: implement the menu bar dashboard experience.
@@ -249,13 +249,14 @@
   - 2026-04-14: `swift test --package-path Packages/GHOrchestratorCore` succeeded after the menu-bar step-row changes.
   - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData -only-testing:GHOrchestratorTests/AppControllerTests -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/SettingsModelTests -only-testing:GHOrchestratorTests/SettingsStoreTests` succeeded.
   - 2026-04-14: `./script/build_and_run.sh --verify` succeeded.
+  - 2026-04-14: user manually confirmed the menu-bar presentation, disclosure affordances, and collapsed-by-default Actions step behavior after reviewing screenshots.
 - notes:
   - The placeholder menu content has been replaced with a real repository/PR dashboard view on top of `MenuBarDashboardModel`.
   - Metadata bubbles are rendered horizontally.
   - The checks and unresolved-comment bubbles own their own expansion states and show an expanded/collapsed indicator.
   - Refresh shows a header `ProgressView` in place of the refresh button; the list keeps its previous content while loading.
   - Expanded Actions content now renders workflow rows, job rows, and nested step rows with browser links derived from the job step URLs.
-  - Manual visual verification of the menu-bar presentation is still pending because this session does not have macOS assistive access to open and inspect the popup automatically.
+  - Manual visual verification was completed by the user because this session does not have macOS assistive access to open and inspect the popup automatically.
 
 ### T10: Settings Window UI
 - status: `done`
@@ -301,6 +302,35 @@
   - all unit tests pass.
   - app builds successfully.
 
+### T12: Settings Window Enhancements
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `T10`
+- goal: add the requested settings-window controls and align the preferences UI more closely with macOS settings conventions.
+- scope:
+  - add a persisted setting that lets people hide or show the Dock icon while the app is running.
+  - apply the Dock icon preference at launch and when the setting changes.
+  - add a Quit action to the Settings window.
+  - update the Settings UI to use more native macOS settings patterns and components where practical.
+- implementation notes:
+  - use AppKit activation policy changes from the app target, not the local package.
+  - keep the Dock icon preference clearly explained because hiding the Dock icon changes how people reopen Settings and access the app menu.
+  - prefer `Form`, `Section`, `LabeledContent`, and standard controls over custom card-like settings layout.
+- deliverables:
+  - persisted Dock icon preference
+  - runtime Dock icon visibility controller
+  - updated Settings window UI
+- verification:
+  - 2026-04-14: `swift test --package-path Packages/GHOrchestratorCore` succeeded after adding the persisted Dock icon preference to `AppSettings`.
+  - 2026-04-14: `tuist generate --no-open` succeeded after adding the Dock icon visibility controller and settings-window updates.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData -only-testing:GHOrchestratorTests/AppControllerTests -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/SettingsModelTests -only-testing:GHOrchestratorTests/SettingsStoreTests` succeeded.
+  - 2026-04-14: `./script/build_and_run.sh --verify` succeeded.
+- notes:
+  - The settings window now uses a native `Form`/`Section` structure instead of custom card-like grouping.
+  - Dock icon visibility is applied from the app target through `NSApplication.setActivationPolicy(_:)`, with changes triggered from persisted settings.
+  - Changing the Dock icon preference no longer triggers an unnecessary dashboard refresh.
+  - Manual visual confirmation of the Dock tile appearing/disappearing is still pending because this session does not have a reliable desktop automation path for toggling the setting and observing the Dock UI directly.
+
 ## Suggested Parallel Pickup Order
 - Agent 1: `T01`
 - Agent 2: `T02` after `T01` lands, then `T07`
@@ -328,3 +358,4 @@
 - 2026-04-14: automatic refresh while the menu window is visible was disabled; polling now runs only while the window is hidden, and opening the menu must not trigger a reload.
 - 2026-04-14: tapping the unresolved-comments badge should expand a list of unresolved review comments showing author, file path, and comment text, with comment rows linking to the browser.
 - 2026-04-14: opening the menu must preserve an already-running hidden refresh rather than cancelling it, and loading feedback belongs in the header instead of replacing list content.
+- 2026-04-14: the Settings window now needs a persisted Dock icon visibility preference, a Quit action, and more native macOS settings presentation.

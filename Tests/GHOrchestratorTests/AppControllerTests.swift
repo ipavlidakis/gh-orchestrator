@@ -58,12 +58,35 @@ final class AppControllerTests: XCTestCase {
         }
     }
 
-    private func configuredSettingsStore() -> SettingsStore {
+    func testAppControllerAppliesDockIconPreferenceAtLaunchAndWhenSettingsChange() async {
+        let store = configuredSettingsStore(hideDockIcon: true)
+        let dockIconController = RecordingDockIconVisibilityController()
+        let controller = AppController(
+            settingsStore: store,
+            dataSource: MutableDashboardDataSource(health: .authenticated(username: "octocat")),
+            sleeper: CancellingSleeper(),
+            dockIconVisibilityController: dockIconController
+        )
+
+        await waitUntil("initial dock icon preference application") {
+            dockIconController.appliedValues == [true]
+        }
+        XCTAssertTrue(controller.settingsModel.hideDockIcon)
+
+        controller.settingsModel.hideDockIcon = false
+
+        await waitUntil("dock icon preference update") {
+            dockIconController.appliedValues == [true, false]
+        }
+    }
+
+    private func configuredSettingsStore(hideDockIcon: Bool = false) -> SettingsStore {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings = AppSettings(
             observedRepositories: [
                 ObservedRepository(owner: "openai", name: "codex")
-            ]
+            ],
+            hideDockIcon: hideDockIcon
         )
         return store
     }
@@ -146,5 +169,14 @@ private final class MutableDashboardDataSource: DashboardDataSource, @unchecked 
 private struct CancellingSleeper: DashboardSleepProviding {
     func sleep(for _: Duration) async throws {
         throw CancellationError()
+    }
+}
+
+@MainActor
+private final class RecordingDockIconVisibilityController: DockIconVisibilityControlling {
+    private(set) var appliedValues: [Bool] = []
+
+    func apply(hideDockIcon: Bool) {
+        appliedValues.append(hideDockIcon)
     }
 }

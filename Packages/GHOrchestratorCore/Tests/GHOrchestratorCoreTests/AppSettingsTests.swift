@@ -6,6 +6,7 @@ final class AppSettingsTests: XCTestCase {
         let settings = AppSettings()
 
         XCTAssertEqual(settings.pollingIntervalSeconds, AppSettings.defaultPollingIntervalSeconds)
+        XCTAssertEqual(settings.hideDockIcon, AppSettings.defaultHideDockIcon)
     }
 
     func testPollingIntervalIsClampedToAllowedRange() {
@@ -27,5 +28,11 @@ final class AppSettingsTests: XCTestCase {
             settings.observedRepositories.map(\.fullName),
             ["openai/codex", "swiftlang/swift"]
         )
+    }
+
+    func testHideDockIconPreferenceRoundTripsThroughInitializer() {
+        let settings = AppSettings(hideDockIcon: true)
+
+        XCTAssertTrue(settings.hideDockIcon)
     }
 }

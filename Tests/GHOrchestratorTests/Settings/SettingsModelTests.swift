@@ -52,6 +52,22 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(reloadedStore.settings.pollingIntervalSeconds, 15)
     }
 
+    func testHideDockIconPersistenceWritesImmediately() {
+        let storageURL = makeIsolatedStorageURL()
+        let store = SettingsStore(storageURL: storageURL)
+        let model = SettingsModel(store: store)
+
+        XCTAssertFalse(model.hideDockIcon)
+
+        model.hideDockIcon = true
+
+        XCTAssertTrue(store.settings.hideDockIcon)
+
+        let reloadedStore = SettingsStore(storageURL: storageURL)
+
+        XCTAssertTrue(reloadedStore.settings.hideDockIcon)
+    }
+
     private func makeIsolatedStorageURL() -> URL {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("GHOrchestrator.SettingsModelTests.\(UUID().uuidString)", isDirectory: true)

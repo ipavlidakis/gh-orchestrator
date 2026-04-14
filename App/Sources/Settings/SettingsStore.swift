@@ -14,12 +14,12 @@ final class SettingsStore {
     private let storageURL: URL
 
     @ObservationIgnored
-    var onSettingsChange: (() -> Void)?
+    var onSettingsChange: ((AppSettings, AppSettings) -> Void)?
 
     var settings: AppSettings {
         didSet {
             persist(settings)
-            onSettingsChange?()
+            onSettingsChange?(oldValue, settings)
         }
     }
 

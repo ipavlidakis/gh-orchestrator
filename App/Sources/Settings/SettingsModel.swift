@@ -26,6 +26,11 @@ final class SettingsModel {
     private(set) var pollingIntervalValidationMessage: String?
 
     var cliHealth: GitHubCLIHealth
+    var hideDockIcon: Bool {
+        didSet {
+            syncHideDockIcon()
+        }
+    }
 
     init(
         store: SettingsStore = SettingsStore(),
@@ -39,6 +44,7 @@ final class SettingsModel {
         self.repositoryValidationMessages = []
         self.pollingIntervalText = String(store.settings.pollingIntervalSeconds)
         self.pollingIntervalValidationMessage = nil
+        self.hideDockIcon = store.settings.hideDockIcon
     }
 
     var settings: AppSettings {
@@ -71,6 +77,7 @@ final class SettingsModel {
         repositoryValidationMessages = []
         pollingIntervalText = String(store.settings.pollingIntervalSeconds)
         pollingIntervalValidationMessage = nil
+        hideDockIcon = store.settings.hideDockIcon
     }
 
     func requestManualRefresh() {
@@ -111,6 +118,12 @@ final class SettingsModel {
 
         if store.settings.pollingIntervalSeconds != clamped {
             store.settings.pollingIntervalSeconds = clamped
+        }
+    }
+
+    private func syncHideDockIcon() {
+        if store.settings.hideDockIcon != hideDockIcon {
+            store.settings.hideDockIcon = hideDockIcon
         }
     }
 

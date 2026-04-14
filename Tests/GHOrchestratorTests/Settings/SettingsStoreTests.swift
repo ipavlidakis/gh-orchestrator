@@ -10,7 +10,8 @@ final class SettingsStoreTests: XCTestCase {
                 ObservedRepository(owner: "openai", name: "codex"),
                 ObservedRepository(owner: "swiftlang", name: "swift")
             ],
-            pollingIntervalSeconds: 120
+            pollingIntervalSeconds: 120,
+            hideDockIcon: true
         )
 
         let writer = SettingsStore(storageURL: storageURL)
