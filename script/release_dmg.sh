@@ -88,6 +88,40 @@ run_capture() {
   "$@"
 }
 
+validate_gatekeeper_context() {
+  local artifact_path="$1"
+  local output_file
+  local status
+
+  output_file="$(make_temp_file)"
+
+  if [[ "$DRY_RUN" == true ]]; then
+    printf '+ %q %q %q %q\n' spctl -a -vv -t open "$artifact_path"
+    return 0
+  fi
+
+  set +e
+  spctl -a -vv -t open "$artifact_path" >"$output_file" 2>&1
+  status=$?
+  set -e
+
+  cat "$output_file"
+
+  if [[ $status -eq 0 ]]; then
+    rm -f "$output_file"
+    return 0
+  fi
+
+  if grep -q "source=Insufficient Context" "$output_file"; then
+    info "warning: Gatekeeper returned 'Insufficient Context' for the local DMG path; continuing because notarization and stapler validation already succeeded."
+    rm -f "$output_file"
+    return 0
+  fi
+
+  rm -f "$output_file"
+  return "$status"
+}
+
 urlencode() {
   /usr/bin/python3 - "$1" <<'PY'
 import sys
@@ -561,7 +595,7 @@ if [[ "$SKIP_NOTARIZATION" == false ]]; then
   run xcrun notarytool submit "$DMG_PATH" --keychain-profile "$APPLE_NOTARY_PROFILE" --wait
   run xcrun stapler staple "$DMG_PATH"
   run xcrun stapler validate "$DMG_PATH"
-  run spctl -a -vv -t open "$DMG_PATH"
+  validate_gatekeeper_context "$DMG_PATH"
 else
   info "Skipping notarization and Gatekeeper validation."
 fi

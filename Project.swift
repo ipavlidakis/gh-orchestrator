@@ -51,12 +51,13 @@ let project = Project(
                 "GitHubOAuthClientID": .string(gitHubOAuthClientID)
             ]),
             sources: ["App/Sources/**"],
-            resources: [],
+            resources: ["App/Resources/**"],
             dependencies: [
                 .package(product: "GHOrchestratorCore")
             ],
             settings: .settings(
                 base: [
+                    "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
                     "CURRENT_PROJECT_VERSION": "1",
                     "MARKETING_VERSION": "1.0.0"
                 ],

@@ -673,6 +673,26 @@
   - `script/build_and_run.sh` now resolves the workspace/project and proactively kills stale `xcodebuild` trees for the same workspace before starting a new build.
   - Once the runner stall was removed, the remaining real failure was a normal compile-time regression: two app-target test doubles were missing the new retry methods introduced by `T27`; those conformances are now updated.
 
+### T29: App Icon Integration
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T01`
+- goal: add a real macOS app icon asset so built binaries and release artifacts use the provided branding.
+- scope:
+  - add an asset catalog under the app target resources.
+  - generate the required `AppIcon.appiconset` PNG sizes from the provided source image.
+  - wire the app target build settings to compile the `AppIcon` asset for macOS.
+- deliverables:
+  - asset catalog resources
+  - app target resource/build-setting update
+  - verification notes
+- verification:
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding the asset catalog resources and `AppIcon` build setting.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after generating the `AppIcon.appiconset` PNGs from `/Users/ipavlidakis/Downloads/icon.png`.
+- notes:
+  - Added `App/Resources/Assets.xcassets/AppIcon.appiconset` with generated macOS icon sizes from the provided source image.
+  - Added a matching `AccentColor.colorset` so the new asset catalog does not emit an extra missing-accent warning during normal builds.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
