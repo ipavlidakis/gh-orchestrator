@@ -8,8 +8,9 @@
 
 ## Product Summary
 - Build a Tuist-managed macOS app named `GHOrchestrator`.
-- Use only Swift, Tuist, SwiftPM, Apple frameworks, and the installed `gh` CLI.
+- Use only Swift, Tuist, SwiftPM, Apple frameworks, and direct GitHub HTTP APIs; do not depend on the `gh` CLI.
 - Ship a menu-bar-first app using `MenuBarExtra` plus a dedicated Settings window.
+- Authenticate the user via browser-based GitHub login launched from the app.
 - Observe only user-configured repositories, then list the logged-in user's open PRs in those repositories.
 - Group PRs by repository and sort repositories and PRs by most recent `updatedAt`.
 - Show PR review state, checks state, unresolved review-thread count, and expandable Actions jobs plus steps.
@@ -17,18 +18,22 @@
 
 ## Fixed Decisions
 - Platform target: macOS 15+.
-- Authentication source: current active `gh` account on `github.com`.
+- Authentication source: GitHub OAuth App login on `github.com` using browser redirect plus PKCE.
+- Redirect URI: `ghorchestrator://oauth/callback`.
+- Access tokens are stored in Keychain, not in `AppSettings`.
+- GitHub scope for v1: `repo`.
 - Persistence: app settings live in an Application Support file (`plist` or `json`), not `UserDefaults`; no database or disk cache.
 - Empty repository list means the app is not configured yet. It does not fall back to all repositories.
 - Polling interval is configurable, defaults to `60` seconds, and must be clamped to `15...900`.
 - Step links use `job.html_url#step:<stepNumber>:1` and fall back to `job.html_url`.
+- Source builds without OAuth credentials show a not-configured state instead of crashing.
 - No third-party libraries or GitHub SDKs.
 
 ## Architecture Outline
 - App target: SwiftUI macOS app with `MenuBarExtra` and `Settings` scenes.
-- Local package: core domain models, `gh` process client, mappers, fixtures, and tests.
-- App layer owns UI state, settings binding, polling lifecycle, and URL opening.
-- Core layer owns process execution, CLI health checks, GraphQL/REST parsing, PR aggregation, and validation helpers.
+- Local package: core domain models, OAuth request building, token exchange, Keychain credential storage, GitHub GraphQL/REST transport, mappers, fixtures, and tests.
+- App layer owns UI state, settings binding, polling lifecycle, browser-login launch, OAuth callback handling, and URL opening.
+- Core layer owns auth request building, token exchange, credential storage, GraphQL/REST parsing, PR aggregation, and validation helpers.
 
 ## Active Feature Plans
 - [PLAN-menu-bar.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-menu-bar.md): settings-window app menu commands and top-level menu pruning.
@@ -106,6 +111,7 @@
   - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after integrating the process and `gh` health services.
 - notes:
   - `gh auth status` is scoped to `--hostname github.com` so health mapping matches the fixed authentication decision.
+  - This task is retained as historical `gh`-based implementation work and is superseded for future auth and transport work by `T14` and `T15`.
 
 ### T04: GraphQL PR Fetch And Snapshot Mapping
 - status: `done`
@@ -133,6 +139,7 @@
 - notes:
   - Snapshot inputs now preserve raw `CheckRun` and `StatusContext` data so T05 can enrich Actions jobs without re-fetching PR basics.
   - Unresolved review comment details are now captured from GraphQL with a bounded nested comment query to stay under GitHub's node-limit constraints.
+  - This task is retained as historical `gh`-based implementation work and is superseded for future GraphQL transport work by `T16`.
 
 ### T05: Actions Jobs And Step Expansion Pipeline
 - status: `done`
@@ -159,6 +166,7 @@
   - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after integrating the enrichment layer.
 - notes:
   - Actions-backed checks are grouped by workflow run using `checkSuite.workflowRun`, while non-Actions check runs and status contexts remain flat external checks.
+  - This task is retained as historical `gh`-based implementation work and is superseded for future REST transport work by `T16`.
 
 ### T06: Repository Section Aggregation And Sorting
 - status: `done`
@@ -284,6 +292,7 @@
 - notes:
   - The settings window UI is implemented and verified against the Application Support-backed settings model/store layer.
   - The manual refresh hook and CLI health display are now wired through the shared app controller/dashboard model.
+  - This task is retained as historical `gh`-centric settings work and is superseded for future auth UI work by `T18`.
 
 ### T11: Fixtures, Tests, And Verification Pass
 - status: `done`
@@ -342,7 +351,118 @@
   - Changing the Dock icon preference no longer triggers an unnecessary dashboard refresh.
   - Repository addition now uses a native `NSAlert` with a single-line `owner/name` text field instead of a delayed SwiftUI sheet presentation.
 
+### T13: OAuth Pivot And Repo Contract Alignment
+- status: `todo`
+- owner: `unassigned`
+- depends_on: `none`
+- goal: align plan, repo contract, and top-level architecture with the OAuth direction.
+- scope:
+  - update `PLAN.md` fixed decisions and decision log.
+  - update `AGENTS.md` to remove `gh` CLI as a repo requirement and replace it with OAuth/direct API guidance.
+  - mark old `gh`-specific tasks as superseded in notes where helpful, without deleting completion history.
+- deliverables:
+  - updated planning docs only
+- verification:
+  - pending
+- notes:
+  - This task is documentation-only and should not claim implementation work for the runtime OAuth migration.
+
+### T14: Core OAuth And Credential Storage
+- status: `todo`
+- owner: `unassigned`
+- depends_on: `T13`
+- goal: add the auth primitives needed for browser login.
+- scope:
+  - add `OAuthAppConfiguration`, PKCE helpers, callback parsing, token exchange DTOs, session models, and a `GitHubCredentialStore` abstraction with Keychain implementation.
+  - add auth state modeling to replace `GitHubCLIHealth`.
+- implementation notes:
+  - access tokens and resolved user identity live in Keychain.
+  - no tokens in `settings.json`.
+- deliverables:
+  - core OAuth models and helpers
+  - credential storage abstraction and Keychain-backed implementation
+- verification:
+  - pending
+
+### T15: Direct GitHub API Transport
+- status: `todo`
+- owner: `unassigned`
+- depends_on: `T14`
+- goal: replace the CLI transport abstraction with authenticated HTTP transport.
+- scope:
+  - replace `GHCLIClient` with a GitHub API transport abstraction backed by `URLSession`.
+  - add GraphQL and REST request helpers, bearer auth headers, and normalized HTTP/API error formatting.
+  - support `GET /user` for connected-account resolution.
+- deliverables:
+  - authenticated API transport layer
+  - direct GitHub GraphQL and REST request helpers
+- verification:
+  - pending
+
+### T16: Snapshot And Actions Pipeline Migration
+- status: `todo`
+- owner: `unassigned`
+- depends_on: `T15`
+- goal: preserve existing dashboard data behavior while removing `gh`.
+- scope:
+  - migrate `PullRequestSnapshotService` to `https://api.github.com/graphql`.
+  - migrate `ActionsJobsEnrichmentService` to direct REST calls for workflow jobs.
+  - keep repository grouping, sorting, unresolved-comment mapping, and Actions enrichment behavior unchanged.
+- deliverables:
+  - migrated snapshot and Actions enrichment services
+- verification:
+  - pending
+
+### T17: App OAuth Flow And Shared State
+- status: `todo`
+- owner: `unassigned`
+- depends_on: `T14`, `T15`
+- goal: wire browser login into the app target.
+- scope:
+  - register the custom URL scheme.
+  - add callback handling in the app scene.
+  - add an app-owned auth coordinator that starts sign-in, validates callback `state`, exchanges the code, persists the session, and updates dashboard/settings state.
+  - add sign-out support.
+- deliverables:
+  - app-target OAuth coordination and callback wiring
+  - shared authenticated app state updates
+- verification:
+  - pending
+
+### T18: Settings And Menu-Bar UI Migration
+- status: `todo`
+- owner: `unassigned`
+- depends_on: `T17`
+- goal: replace all `gh`-centric UI states and copy.
+- scope:
+  - rename the Settings `GitHub CLI` section to `GitHub`.
+  - replace install/login command instructions with `Sign in with GitHub`, connected account, sign-out, and not-configured/auth-failed messaging.
+  - update menu-bar loading/error states to use auth-oriented states instead of `ghMissing` and `loggedOut`.
+- deliverables:
+  - migrated settings and menu-bar auth UI
+- verification:
+  - pending
+
+### T19: Verification And Fixture Refresh
+- status: `todo`
+- owner: `unassigned`
+- depends_on: `T16`, `T17`, `T18`
+- goal: re-establish package/app verification under the new auth and transport model.
+- scope:
+  - add OAuth, token, and user fixtures plus HTTP transport mocks.
+  - update snapshot and enrichment tests to use mocked HTTP responses instead of mocked `gh` output.
+  - rerun the standard verification commands.
+- deliverables:
+  - refreshed fixtures and tests
+  - verification notes for the OAuth migration phase
+- verification:
+  - `tuist generate --no-open`
+  - `swift test --package-path Packages/GHOrchestratorCore`
+  - `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData`
+  - `./script/build_and_run.sh --verify`
+
 ## Suggested Parallel Pickup Order
+### Historical v1 phase
 - Agent 1: `T01`
 - Agent 2: `T02` after `T01` lands, then `T07`
 - Agent 3: `T03` after `T01` and `T02`
@@ -354,12 +474,21 @@
 - Agent 9: `T10` after `T07`
 - Agent 10: `T11` after the core data and state tasks land
 
+### OAuth migration phase
+- Agent 1: `PLAN.md:T13`
+- Agent 2: `PLAN.md:T14` after `PLAN.md:T13`
+- Agent 3: `PLAN.md:T15` after `PLAN.md:T14`
+- Agent 4: `PLAN.md:T16` after `PLAN.md:T15`
+- Agent 5: `PLAN.md:T17` after `PLAN.md:T14` and `PLAN.md:T15`
+- Agent 6: `PLAN.md:T18` after `PLAN.md:T17`
+- Agent 7: `PLAN.md:T19` after `PLAN.md:T16`, `PLAN.md:T17`, and `PLAN.md:T18`
+
 ## Cross-Task Rules
 - Keep the app target thin. Process execution and payload parsing belong in the local package.
-- Do not call `gh` directly from SwiftUI views.
+- Do not perform OAuth token exchange or GitHub HTTP calls directly from SwiftUI views.
 - Do not add non-Apple dependencies.
 - Favor `Codable`, value types, and explicit mappers over loosely typed dictionaries.
-- Keep failures user-visible and actionable, especially around `gh` installation and authentication.
+- Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
 - 2026-04-14: v1 scope updated from “all open PRs for the user” to “open PRs for a user-configured repository allowlist”.
@@ -370,3 +499,4 @@
 - 2026-04-14: tapping the unresolved-comments badge should expand a list of unresolved review comments showing author, file path, and comment text, with comment rows linking to the browser.
 - 2026-04-14: opening the menu must preserve an already-running hidden refresh rather than cancelling it, and loading feedback belongs in the header instead of replacing list content.
 - 2026-04-14: the Settings window now needs a persisted Dock icon visibility preference, a Quit action, and more native macOS settings presentation.
+- 2026-04-14: authentication and transport pivoted from the local `gh` CLI to GitHub OAuth App login with PKCE, Keychain-backed token storage, and direct GitHub GraphQL and REST requests because the app must work without per-repository GitHub App installation.

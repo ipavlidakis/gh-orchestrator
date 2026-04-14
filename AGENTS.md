@@ -2,22 +2,24 @@
 
 ## Purpose
 - This repo builds `GHOrchestrator`, a Tuist-managed macOS 15+ menu-bar app.
-- Keep the app target thin: UI, settings binding, polling lifecycle, and URL opening stay in the app; `gh` process execution, parsing, aggregation, fixtures, and tests live in the local Swift package.
-- Use only Swift, Tuist, SwiftPM, Apple frameworks, and the installed `gh` CLI. Do not add third-party dependencies.
+- Keep the app target thin: UI, settings binding, polling lifecycle, browser-login launch, OAuth callback handling, and URL opening stay in the app; OAuth request building, token exchange, Keychain credential storage, GitHub GraphQL and REST transport, parsing, aggregation, fixtures, and tests live in the local Swift package.
+- Use only Swift, Tuist, SwiftPM, Apple frameworks, and direct GitHub HTTP APIs. Do not add third-party dependencies.
 
 ## Architecture Boundaries
 - App target:
   - SwiftUI scenes, views, and observable UI state.
   - Settings UX and launch-time wiring.
   - Menu-bar presentation and user interaction.
+  - Browser login launch and OAuth callback handling.
 - Local package:
-  - Process runner and `gh` command wrapper.
-  - CLI health checks, GraphQL/REST decoding, domain models, mappers, and fixtures.
+  - OAuth request building and token exchange helpers.
+  - Keychain-backed credential storage.
+  - GitHub GraphQL and REST transport, domain models, mappers, and fixtures.
   - Unit tests for core behavior.
 - Cross-boundary rules:
-  - Do not call `gh` directly from SwiftUI views.
+  - Do not perform OAuth token exchange or GitHub HTTP calls directly from SwiftUI views.
   - Prefer value types, `Codable`, and explicit mappers over ad hoc dictionaries.
-  - Keep failures visible and actionable, especially for missing or unauthenticated `gh`.
+  - Keep failures visible and actionable, especially for missing OAuth configuration, unauthenticated sessions, and API or auth failures.
 
 ## Task Workflow
 - `PLAN.md` is the shared program plan and registry for repo-wide history, cross-feature decisions, and active feature-plan pointers.
@@ -41,5 +43,6 @@
 ## Repo Rules
 - Keep `AGENTS.md` aligned with `PLAN.md`, any active `PLAN-*.md` files, and the repo’s actual layout.
 - Do not touch `PLAN.md`, any `PLAN-*.md`, or source/build/config files when you are only updating the collaboration contract.
+- Do not commit live OAuth credentials to the repo; source builds should surface a not-configured state instead.
 - Keep changes small and local. Prefer one focused task per agent over broad cross-cutting edits.
 - Preserve unrelated work in the tree; do not revert or overwrite changes you did not make.
