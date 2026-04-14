@@ -714,8 +714,8 @@
   - The wrapper keeps `version` and `build` as prompt-time inputs while reusing the existing release pipeline and local JSON configuration.
 
 ### T31: Release target_commitish Fix
-- status: `in_progress`
-- owner: `codex-main`
+- status: `todo`
+- owner: `unassigned`
 - depends_on: `T26`, `T30`
 - goal: make GitHub release creation resilient when the local branch is ahead of origin.
 - scope:
@@ -727,6 +727,30 @@
   - verification notes
 - verification:
   - pending
+- notes:
+  - Returned to the queue on 2026-04-15 with no repo changes recorded under this task so a separate documentation task could be claimed cleanly.
+
+### T32: Repository Documentation
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T24`, `T26`, `T30`
+- goal: add top-level docs that explain what the repo builds and how to build and run it from source.
+- scope:
+  - create `README.md` with the product summary, architecture split, repo layout, and primary workflows.
+  - create a separate source-build guide covering prerequisites, local OAuth config, generation, build/run, verification, and troubleshooting entry points.
+  - link the new docs to the existing release documentation without duplicating the release workflow.
+- deliverables:
+  - `README.md`
+  - source-build instructions document
+  - verification notes
+- verification:
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding `README.md` and `BUILDING.md`.
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after the new documentation files were added.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after the repo docs were added.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after documenting the source-build workflow.
+- notes:
+  - Added `README.md` for repo orientation and `BUILDING.md` for source-build setup, local OAuth config, verification, and troubleshooting.
+  - The new docs intentionally link to `RELEASING.md` instead of duplicating the release pipeline.
 
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
