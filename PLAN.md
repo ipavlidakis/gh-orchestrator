@@ -713,6 +713,21 @@
   - Added a new Codex environment `Release` action in `.codex/environments/environment.toml` that points at `./script/release_prompt.sh`.
   - The wrapper keeps `version` and `build` as prompt-time inputs while reusing the existing release pipeline and local JSON configuration.
 
+### T31: Release target_commitish Fix
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `T26`, `T30`
+- goal: make GitHub release creation resilient when the local branch is ahead of origin.
+- scope:
+  - stop defaulting `target_commitish` to a local-only `HEAD` SHA.
+  - prefer the current branch name for release creation, with detached-head fallback to the commit SHA.
+  - verify the release preflight path after the change.
+- deliverables:
+  - release script fix
+  - verification notes
+- verification:
+  - pending
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`

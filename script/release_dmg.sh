@@ -20,7 +20,7 @@ RELEASE_NAME=""
 RELEASE_NOTES_FILE=""
 OUTPUT_DIR=""
 REPOSITORY="$REPOSITORY_DEFAULT"
-TARGET_COMMITISH="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+TARGET_COMMITISH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD 2>/dev/null || git -C "$REPO_ROOT" rev-parse HEAD)"
 CONFIG_PATH="$DEFAULT_CONFIG_PATH"
 
 APPLE_DEVELOPER_TEAM_ID="${APPLE_DEVELOPER_TEAM_ID:-}"
@@ -238,7 +238,9 @@ load_config() {
 
   local config_target_commitish
   config_target_commitish="$(json_field "$config_path" "targetCommitish")"
-  if [[ -n "$config_target_commitish" && "$TARGET_COMMITISH" == "$(git -C "$REPO_ROOT" rev-parse HEAD)" ]]; then
+  local default_target_commitish
+  default_target_commitish="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD 2>/dev/null || git -C "$REPO_ROOT" rev-parse HEAD)"
+  if [[ -n "$config_target_commitish" && "$TARGET_COMMITISH" == "$default_target_commitish" ]]; then
     TARGET_COMMITISH="$config_target_commitish"
   fi
 
