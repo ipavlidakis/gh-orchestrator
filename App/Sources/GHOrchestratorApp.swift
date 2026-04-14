@@ -5,6 +5,7 @@ import SwiftUI
 @main
 struct GHOrchestratorApp: App {
     @State private var controller = AppController()
+    private let settingsWindowMenuVisibilityController = SettingsWindowMenuVisibilityController()
 
     var body: some Scene {
         MenuBarExtra(AppMetadata.menuBarTitle, systemImage: "arrow.triangle.branch") {
@@ -13,9 +14,15 @@ struct GHOrchestratorApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsWindowView(model: controller.settingsModel)
+            SettingsWindowView(
+                model: controller.settingsModel,
+                menuVisibilityController: settingsWindowMenuVisibilityController
+            )
         }
         .defaultSize(width: 780, height: 600)
         .windowResizability(.contentSize)
+        .commands {
+            SettingsWindowCommands(dashboardModel: controller.dashboardModel)
+        }
     }
 }

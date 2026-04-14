@@ -35,7 +35,10 @@ private enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 
 struct SettingsWindowView: View {
     @Bindable var model: SettingsModel
+    let menuVisibilityController: any SettingsWindowMenuVisibilityControlling
+
     @SceneStorage("settings.selected-pane") private var selectedPaneID = SettingsPane.general.rawValue
+    @Environment(\.appearsActive) private var appearsActive
 
     var body: some View {
         NavigationSplitView {
@@ -62,6 +65,15 @@ struct SettingsWindowView: View {
         .frame(minWidth: 760, idealWidth: 780, minHeight: 560, idealHeight: 600)
         .windowMinimizeBehavior(.disabled)
         .windowResizeBehavior(.disabled)
+        .onAppear {
+            menuVisibilityController.setSettingsWindowActive(appearsActive)
+        }
+        .onChange(of: appearsActive) { _, newValue in
+            menuVisibilityController.setSettingsWindowActive(newValue)
+        }
+        .onDisappear {
+            menuVisibilityController.setSettingsWindowActive(false)
+        }
     }
 
     private var selectedPane: SettingsPane {

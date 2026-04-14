@@ -10,4 +10,11 @@ final class GHOrchestratorTests: XCTestCase {
     func testCoreModuleExportsPlaceholderMessage() {
         XCTAssertEqual(GHOrchestratorCore.placeholderMessage, "GHOrchestratorCore")
     }
+
+    func testAppMetadataHelpURLTargetsRepository() {
+        XCTAssertEqual(
+            AppMetadata.helpURL.absoluteString,
+            "https://github.com/ipavlidakis/gh-orchestrator"
+        )
+    }
 }

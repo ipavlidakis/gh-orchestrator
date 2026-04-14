@@ -19,8 +19,8 @@
 ## Task Board
 
 ### T13: Settings Window App Menu Commands
-- status: `pending`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `PLAN.md:T09`, `PLAN.md:T10`, `PLAN.md:T12`
 - goal: make the active Settings window present a GHOrchestrator-specific app menu with the required actions while hiding the unused top-level menus.
 - scope:
@@ -37,10 +37,14 @@
   - app-target menu command definitions
   - any small app-target AppKit menu-pruning helper required to hide top-level menus
 - verification:
-  - `tuist generate --no-open`
-  - `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData`
-  - `./script/build_and_run.sh --verify`
-  - manual check with the Settings window frontmost confirming the app menu is active, `Refresh` is under `About`, `Help` opens the repo page, and `Edit` / `View` / `Window` are absent.
+  - 2026-04-14: `tuist generate --no-open` succeeded.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded.
+  - 2026-04-14: `./script/build_and_run.sh --verify` succeeded.
+  - 2026-04-14: an AppleScript/System Events inspection with the Settings window frontmost confirmed the top-level menu bar was reduced to `Apple`, `GHOrchestrator`, and `Help`, and the `GHOrchestrator` app menu showed `About GHOrchestrator`, `Refresh`, `Settings…`, standard visibility items, and `Quit GHOrchestrator`.
+  - 2026-04-14: `GHOrchestratorTests.testAppMetadataHelpURLTargetsRepository` and `SettingsWindowCommandsTests` pin the Help-command target URL and command-routing seam in unit tests.
+- notes:
+  - The Settings window now drives menu pruning from `EnvironmentValues.appearsActive`, with a small AppKit helper hiding `Edit`, `View`, and `Window` only while the Settings scene is active.
+  - The Help menu item was automation-clicked successfully, but the launched external browser did not expose a reliable URL readback path in this environment, so the exact destination is covered by the unit seam rather than browser-state automation.
 
 ## Decision Log
 - 2026-04-14: when the Settings window is active, GHOrchestrator must present its app menu in the macOS menu bar with `About`, `Refresh`, `Settings…`, `Quit`, and `Help`; `Refresh` belongs directly under `About`, the top-level `Edit`, `View`, and `Window` menus must be hidden, and `Help` opens `https://github.com/ipavlidakis/gh-orchestrator`.
