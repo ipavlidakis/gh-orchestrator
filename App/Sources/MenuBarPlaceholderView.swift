@@ -73,7 +73,7 @@ struct MenuBarPlaceholderView: View {
         case .authorizing:
             StateMessageView(
                 title: "Finishing sign-in",
-                message: "Complete the GitHub sign-in flow in your browser. The dashboard will refresh automatically when the app receives the callback."
+                message: "Open Settings to view the GitHub device code, then approve it in your browser. The dashboard will refresh automatically when GitHub authorizes this Mac."
             )
 
         case .empty:

@@ -219,7 +219,7 @@ private struct GitHubSettingsPane: View {
 
                     SettingsTextBlock(
                         title: "OAuth not configured",
-                        bodyText: "This build does not include a complete GitHub OAuth app configuration. Add both `clientID` and `clientSecret` to `Config/GitHubOAuth.local.json` before generating/building the app, or use the build-time env vars as a fallback."
+                        bodyText: "This build does not include a GitHub OAuth client ID. Add `clientID` to `Config/GitHubOAuth.local.json` before generating/building the app, or use the build-time env var fallback. The GitHub OAuth app must also have device flow enabled."
                     )
 
                     Divider()
@@ -244,14 +244,14 @@ private struct GitHubSettingsPane: View {
 
                     SettingsTextBlock(
                         title: "Sign in",
-                        bodyText: "Start GitHub sign-in in your browser, then return to GHOrchestrator when GitHub redirects back to the app."
+                        bodyText: "Start GitHub sign-in to get a one-time device code, then approve that code in your browser."
                     )
 
                     Divider()
 
                     SettingsRow(
                         title: "Actions",
-                        subtitle: "Launch the GitHub OAuth flow in the default browser."
+                        subtitle: "Request a GitHub device code and open the verification page in the default browser."
                     ) {
                         Button("Sign in with GitHub") {
                             model.requestSignIn()
@@ -261,19 +261,48 @@ private struct GitHubSettingsPane: View {
                 case .authorizing:
                     Divider()
 
-                    SettingsTextBlock(
-                        title: "Authorizing",
-                        bodyText: "Finish the GitHub sign-in flow in your browser. GHOrchestrator will update automatically when the OAuth callback returns."
-                    )
+                    if let userCode = model.deviceAuthorizationUserCode {
+                        SettingsTextBlock(
+                            title: "Approve device code",
+                            bodyText: "Enter this one-time code on GitHub to finish sign-in."
+                        )
 
-                    Divider()
+                        Divider()
 
-                    SettingsRow(
-                        title: "Progress",
-                        subtitle: "Waiting for GitHub to redirect back to the app."
-                    ) {
-                        ProgressView()
-                            .controlSize(.small)
+                        SettingsRow(
+                            title: "Verification code",
+                            subtitle: "GitHub expires this code after a short window."
+                        ) {
+                            Text(userCode)
+                                .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                                .textSelection(.enabled)
+                        }
+
+                        if let verificationURI = model.deviceAuthorizationVerificationURI {
+                            Divider()
+
+                            SettingsRow(
+                                title: "Verification page",
+                                subtitle: "Open GitHub’s device verification page if the browser did not open automatically."
+                            ) {
+                                Link("Open Verification Page", destination: verificationURI)
+                            }
+                        }
+                    } else {
+                        SettingsTextBlock(
+                            title: "Preparing sign-in",
+                            bodyText: "Requesting a GitHub device code for this Mac."
+                        )
+
+                        Divider()
+
+                        SettingsRow(
+                            title: "Progress",
+                            subtitle: "Waiting for GitHub to issue the device code."
+                        ) {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
                     }
                 case .authFailure(let message):
                     Divider()

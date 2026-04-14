@@ -3,15 +3,13 @@ import XCTest
 
 final class OAuthAppConfigurationTests: XCTestCase {
     func testResolveReturnsNotConfiguredWhenClientIDIsMissing() {
-        XCTAssertEqual(OAuthAppConfiguration.resolve(clientID: nil, clientSecret: "secret"), .notConfigured)
-        XCTAssertEqual(OAuthAppConfiguration.resolve(clientID: "   ", clientSecret: "secret"), .notConfigured)
-        XCTAssertEqual(OAuthAppConfiguration.resolve(clientID: "client", clientSecret: nil), .notConfigured)
+        XCTAssertEqual(OAuthAppConfiguration.resolve(clientID: nil), .notConfigured)
+        XCTAssertEqual(OAuthAppConfiguration.resolve(clientID: "   "), .notConfigured)
     }
 
-    func testResolveConfiguredNormalizesClientIDAndScopes() {
+    func testResolveConfiguredNormalizesClientIDAndScopesWithoutRequiringClientSecret() {
         let resolution = OAuthAppConfiguration.resolve(
             clientID: "  abc123  ",
-            clientSecret: "  secret456  ",
             scopes: ["repo", "workflow", "repo", " "]
         )
 
@@ -20,14 +18,15 @@ final class OAuthAppConfigurationTests: XCTestCase {
         }
 
         XCTAssertEqual(configuration.clientID, "abc123")
-        XCTAssertEqual(configuration.clientSecret, "secret456")
+        XCTAssertNil(configuration.clientSecret)
         XCTAssertEqual(configuration.scopes, ["repo", "workflow"])
+        XCTAssertEqual(configuration.deviceCodeURL, OAuthAppConfiguration.githubDeviceCodeURL)
         XCTAssertEqual(configuration.redirectURI, OAuthAppConfiguration.defaultRedirectURI)
     }
 
     func testAuthorizationURLIncludesPKCEAndRedirectParameters() throws {
         let configuration = try XCTUnwrap(
-            OAuthAppConfiguration.resolve(clientID: "abc123", clientSecret: "secret456").configuration
+            OAuthAppConfiguration.resolve(clientID: "abc123").configuration
         )
         let state = try XCTUnwrap(OAuthState(rawValue: "state-token"))
         let challenge = OAuthCodeChallenge(rawValue: "challenge-token")

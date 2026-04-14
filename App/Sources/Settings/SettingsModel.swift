@@ -63,8 +63,12 @@ final class SettingsModel {
             return "OAuth is not configured for this build"
         case .signedOut:
             return "Not signed in"
-        case .authorizing:
-            return "Waiting for GitHub sign-in to finish"
+        case .authorizing(let userCode, _):
+            if let userCode, !userCode.isEmpty {
+                return "Waiting for code \(userCode) to be approved"
+            }
+
+            return "Requesting a GitHub device sign-in code"
         case .authenticated(let username):
             return "Signed in as \(username)"
         case .authFailure(let message):
@@ -77,7 +81,16 @@ final class SettingsModel {
     }
 
     var canStartSignIn: Bool {
-        signInAction != nil && authenticationState != .authorizing && authenticationState != .notConfigured
+        guard signInAction != nil else {
+            return false
+        }
+
+        switch authenticationState {
+        case .authorizing, .notConfigured:
+            return false
+        case .signedOut, .authenticated, .authFailure:
+            return true
+        }
     }
 
     var canSignOut: Bool {
@@ -94,6 +107,22 @@ final class SettingsModel {
 
     var pollingIntervalStepperValue: Int {
         Int(pollingIntervalText) ?? store.settings.pollingIntervalSeconds
+    }
+
+    var deviceAuthorizationUserCode: String? {
+        guard case .authorizing(let userCode, _) = authenticationState else {
+            return nil
+        }
+
+        return userCode
+    }
+
+    var deviceAuthorizationVerificationURI: URL? {
+        guard case .authorizing(_, let verificationURI) = authenticationState else {
+            return nil
+        }
+
+        return verificationURI
     }
 
     func reloadFromStore() {

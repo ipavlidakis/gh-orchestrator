@@ -74,21 +74,6 @@ final class AppControllerTests: XCTestCase {
         XCTAssertEqual(authController.signOutCount, 1)
     }
 
-    func testAppControllerForwardsIncomingURLsToAuthController() {
-        let authController = MutableAuthController(state: .signedOut)
-        let controller = AppController(
-            settingsStore: configuredSettingsStore(),
-            dataSource: MutableDashboardDataSource(),
-            authController: authController,
-            sleeper: CancellingSleeper()
-        )
-        let callbackURL = URL(string: "ghorchestrator://oauth/callback?code=abc&state=123")!
-
-        controller.handleIncomingURL(callbackURL)
-
-        XCTAssertEqual(authController.handledURLs, [callbackURL])
-    }
-
     func testAppControllerAppliesDockIconPreferenceAtLaunchAndWhenSettingsChange() async {
         let store = configuredSettingsStore(hideDockIcon: true)
         let dockIconController = RecordingDockIconVisibilityController()
@@ -182,7 +167,6 @@ private final class MutableDashboardDataSource: DashboardDataSource, @unchecked 
 @Observable
 private final class MutableAuthController: GitHubAuthControlling {
     var state: GitHubAuthenticationState
-    private(set) var handledURLs: [URL] = []
     private(set) var signInCount = 0
     private(set) var signOutCount = 0
 
@@ -192,10 +176,6 @@ private final class MutableAuthController: GitHubAuthControlling {
 
     func startSignIn() {
         signInCount += 1
-    }
-
-    func handleCallbackURL(_ url: URL) {
-        handledURLs.append(url)
     }
 
     func signOut() {

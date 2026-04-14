@@ -7,6 +7,14 @@ public protocol GitHubAPIClient: Sendable {
         variables: Variables?
     ) async throws -> Response
     func authenticatedUser() async throws -> GitHubAuthenticatedUser
+    func startDeviceAuthorization(
+        configuration: OAuthAppConfiguration
+    ) async throws -> GitHubDeviceAuthorization
+    func pollDeviceAuthorization(
+        configuration: OAuthAppConfiguration,
+        deviceCode: String,
+        interval: Int
+    ) async throws -> GitHubDeviceAuthorizationPollResult
     func exchangeCode(
         configuration: OAuthAppConfiguration,
         callback: OAuthCallback,
@@ -97,14 +105,83 @@ public struct URLSessionGitHubAPIClient: GitHubAPIClient {
         try await get("/user")
     }
 
+    public func startDeviceAuthorization(
+        configuration: OAuthAppConfiguration
+    ) async throws -> GitHubDeviceAuthorization {
+        let deviceRequest = GitHubDeviceAuthorizationRequest(
+            clientID: configuration.clientID,
+            scopes: configuration.scopes
+        )
+
+        var request = URLRequest(url: configuration.deviceCodeURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.httpBody = deviceRequest.formURLEncodedData()
+
+        let data = try await perform(request, includeAuthorization: false)
+
+        do {
+            return try GitHubJSONCoders.restDecoder.decode(GitHubDeviceAuthorization.self, from: data)
+        } catch {
+            throw GitHubAPIClientError.invalidResponse(message: error.localizedDescription)
+        }
+    }
+
+    public func pollDeviceAuthorization(
+        configuration: OAuthAppConfiguration,
+        deviceCode: String,
+        interval: Int
+    ) async throws -> GitHubDeviceAuthorizationPollResult {
+        let pollRequest = GitHubDeviceAccessTokenPollRequest(
+            clientID: configuration.clientID,
+            deviceCode: deviceCode
+        )
+
+        var request = URLRequest(url: configuration.accessTokenURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.httpBody = pollRequest.formURLEncodedData()
+
+        let data = try await perform(request, includeAuthorization: false)
+
+        let tokenResponse: GitHubTokenExchangeResponse
+        do {
+            tokenResponse = try GitHubJSONCoders.restDecoder.decode(GitHubTokenExchangeResponse.self, from: data)
+        } catch {
+            throw GitHubAPIClientError.invalidResponse(message: error.localizedDescription)
+        }
+
+        if let errorCode = tokenResponse.error?.trimmingCharacters(in: .whitespacesAndNewlines), !errorCode.isEmpty {
+            return try pollResult(
+                for: errorCode,
+                response: tokenResponse,
+                fallbackInterval: interval
+            )
+        }
+
+        var session = try tokenResponse.session()
+        let user = try await authenticatedUser(using: session)
+        session = session.withUsername(user.login)
+        try credentialStore.saveSession(session)
+        return .success(session)
+    }
+
     public func exchangeCode(
         configuration: OAuthAppConfiguration,
         callback: OAuthCallback,
         codeVerifier: OAuthCodeVerifier
     ) async throws -> GitHubSession {
+        guard let clientSecret = configuration.clientSecret else {
+            throw GitHubAPIClientError.invalidResponse(
+                message: "GitHub OAuth web flow requires a client secret."
+            )
+        }
+
         let tokenRequest = GitHubTokenExchangeRequest(
             clientID: configuration.clientID,
-            clientSecret: configuration.clientSecret,
+            clientSecret: clientSecret,
             code: callback.code,
             codeVerifier: codeVerifier,
             redirectURI: configuration.redirectURI
@@ -134,6 +211,41 @@ public struct URLSessionGitHubAPIClient: GitHubAPIClient {
 }
 
 extension URLSessionGitHubAPIClient {
+    private func pollResult(
+        for errorCode: String,
+        response: GitHubTokenExchangeResponse,
+        fallbackInterval: Int
+    ) throws -> GitHubDeviceAuthorizationPollResult {
+        switch errorCode {
+        case "authorization_pending":
+            return .pending(nextInterval: max(fallbackInterval, 1))
+        case "slow_down":
+            let nextInterval = response.interval ?? (fallbackInterval + 5)
+            return .pending(nextInterval: max(nextInterval, fallbackInterval + 5))
+        case "expired_token", "token_expired":
+            throw GitHubDeviceAuthorizationError.expiredToken
+        case "access_denied":
+            throw GitHubDeviceAuthorizationError.accessDenied(
+                description: response.errorDescription,
+                documentationURL: response.errorURI
+            )
+        case "device_flow_disabled":
+            throw GitHubDeviceAuthorizationError.deviceFlowDisabled
+        case "incorrect_client_credentials":
+            throw GitHubDeviceAuthorizationError.incorrectClientCredentials
+        case "incorrect_device_code":
+            throw GitHubDeviceAuthorizationError.incorrectDeviceCode
+        case "unsupported_grant_type":
+            throw GitHubDeviceAuthorizationError.unsupportedGrantType
+        default:
+            throw GitHubDeviceAuthorizationError.authorizationFailed(
+                error: errorCode,
+                description: response.errorDescription,
+                documentationURL: response.errorURI
+            )
+        }
+    }
+
     private func authenticatedUser(using session: GitHubSession) async throws -> GitHubAuthenticatedUser {
         let request = try authenticatedRequest(
             url: endpointURL(path: "/user"),

@@ -16,28 +16,33 @@ public struct OAuthAppConfiguration: Equatable, Sendable {
     }
 
     public static let githubAuthorizeURL = URL(string: "https://github.com/login/oauth/authorize")!
+    public static let githubDeviceCodeURL = URL(string: "https://github.com/login/device/code")!
     public static let githubAccessTokenURL = URL(string: "https://github.com/login/oauth/access_token")!
     public static let defaultRedirectURI = URL(string: "ghorchestrator://oauth/callback")!
     public static let defaultScopes = ["repo"]
 
     public let clientID: String
-    public let clientSecret: String
+    public let clientSecret: String?
     public let authorizeURL: URL
+    public let deviceCodeURL: URL
     public let accessTokenURL: URL
     public let redirectURI: URL
     public let scopes: [String]
 
     public init(
         clientID: String,
-        clientSecret: String,
+        clientSecret: String? = nil,
         authorizeURL: URL = OAuthAppConfiguration.githubAuthorizeURL,
+        deviceCodeURL: URL = OAuthAppConfiguration.githubDeviceCodeURL,
         accessTokenURL: URL = OAuthAppConfiguration.githubAccessTokenURL,
         redirectURI: URL = OAuthAppConfiguration.defaultRedirectURI,
         scopes: [String] = OAuthAppConfiguration.defaultScopes
     ) {
         self.clientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.clientSecret = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedClientSecret = clientSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.clientSecret = normalizedClientSecret.isEmpty ? nil : normalizedClientSecret
         self.authorizeURL = authorizeURL
+        self.deviceCodeURL = deviceCodeURL
         self.accessTokenURL = accessTokenURL
         self.redirectURI = redirectURI
         self.scopes = Self.normalizedScopes(scopes)
@@ -45,24 +50,25 @@ public struct OAuthAppConfiguration: Equatable, Sendable {
 
     public static func resolve(
         clientID: String?,
-        clientSecret: String?,
+        clientSecret: String? = nil,
         authorizeURL: URL = OAuthAppConfiguration.githubAuthorizeURL,
+        deviceCodeURL: URL = OAuthAppConfiguration.githubDeviceCodeURL,
         accessTokenURL: URL = OAuthAppConfiguration.githubAccessTokenURL,
         redirectURI: URL = OAuthAppConfiguration.defaultRedirectURI,
         scopes: [String] = OAuthAppConfiguration.defaultScopes
     ) -> Resolution {
         let normalizedClientID = clientID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let normalizedClientSecret = clientSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-        guard !normalizedClientID.isEmpty, !normalizedClientSecret.isEmpty else {
+        guard !normalizedClientID.isEmpty else {
             return .notConfigured
         }
 
         return .configured(
             OAuthAppConfiguration(
                 clientID: normalizedClientID,
-                clientSecret: normalizedClientSecret,
+                clientSecret: clientSecret,
                 authorizeURL: authorizeURL,
+                deviceCodeURL: deviceCodeURL,
                 accessTokenURL: accessTokenURL,
                 redirectURI: redirectURI,
                 scopes: scopes

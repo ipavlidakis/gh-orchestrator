@@ -2,7 +2,7 @@
 
 ## Purpose
 - This repo builds `GHOrchestrator`, a Tuist-managed macOS 15+ menu-bar app.
-- Keep the app target thin: UI, settings binding, polling lifecycle, browser-login launch, OAuth callback handling, and URL opening stay in the app; OAuth request building, token exchange, Keychain credential storage, GitHub GraphQL and REST transport, parsing, aggregation, fixtures, and tests live in the local Swift package.
+- Keep the app target thin: UI, settings binding, polling lifecycle, browser-login launch, device-flow polling lifecycle, and URL opening stay in the app; OAuth device-code request building, token polling, Keychain credential storage, GitHub GraphQL and REST transport, parsing, aggregation, fixtures, and tests live in the local Swift package.
 - Use only Swift, Tuist, SwiftPM, Apple frameworks, and direct GitHub HTTP APIs. Do not add third-party dependencies.
 
 ## Architecture Boundaries
@@ -10,9 +10,9 @@
   - SwiftUI scenes, views, and observable UI state.
   - Settings UX and launch-time wiring.
   - Menu-bar presentation and user interaction.
-  - Browser login launch and OAuth callback handling.
+  - Browser login launch and device-flow polling lifecycle.
 - Local package:
-  - OAuth request building and token exchange helpers.
+  - OAuth device-code request and token polling helpers.
   - Keychain-backed credential storage.
   - GitHub GraphQL and REST transport, domain models, mappers, and fixtures.
   - Unit tests for core behavior.

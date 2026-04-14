@@ -37,6 +37,7 @@ public struct GitHubTokenExchangeResponse: Codable, Equatable, Sendable {
     public let refreshToken: String?
     public let expiresIn: Int?
     public let refreshTokenExpiresIn: Int?
+    public let interval: Int?
     public let error: String?
     public let errorDescription: String?
     public let errorURI: URL?
@@ -48,6 +49,7 @@ public struct GitHubTokenExchangeResponse: Codable, Equatable, Sendable {
         refreshToken: String? = nil,
         expiresIn: Int? = nil,
         refreshTokenExpiresIn: Int? = nil,
+        interval: Int? = nil,
         error: String? = nil,
         errorDescription: String? = nil,
         errorURI: URL? = nil
@@ -58,6 +60,7 @@ public struct GitHubTokenExchangeResponse: Codable, Equatable, Sendable {
         self.refreshToken = refreshToken
         self.expiresIn = expiresIn
         self.refreshTokenExpiresIn = refreshTokenExpiresIn
+        self.interval = interval
         self.error = error
         self.errorDescription = errorDescription
         self.errorURI = errorURI
@@ -120,6 +123,7 @@ public struct GitHubTokenExchangeResponse: Codable, Equatable, Sendable {
         case refreshToken = "refresh_token"
         case expiresIn = "expires_in"
         case refreshTokenExpiresIn = "refresh_token_expires_in"
+        case interval
         case error
         case errorDescription = "error_description"
         case errorURI = "error_uri"
@@ -201,13 +205,13 @@ extension GitHubTokenExchangeRequest {
     }
 }
 
-private extension String {
+extension String {
     var percentEncodedQueryValue: String {
         addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? self
     }
 }
 
-private extension CharacterSet {
+extension CharacterSet {
     static let urlQueryValueAllowed: CharacterSet = {
         var allowed = CharacterSet.urlQueryAllowed
         allowed.remove(charactersIn: ":#[]@!$&'()*+,;=/?")

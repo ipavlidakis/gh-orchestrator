@@ -177,7 +177,7 @@ final class MenuBarDashboardModelTests: XCTestCase {
             settingsStore: store,
             dataSource: MockDashboardDataSource(sections: []),
             sleeper: RecordingSleeper(),
-            authenticationState: .authorizing
+            authenticationState: .authorizing(userCode: "WDJB-MJHT", verificationURI: URL(string: "https://github.com/login/device")!)
         )
         XCTAssertEqual(authorizingModel.state, .authorizing)
 

@@ -102,15 +102,46 @@ final class GitHubAPIClientTests: XCTestCase {
         }
     }
 
-    func testExchangeCodeResolvesUserAndPersistsSession() async throws {
+    func testStartDeviceAuthorizationPostsClientIDAndScopeToGitHubEndpoint() async throws {
         let configuration = try XCTUnwrap(
-            OAuthAppConfiguration.resolve(clientID: "abc123", clientSecret: "secret456").configuration
+            OAuthAppConfiguration.resolve(
+                clientID: "abc123",
+                scopes: ["repo", "workflow"]
+            ).configuration
         )
-        let callback = try OAuthCallback(
-            url: URL(string: "ghorchestrator://oauth/callback?code=oauth-code&state=state-123")!,
-            expectedState: try XCTUnwrap(OAuthState(rawValue: "state-123"))
+        let transport = StubGitHubHTTPTransport(
+            results: [
+                .success(
+                    data: Data(#"{"device_code":"device-code","user_code":"WDJB-MJHT","verification_uri":"https://github.com/login/device","expires_in":900,"interval":5}"#.utf8),
+                    response: makeHTTPResponse(url: "https://github.com/login/device/code", statusCode: 200)
+                )
+            ]
         )
-        let verifier = try XCTUnwrap(OAuthCodeVerifier(rawValue: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"))
+        let credentialStore = StubGitHubCredentialStore(session: nil)
+        let client = URLSessionGitHubAPIClient(
+            transport: transport,
+            credentialStore: credentialStore
+        )
+
+        let authorization = try await client.startDeviceAuthorization(configuration: configuration)
+        let requests = await transport.recordedRequests()
+        let requestBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
+
+        XCTAssertEqual(authorization.deviceCode, "device-code")
+        XCTAssertEqual(authorization.userCode, "WDJB-MJHT")
+        XCTAssertEqual(authorization.interval, 5)
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests[0].url?.absoluteString, "https://github.com/login/device/code")
+        XCTAssertEqual(requests[0].httpMethod, "POST")
+        XCTAssertEqual(requests[0].value(forHTTPHeaderField: "Accept"), "application/json")
+        XCTAssertTrue(requestBody.contains("client_id=abc123"))
+        XCTAssertTrue(requestBody.contains("scope=repo%20workflow"))
+    }
+
+    func testPollDeviceAuthorizationResolvesUserAndPersistsSession() async throws {
+        let configuration = try XCTUnwrap(
+            OAuthAppConfiguration.resolve(clientID: "abc123").configuration
+        )
         let transport = StubGitHubHTTPTransport(
             results: [
                 .success(
@@ -129,13 +160,17 @@ final class GitHubAPIClientTests: XCTestCase {
             credentialStore: credentialStore
         )
 
-        let session = try await client.exchangeCode(
+        let result = try await client.pollDeviceAuthorization(
             configuration: configuration,
-            callback: callback,
-            codeVerifier: verifier
+            deviceCode: "device-code",
+            interval: 5
         )
         let requests = await transport.recordedRequests()
         let tokenRequestBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
+
+        guard case .success(let session) = result else {
+            return XCTFail("Expected a successful device authorization poll result")
+        }
 
         XCTAssertEqual(session.accessToken, "access-token")
         XCTAssertEqual(session.username, "octocat")
@@ -146,13 +181,37 @@ final class GitHubAPIClientTests: XCTestCase {
         XCTAssertEqual(requests[0].httpMethod, "POST")
         XCTAssertEqual(requests[0].value(forHTTPHeaderField: "Accept"), "application/json")
         XCTAssertTrue(tokenRequestBody.contains("client_id=abc123"))
-        XCTAssertTrue(tokenRequestBody.contains("client_secret=secret456"))
-        XCTAssertTrue(tokenRequestBody.contains("code=oauth-code"))
-        XCTAssertTrue(tokenRequestBody.contains("code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"))
-        XCTAssertTrue(tokenRequestBody.contains("redirect_uri=ghorchestrator%3A%2F%2Foauth%2Fcallback"))
+        XCTAssertTrue(tokenRequestBody.contains("device_code=device-code"))
+        XCTAssertTrue(tokenRequestBody.contains("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code"))
 
         XCTAssertEqual(requests[1].url?.absoluteString, "https://api.github.com/user")
         XCTAssertEqual(requests[1].value(forHTTPHeaderField: "Authorization"), "Bearer access-token")
+    }
+
+    func testPollDeviceAuthorizationReturnsPendingWithSlowDownBackoff() async throws {
+        let configuration = try XCTUnwrap(
+            OAuthAppConfiguration.resolve(clientID: "abc123").configuration
+        )
+        let transport = StubGitHubHTTPTransport(
+            results: [
+                .success(
+                    data: Data(#"{"error":"slow_down","interval":9}"#.utf8),
+                    response: makeHTTPResponse(url: "https://github.com/login/oauth/access_token", statusCode: 200)
+                )
+            ]
+        )
+        let client = URLSessionGitHubAPIClient(
+            transport: transport,
+            credentialStore: StubGitHubCredentialStore(session: nil)
+        )
+
+        let result = try await client.pollDeviceAuthorization(
+            configuration: configuration,
+            deviceCode: "device-code",
+            interval: 5
+        )
+
+        XCTAssertEqual(result, .pending(nextInterval: 10))
     }
 
     func testAuthenticatedUserFailsWhenNoStoredSessionExists() async throws {

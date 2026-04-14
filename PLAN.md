@@ -10,7 +10,7 @@
 - Build a Tuist-managed macOS app named `GHOrchestrator`.
 - Use only Swift, Tuist, SwiftPM, Apple frameworks, and direct GitHub HTTP APIs; do not depend on the `gh` CLI.
 - Ship a menu-bar-first app using `MenuBarExtra` plus a dedicated Settings window.
-- Authenticate the user via browser-based GitHub login launched from the app.
+- Authenticate the user via GitHub OAuth device flow launched from the app.
 - Observe only user-configured repositories, then list the logged-in user's open PRs in those repositories.
 - Group PRs by repository and sort repositories and PRs by most recent `updatedAt`.
 - Show PR review state, checks state, unresolved review-thread count, and expandable Actions jobs plus steps.
@@ -18,8 +18,8 @@
 
 ## Fixed Decisions
 - Platform target: macOS 15+.
-- Authentication source: GitHub OAuth App login on `github.com` using browser redirect plus PKCE.
-- Redirect URI: `ghorchestrator://oauth/callback`.
+- Authentication source: GitHub OAuth App device flow using a browser verification step plus direct API polling.
+- Public builds require only the GitHub OAuth client ID; they must not embed the OAuth client secret.
 - Access tokens are stored in Keychain, not in `AppSettings`.
 - GitHub scope for v1: `repo`.
 - Persistence: app settings live in an Application Support file (`plist` or `json`), not `UserDefaults`; no database or disk cache.
@@ -31,9 +31,9 @@
 
 ## Architecture Outline
 - App target: SwiftUI macOS app with `MenuBarExtra` and `Settings` scenes.
-- Local package: core domain models, OAuth request building, token exchange, Keychain credential storage, GitHub GraphQL/REST transport, mappers, fixtures, and tests.
-- App layer owns UI state, settings binding, polling lifecycle, browser-login launch, OAuth callback handling, and URL opening.
-- Core layer owns auth request building, token exchange, credential storage, GraphQL/REST parsing, PR aggregation, and validation helpers.
+- Local package: core domain models, OAuth device-code request and token polling, Keychain credential storage, GitHub GraphQL/REST transport, mappers, fixtures, and tests.
+- App layer owns UI state, settings binding, polling lifecycle, browser-login launch, device-flow polling lifecycle, and URL opening.
+- Core layer owns auth request building, device-code/token polling, credential storage, GraphQL/REST parsing, PR aggregation, and validation helpers.
 
 ## Active Feature Plans
 - [PLAN-menu-bar.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-menu-bar.md): settings-window app menu commands and top-level menu pruning.
@@ -546,7 +546,7 @@
   - Builder-facing Settings copy now points to the local config file first, with env vars only mentioned as an optional fallback.
 
 ### T23: OAuth Client Secret Support
-- status: `in_progress`
+- status: `blocked`
 - owner: `codex-main`
 - depends_on: `T21`, `T22`
 - goal: complete the GitHub OAuth code exchange with the app credentials GitHub currently requires.
@@ -559,6 +559,32 @@
   - verification notes
 - verification:
   - pending
+- notes:
+  - Blocked on 2026-04-15 because a downloadable public app cannot safely ship the GitHub OAuth client secret in its bundle. `T24` replaces this direction with device flow.
+
+### T24: Public Build Auth Pivot To Device Flow
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T17`, `T18`, `T19`, `T22`
+- goal: make downloadable public builds authenticate without shipping an OAuth client secret.
+- scope:
+  - replace the browser redirect plus code-exchange flow with GitHub OAuth device flow.
+  - require only the OAuth client ID in app configuration.
+  - add device-code request and polling models/transport, including GitHub’s polling and backoff rules.
+  - update app auth state, settings/menu-bar UX, and builder-facing copy for device flow and device-flow enablement.
+  - remove callback-specific app wiring that is no longer needed.
+- deliverables:
+  - device-flow auth implementation across the package and app targets
+  - updated plan/contract notes for public-build-safe auth
+  - verification notes
+- verification:
+  - 2026-04-15: `tuist generate --no-open` succeeded after switching the shipped auth path to GitHub device flow and removing callback-specific app wiring.
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after adding device-code request and polling coverage.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after migrating the app auth controller, settings/menu-bar UI, and tests to device flow.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after removing the bundled OAuth client secret and custom callback URL dependency from the app target.
+- notes:
+  - This task supersedes the public-binary direction implied by `T23`, because embedding a GitHub OAuth client secret in a downloadable app bundle is not acceptable for release distribution.
+  - Public builds now require only `GitHubOAuthClientID`; builders must enable device flow for the corresponding GitHub OAuth app in GitHub settings before distributing the app.
 
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
@@ -599,3 +625,4 @@
 - 2026-04-14: opening the menu must preserve an already-running hidden refresh rather than cancelling it, and loading feedback belongs in the header instead of replacing list content.
 - 2026-04-14: the Settings window now needs a persisted Dock icon visibility preference, a Quit action, and more native macOS settings presentation.
 - 2026-04-14: authentication and transport pivoted from the local `gh` CLI to GitHub OAuth App login with PKCE, Keychain-backed token storage, and direct GitHub GraphQL and REST requests because the app must work without per-repository GitHub App installation.
+- 2026-04-15: downloadable public builds must not embed a GitHub OAuth client secret; GHOrchestrator will use GitHub OAuth device flow with a client ID only, and the OAuth app must have device flow enabled in GitHub settings.

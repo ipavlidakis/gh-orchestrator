@@ -6,7 +6,6 @@ import Observation
 protocol GitHubAuthControlling: AnyObject {
     var state: GitHubAuthenticationState { get }
     func startSignIn()
-    func handleCallbackURL(_ url: URL)
     func signOut()
 }
 
@@ -17,9 +16,10 @@ final class GitHubAuthController: GitHubAuthControlling {
     private let apiClient: any GitHubAPIClient
     private let credentialStore: any GitHubCredentialStore
     private let urlOpener: any ExternalURLOpening
+    private let sleeper: any DeviceAuthorizationSleepProviding
 
     @ObservationIgnored
-    private var pendingAuthorization: PendingAuthorization?
+    private var authorizationTask: Task<Void, Never>?
 
     var state: GitHubAuthenticationState
 
@@ -27,79 +27,41 @@ final class GitHubAuthController: GitHubAuthControlling {
         configurationProvider: any GitHubOAuthConfigurationProviding = BundleGitHubOAuthConfigurationProvider(),
         apiClient: any GitHubAPIClient = URLSessionGitHubAPIClient(),
         credentialStore: any GitHubCredentialStore = KeychainGitHubCredentialStore(),
-        urlOpener: any ExternalURLOpening = WorkspaceExternalURLOpener()
+        urlOpener: any ExternalURLOpening = WorkspaceExternalURLOpener(),
+        sleeper: any DeviceAuthorizationSleepProviding = TaskDeviceAuthorizationSleeper()
     ) {
         self.configurationProvider = configurationProvider
         self.apiClient = apiClient
         self.credentialStore = credentialStore
         self.urlOpener = urlOpener
+        self.sleeper = sleeper
         self.state = Self.initialState(
             configurationResolution: configurationProvider.configurationResolution(),
             credentialStore: credentialStore
         )
     }
 
+    deinit {
+        authorizationTask?.cancel()
+    }
+
     func startSignIn() {
         guard case .configured(let configuration) = configurationProvider.configurationResolution() else {
-            pendingAuthorization = nil
+            authorizationTask?.cancel()
             state = .notConfigured
             return
         }
 
-        let verifier = OAuthCodeVerifier.generate()
-        let authState = OAuthState.generate()
-        let authorizationURL = configuration.authorizationURL(
-            state: authState,
-            codeChallenge: verifier.codeChallenge
-        )
+        authorizationTask?.cancel()
+        state = .authorizing(userCode: nil, verificationURI: nil)
 
-        pendingAuthorization = PendingAuthorization(
-            configuration: configuration,
-            state: authState,
-            verifier: verifier
-        )
-
-        guard urlOpener.open(authorizationURL) else {
-            pendingAuthorization = nil
-            state = .authFailure(message: "Unable to open GitHub sign-in in the browser.")
-            return
-        }
-
-        state = .authorizing
-    }
-
-    func handleCallbackURL(_ url: URL) {
-        guard let pendingAuthorization else {
-            state = .authFailure(message: "No GitHub sign-in is currently in progress.")
-            return
-        }
-
-        let callback: OAuthCallback
-        do {
-            callback = try OAuthCallback(
-                url: url,
-                expectedState: pendingAuthorization.state,
-                redirectURI: pendingAuthorization.configuration.redirectURI
-            )
-        } catch {
-            self.pendingAuthorization = nil
-            state = .authFailure(message: error.localizedDescription)
-            return
-        }
-
-        state = .authorizing
-
-        Task { @MainActor in
-            await exchangeCode(
-                with: pendingAuthorization.configuration,
-                callback: callback,
-                verifier: pendingAuthorization.verifier
-            )
+        authorizationTask = Task { @MainActor [weak self] in
+            await self?.runDeviceAuthorization(with: configuration)
         }
     }
 
     func signOut() {
-        pendingAuthorization = nil
+        authorizationTask?.cancel()
 
         do {
             try credentialStore.deleteSession()
@@ -118,29 +80,70 @@ final class GitHubAuthController: GitHubAuthControlling {
 }
 
 private extension GitHubAuthController {
-    func exchangeCode(
-        with configuration: OAuthAppConfiguration,
-        callback: OAuthCallback,
-        verifier: OAuthCodeVerifier
-    ) async {
-        defer {
-            pendingAuthorization = nil
-        }
-
+    func runDeviceAuthorization(with configuration: OAuthAppConfiguration) async {
         do {
-            let session = try await apiClient.exchangeCode(
-                configuration: configuration,
-                callback: callback,
-                codeVerifier: verifier
+            let authorization = try await apiClient.startDeviceAuthorization(
+                configuration: configuration
             )
-
-            if let username = session.username, !username.isEmpty {
-                state = .authenticated(username: username)
-            } else {
-                state = .authFailure(message: "GitHub login succeeded, but the connected account name could not be resolved.")
+            guard !Task.isCancelled else {
+                return
             }
+
+            state = .authorizing(
+                userCode: authorization.userCode,
+                verificationURI: authorization.verificationURI
+            )
+            _ = urlOpener.open(authorization.verificationURI)
+
+            try await pollDeviceAuthorization(
+                configuration: configuration,
+                authorization: authorization
+            )
+        } catch is CancellationError {
+            return
         } catch {
+            guard !Task.isCancelled else {
+                return
+            }
+
             state = .authFailure(message: error.localizedDescription)
+        }
+    }
+
+    func pollDeviceAuthorization(
+        configuration: OAuthAppConfiguration,
+        authorization: GitHubDeviceAuthorization
+    ) async throws {
+        var interval = authorization.interval
+        let expirationDate = authorization.expirationDate()
+
+        while !Task.isCancelled {
+            if Date() >= expirationDate {
+                state = .authFailure(message: GitHubDeviceAuthorizationError.expiredToken.localizedDescription)
+                return
+            }
+
+            try await sleeper.sleep(for: .seconds(interval))
+            guard !Task.isCancelled else {
+                return
+            }
+
+            switch try await apiClient.pollDeviceAuthorization(
+                configuration: configuration,
+                deviceCode: authorization.deviceCode,
+                interval: interval
+            ) {
+            case .pending(let nextInterval):
+                interval = nextInterval
+            case .success(let session):
+                guard let username = session.username, !username.isEmpty else {
+                    state = .authFailure(message: "GitHub login succeeded, but the connected account name could not be resolved.")
+                    return
+                }
+
+                state = .authenticated(username: username)
+                return
+            }
         }
     }
 
@@ -168,21 +171,13 @@ private extension GitHubAuthController {
     }
 }
 
-private struct PendingAuthorization {
-    let configuration: OAuthAppConfiguration
-    let state: OAuthState
-    let verifier: OAuthCodeVerifier
-}
-
 protocol GitHubOAuthConfigurationProviding: Sendable {
     func configurationResolution() -> OAuthAppConfiguration.Resolution
 }
 
 struct BundleGitHubOAuthConfigurationProvider: GitHubOAuthConfigurationProviding {
     static let clientIDInfoKey = "GitHubOAuthClientID"
-    static let clientSecretInfoKey = "GitHubOAuthClientSecret"
     static let clientIDEnvironmentKey = "GH_ORCHESTRATOR_GITHUB_CLIENT_ID"
-    static let clientSecretEnvironmentKey = "GH_ORCHESTRATOR_GITHUB_CLIENT_SECRET"
 
     let bundle: Bundle
     let environment: [String: String]
@@ -197,13 +192,10 @@ struct BundleGitHubOAuthConfigurationProvider: GitHubOAuthConfigurationProviding
 
     func configurationResolution() -> OAuthAppConfiguration.Resolution {
         let environmentClientID = environment[Self.clientIDEnvironmentKey]
-        let environmentClientSecret = environment[Self.clientSecretEnvironmentKey]
         let bundleClientID = bundle.object(forInfoDictionaryKey: Self.clientIDInfoKey) as? String
-        let bundleClientSecret = bundle.object(forInfoDictionaryKey: Self.clientSecretInfoKey) as? String
 
         return OAuthAppConfiguration.resolve(
-            clientID: environmentClientID ?? bundleClientID,
-            clientSecret: environmentClientSecret ?? bundleClientSecret
+            clientID: environmentClientID ?? bundleClientID
         )
     }
 }
@@ -215,5 +207,15 @@ protocol ExternalURLOpening: Sendable {
 struct WorkspaceExternalURLOpener: ExternalURLOpening {
     func open(_ url: URL) -> Bool {
         NSWorkspace.shared.open(url)
+    }
+}
+
+protocol DeviceAuthorizationSleepProviding: Sendable {
+    func sleep(for duration: Duration) async throws
+}
+
+struct TaskDeviceAuthorizationSleeper: DeviceAuthorizationSleepProviding {
+    func sleep(for duration: Duration) async throws {
+        try await Task.sleep(for: duration)
     }
 }

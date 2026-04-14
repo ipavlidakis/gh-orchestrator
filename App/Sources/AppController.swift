@@ -11,9 +11,6 @@ final class AppController {
     let settingsModel: SettingsModel
     private let dockIconVisibilityController: any DockIconVisibilityControlling
 
-    @ObservationIgnored
-    private var callbackObserver: NSObjectProtocol?
-
     init(
         settingsStore: SettingsStore = SettingsStore(),
         dataSource: (any DashboardDataSource)? = nil,
@@ -53,22 +50,10 @@ final class AppController {
             }
         )
 
-        GitHubAuthURLHandler.shared.installIfNeeded()
-        observeIncomingURLs()
         observeAuthenticationState()
         observeDockIconPreference()
         Task { @MainActor [weak self] in
             self?.applyDockIconPreference()
-        }
-    }
-
-    func handleIncomingURL(_ url: URL) {
-        authController.handleCallbackURL(url)
-    }
-
-    deinit {
-        if let callbackObserver {
-            NotificationCenter.default.removeObserver(callbackObserver)
         }
     }
 
@@ -85,22 +70,6 @@ final class AppController {
                 self.settingsModel.authenticationState = state
                 self.dashboardModel.setAuthenticationState(state)
                 self.observeAuthenticationState()
-            }
-        }
-    }
-
-    private func observeIncomingURLs() {
-        callbackObserver = NotificationCenter.default.addObserver(
-            forName: .gitHubOAuthCallbackReceived,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let url = notification.object as? URL else {
-                return
-            }
-
-            Task { @MainActor [weak self] in
-                self?.handleIncomingURL(url)
             }
         }
     }
