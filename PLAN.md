@@ -368,8 +368,8 @@
   - This task is documentation-only and should not claim implementation work for the runtime OAuth migration.
 
 ### T14: Core OAuth And Credential Storage
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T13`
 - goal: add the auth primitives needed for browser login.
 - scope:
@@ -382,7 +382,10 @@
   - core OAuth models and helpers
   - credential storage abstraction and Keychain-backed implementation
 - verification:
-  - pending
+  - 2026-04-14: `swift test --package-path Packages/GHOrchestratorCore` succeeded after adding the core OAuth configuration, PKCE/callback helpers, session models, and Keychain-backed credential store.
+- notes:
+  - Added a package-local `Auth/` area with `OAuthAppConfiguration`, `OAuthCodeVerifier`, `OAuthCodeChallenge`, `OAuthState`, `OAuthCallback`, `GitHubTokenExchangeRequest`, `GitHubTokenExchangeResponse`, `GitHubSession`, `GitHubAuthenticationState`, and `KeychainGitHubCredentialStore`.
+  - `GitHubCLIHealth` and the current app/UI consumers were left in place intentionally; `T15` should build direct `URLSession` transport on top of `GitHubTokenExchangeRequest` / `GitHubTokenExchangeResponse` and resolve `/user` into `GitHubSession.username`, while `T17`/`T18` should migrate app state and views to `GitHubAuthenticationState`.
 
 ### T15: Direct GitHub API Transport
 - status: `todo`
