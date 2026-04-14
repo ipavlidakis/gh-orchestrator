@@ -20,17 +20,18 @@
   - Keep failures visible and actionable, especially for missing or unauthenticated `gh`.
 
 ## Task Workflow
-- `PLAN.md` is the live source of truth for task ownership and progress.
-- Claim exactly one task at a time by setting its `owner` and moving `status` to `in_progress`.
-- If you need to change product decisions, update the `Decision Log` in `PLAN.md` first; do not change scope silently.
-- When you finish a task, update the task entry in `PLAN.md` before handing off:
+- `PLAN.md` is the shared program plan and registry for repo-wide history, cross-feature decisions, and active feature-plan pointers.
+- Feature-specific work may live in dedicated `PLAN-*.md` files.
+- Claim exactly one task at a time in the relevant plan file by setting its `owner` and moving `status` to `in_progress`.
+- If you need to change product decisions, update the `Decision Log` in the relevant plan file first; if the change is cross-feature or repo-wide, reflect it in `PLAN.md` as well.
+- When you finish a task, update the task entry in the same plan file before handing off:
   - set `status` to the finished state used by the plan,
   - add or update `verification`,
   - add any follow-on notes needed for the next agent.
-- If you are blocked, mark the task accordingly and explain the blocker in the task notes instead of leaving partial work unexplained.
+- If you are blocked, mark the task accordingly and explain the blocker in that plan’s task notes instead of leaving partial work unexplained.
 
 ## Validation Expectations
-- Follow the task-specific verification called out in `PLAN.md`.
+- Follow the task-specific verification called out in the touched plan file.
 - Baseline checks for this repo are:
   - `tuist generate`
   - `./script/build_and_run.sh --verify` once the app target exists
@@ -38,7 +39,7 @@
 - Treat verification as part of the task, not an optional cleanup step.
 
 ## Repo Rules
-- Keep `AGENTS.md` aligned with `PLAN.md` and this repo’s actual layout.
-- Do not touch `PLAN.md` or source/build/config files when you are only updating the collaboration contract.
+- Keep `AGENTS.md` aligned with `PLAN.md`, any active `PLAN-*.md` files, and the repo’s actual layout.
+- Do not touch `PLAN.md`, any `PLAN-*.md`, or source/build/config files when you are only updating the collaboration contract.
 - Keep changes small and local. Prefer one focused task per agent over broad cross-cutting edits.
 - Preserve unrelated work in the tree; do not revert or overwrite changes you did not make.

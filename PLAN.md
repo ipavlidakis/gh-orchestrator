@@ -1,7 +1,7 @@
 # GH Orchestrator Plan
 
 ## Purpose
-- This file is the live execution plan for building `GHOrchestrator`.
+- This file is the shared execution plan and registry for building `GHOrchestrator`.
 - Agents should claim one task at a time by setting its `owner` and moving `status` to `in_progress`.
 - When a task is finished, the agent must update `status`, `verification`, and any follow-on notes before handing off.
 - Do not change product decisions in this file silently. Add changes to the decision log first.
@@ -29,6 +29,10 @@
 - Local package: core domain models, `gh` process client, mappers, fixtures, and tests.
 - App layer owns UI state, settings binding, polling lifecycle, and URL opening.
 - Core layer owns process execution, CLI health checks, GraphQL/REST parsing, PR aggregation, and validation helpers.
+
+## Active Feature Plans
+- [PLAN-menu-bar.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-menu-bar.md): settings-window app menu commands and top-level menu pruning.
+- Add future independent feature tracks as `PLAN-<feature>.md` files and list them here.
 
 ## Task Board
 
