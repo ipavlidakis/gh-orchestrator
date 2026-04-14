@@ -7,7 +7,7 @@ import GHOrchestratorCore
 final class GitHubAuthControllerTests: XCTestCase {
     func testInitialStateIsNotConfiguredWhenClientIDIsMissing() {
         let controller = GitHubAuthController(
-            configurationProvider: StubGitHubOAuthConfigurationProvider(clientID: nil),
+            configurationProvider: StubGitHubOAuthConfigurationProvider(clientID: nil, clientSecret: "secret456"),
             apiClient: StubGitHubAPIClient(),
             credentialStore: StubGitHubCredentialStore(),
             urlOpener: RecordingURLOpener()
@@ -19,7 +19,7 @@ final class GitHubAuthControllerTests: XCTestCase {
     func testStartSignInOpensBrowserAndMovesToAuthorizing() throws {
         let urlOpener = RecordingURLOpener()
         let controller = GitHubAuthController(
-            configurationProvider: StubGitHubOAuthConfigurationProvider(clientID: "abc123"),
+            configurationProvider: StubGitHubOAuthConfigurationProvider(clientID: "abc123", clientSecret: "secret456"),
             apiClient: StubGitHubAPIClient(),
             credentialStore: StubGitHubCredentialStore(),
             urlOpener: urlOpener
@@ -54,7 +54,7 @@ final class GitHubAuthControllerTests: XCTestCase {
             )
         )
         let controller = GitHubAuthController(
-            configurationProvider: StubGitHubOAuthConfigurationProvider(clientID: "abc123"),
+            configurationProvider: StubGitHubOAuthConfigurationProvider(clientID: "abc123", clientSecret: "secret456"),
             apiClient: apiClient,
             credentialStore: StubGitHubCredentialStore(),
             urlOpener: urlOpener
@@ -83,7 +83,7 @@ final class GitHubAuthControllerTests: XCTestCase {
 
     func testHandleCallbackWithoutPendingAuthorizationProducesAuthFailure() {
         let controller = GitHubAuthController(
-            configurationProvider: StubGitHubOAuthConfigurationProvider(clientID: "abc123"),
+            configurationProvider: StubGitHubOAuthConfigurationProvider(clientID: "abc123", clientSecret: "secret456"),
             apiClient: StubGitHubAPIClient(),
             credentialStore: StubGitHubCredentialStore(),
             urlOpener: RecordingURLOpener()
@@ -108,7 +108,7 @@ final class GitHubAuthControllerTests: XCTestCase {
             )
         )
         let controller = GitHubAuthController(
-            configurationProvider: StubGitHubOAuthConfigurationProvider(clientID: "abc123"),
+            configurationProvider: StubGitHubOAuthConfigurationProvider(clientID: "abc123", clientSecret: "secret456"),
             apiClient: StubGitHubAPIClient(),
             credentialStore: credentialStore,
             urlOpener: RecordingURLOpener()
@@ -140,9 +140,10 @@ final class GitHubAuthControllerTests: XCTestCase {
 
 private struct StubGitHubOAuthConfigurationProvider: GitHubOAuthConfigurationProviding {
     let clientID: String?
+    let clientSecret: String?
 
     func configurationResolution() -> OAuthAppConfiguration.Resolution {
-        OAuthAppConfiguration.resolve(clientID: clientID)
+        OAuthAppConfiguration.resolve(clientID: clientID, clientSecret: clientSecret)
     }
 }
 

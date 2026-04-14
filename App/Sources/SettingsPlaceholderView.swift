@@ -219,8 +219,26 @@ private struct GitHubSettingsPane: View {
 
                     SettingsTextBlock(
                         title: "OAuth not configured",
-                        bodyText: "This build does not include a GitHub OAuth client ID. Set `GH_ORCHESTRATOR_GITHUB_CLIENT_ID` in the app environment or provide `GitHubOAuthClientID` in the app configuration before signing in."
+                        bodyText: "This build does not include a complete GitHub OAuth app configuration. Add both `clientID` and `clientSecret` to `Config/GitHubOAuth.local.json` before generating/building the app, or use the build-time env vars as a fallback."
                     )
+
+                    Divider()
+
+                    SettingsRow(
+                        title: "Create OAuth App",
+                        subtitle: "Open GitHub’s OAuth app registration page in your browser."
+                    ) {
+                        Link("Open Registration Page", destination: AppMetadata.gitHubOAuthAppRegistrationURL)
+                    }
+
+                    Divider()
+
+                    SettingsRow(
+                        title: "Setup Guide",
+                        subtitle: "Open the GitHub docs for the exact OAuth app creation steps."
+                    ) {
+                        Link("Open GitHub Docs", destination: AppMetadata.gitHubOAuthAppDocsURL)
+                    }
                 case .signedOut:
                     Divider()
 

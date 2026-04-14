@@ -21,6 +21,7 @@ public struct OAuthAppConfiguration: Equatable, Sendable {
     public static let defaultScopes = ["repo"]
 
     public let clientID: String
+    public let clientSecret: String
     public let authorizeURL: URL
     public let accessTokenURL: URL
     public let redirectURI: URL
@@ -28,12 +29,14 @@ public struct OAuthAppConfiguration: Equatable, Sendable {
 
     public init(
         clientID: String,
+        clientSecret: String,
         authorizeURL: URL = OAuthAppConfiguration.githubAuthorizeURL,
         accessTokenURL: URL = OAuthAppConfiguration.githubAccessTokenURL,
         redirectURI: URL = OAuthAppConfiguration.defaultRedirectURI,
         scopes: [String] = OAuthAppConfiguration.defaultScopes
     ) {
         self.clientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.clientSecret = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         self.authorizeURL = authorizeURL
         self.accessTokenURL = accessTokenURL
         self.redirectURI = redirectURI
@@ -42,20 +45,23 @@ public struct OAuthAppConfiguration: Equatable, Sendable {
 
     public static func resolve(
         clientID: String?,
+        clientSecret: String?,
         authorizeURL: URL = OAuthAppConfiguration.githubAuthorizeURL,
         accessTokenURL: URL = OAuthAppConfiguration.githubAccessTokenURL,
         redirectURI: URL = OAuthAppConfiguration.defaultRedirectURI,
         scopes: [String] = OAuthAppConfiguration.defaultScopes
     ) -> Resolution {
         let normalizedClientID = clientID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalizedClientSecret = clientSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-        guard !normalizedClientID.isEmpty else {
+        guard !normalizedClientID.isEmpty, !normalizedClientSecret.isEmpty else {
             return .notConfigured
         }
 
         return .configured(
             OAuthAppConfiguration(
                 clientID: normalizedClientID,
+                clientSecret: normalizedClientSecret,
                 authorizeURL: authorizeURL,
                 accessTokenURL: accessTokenURL,
                 redirectURI: redirectURI,

@@ -4,15 +4,15 @@ import XCTest
 
 final class GitHubAPIClientTests: XCTestCase {
     func testAuthenticatedUserUsesStoredBearerToken() async throws {
-        let transport = MockGitHubHTTPTransport(
+        let transport = StubGitHubHTTPTransport(
             results: [
                 .success(
-                    data: Data(#"{"login":"octocat"}"#.utf8),
-                    response: httpResponse(url: "https://api.github.com/user", statusCode: 200)
+                    data: fixtureData(named: "authenticated_user", subdirectory: "GitHubAPI"),
+                    response: makeHTTPResponse(url: "https://api.github.com/user", statusCode: 200)
                 )
             ]
         )
-        let credentialStore = MockGitHubCredentialStore(
+        let credentialStore = StubGitHubCredentialStore(
             session: GitHubSession(
                 accessToken: "access-token",
                 tokenType: "bearer",
@@ -36,15 +36,15 @@ final class GitHubAPIClientTests: XCTestCase {
     }
 
     func testGraphQLPostsQueryAndVariablesToGitHubEndpoint() async throws {
-        let transport = MockGitHubHTTPTransport(
+        let transport = StubGitHubHTTPTransport(
             results: [
                 .success(
-                    data: Data(#"{"data":{"viewer":{"login":"octocat"}}}"#.utf8),
-                    response: httpResponse(url: "https://api.github.com/graphql", statusCode: 200)
+                    data: fixtureData(named: "graphql_viewer", subdirectory: "GitHubAPI"),
+                    response: makeHTTPResponse(url: "https://api.github.com/graphql", statusCode: 200)
                 )
             ]
         )
-        let credentialStore = MockGitHubCredentialStore(
+        let credentialStore = StubGitHubCredentialStore(
             session: GitHubSession(
                 accessToken: "access-token",
                 tokenType: "bearer"
@@ -75,15 +75,15 @@ final class GitHubAPIClientTests: XCTestCase {
     }
 
     func testGraphQLThrowsMessagesFromErrorsField() async throws {
-        let transport = MockGitHubHTTPTransport(
+        let transport = StubGitHubHTTPTransport(
             results: [
                 .success(
-                    data: Data(#"{"errors":[{"message":"Viewer unavailable"}]}"#.utf8),
-                    response: httpResponse(url: "https://api.github.com/graphql", statusCode: 200)
+                    data: fixtureData(named: "graphql_error", subdirectory: "GitHubAPI"),
+                    response: makeHTTPResponse(url: "https://api.github.com/graphql", statusCode: 200)
                 )
             ]
         )
-        let credentialStore = MockGitHubCredentialStore(
+        let credentialStore = StubGitHubCredentialStore(
             session: GitHubSession(accessToken: "access-token", tokenType: "bearer")
         )
         let client = URLSessionGitHubAPIClient(
@@ -104,26 +104,26 @@ final class GitHubAPIClientTests: XCTestCase {
 
     func testExchangeCodeResolvesUserAndPersistsSession() async throws {
         let configuration = try XCTUnwrap(
-            OAuthAppConfiguration.resolve(clientID: "abc123").configuration
+            OAuthAppConfiguration.resolve(clientID: "abc123", clientSecret: "secret456").configuration
         )
         let callback = try OAuthCallback(
             url: URL(string: "ghorchestrator://oauth/callback?code=oauth-code&state=state-123")!,
             expectedState: try XCTUnwrap(OAuthState(rawValue: "state-123"))
         )
         let verifier = try XCTUnwrap(OAuthCodeVerifier(rawValue: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"))
-        let transport = MockGitHubHTTPTransport(
+        let transport = StubGitHubHTTPTransport(
             results: [
                 .success(
-                    data: Data(#"{"access_token":"access-token","token_type":"bearer","scope":"repo"}"#.utf8),
-                    response: httpResponse(url: "https://github.com/login/oauth/access_token", statusCode: 200)
+                    data: fixtureData(named: "token_exchange_success", subdirectory: "GitHubAPI"),
+                    response: makeHTTPResponse(url: "https://github.com/login/oauth/access_token", statusCode: 200)
                 ),
                 .success(
-                    data: Data(#"{"login":"octocat"}"#.utf8),
-                    response: httpResponse(url: "https://api.github.com/user", statusCode: 200)
+                    data: fixtureData(named: "authenticated_user", subdirectory: "GitHubAPI"),
+                    response: makeHTTPResponse(url: "https://api.github.com/user", statusCode: 200)
                 )
             ]
         )
-        let credentialStore = MockGitHubCredentialStore()
+        let credentialStore = StubGitHubCredentialStore(session: nil)
         let client = URLSessionGitHubAPIClient(
             transport: transport,
             credentialStore: credentialStore
@@ -146,6 +146,7 @@ final class GitHubAPIClientTests: XCTestCase {
         XCTAssertEqual(requests[0].httpMethod, "POST")
         XCTAssertEqual(requests[0].value(forHTTPHeaderField: "Accept"), "application/json")
         XCTAssertTrue(tokenRequestBody.contains("client_id=abc123"))
+        XCTAssertTrue(tokenRequestBody.contains("client_secret=secret456"))
         XCTAssertTrue(tokenRequestBody.contains("code=oauth-code"))
         XCTAssertTrue(tokenRequestBody.contains("code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"))
         XCTAssertTrue(tokenRequestBody.contains("redirect_uri=ghorchestrator%3A%2F%2Foauth%2Fcallback"))
@@ -155,10 +156,10 @@ final class GitHubAPIClientTests: XCTestCase {
     }
 
     func testAuthenticatedUserFailsWhenNoStoredSessionExists() async throws {
-        let transport = MockGitHubHTTPTransport(results: [])
+        let transport = StubGitHubHTTPTransport(results: [])
         let client = URLSessionGitHubAPIClient(
             transport: transport,
-            credentialStore: MockGitHubCredentialStore()
+            credentialStore: StubGitHubCredentialStore(session: nil)
         )
 
         do {
@@ -173,15 +174,15 @@ final class GitHubAPIClientTests: XCTestCase {
     }
 
     func testRequestFailureUsesNormalizedGitHubMessage() async throws {
-        let transport = MockGitHubHTTPTransport(
+        let transport = StubGitHubHTTPTransport(
             results: [
                 .success(
-                    data: Data(#"{"message":"Bad credentials"}"#.utf8),
-                    response: httpResponse(url: "https://api.github.com/user", statusCode: 401)
+                    data: fixtureData(named: "bad_credentials", subdirectory: "GitHubAPI"),
+                    response: makeHTTPResponse(url: "https://api.github.com/user", statusCode: 401)
                 )
             ]
         )
-        let credentialStore = MockGitHubCredentialStore(
+        let credentialStore = StubGitHubCredentialStore(
             session: GitHubSession(accessToken: "access-token", tokenType: "bearer")
         )
         let client = URLSessionGitHubAPIClient(
@@ -205,72 +206,4 @@ private struct ViewerResponse: Decodable, Equatable {
 private struct GraphQLPayload: Decodable {
     let query: String
     let variables: [String: String]
-}
-
-private actor MockGitHubHTTPTransport: GitHubHTTPTransport {
-    enum Result {
-        case success(data: Data, response: URLResponse)
-        case failure(Error)
-    }
-
-    private var results: [Result]
-    private var requests: [URLRequest] = []
-
-    init(results: [Result]) {
-        self.results = results
-    }
-
-    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        requests.append(request)
-
-        guard !results.isEmpty else {
-            throw MockTransportError.noQueuedResponse
-        }
-
-        let result = results.removeFirst()
-
-        switch result {
-        case .success(let data, let response):
-            return (data, response)
-        case .failure(let error):
-            throw error
-        }
-    }
-
-    func recordedRequests() -> [URLRequest] {
-        requests
-    }
-}
-
-private enum MockTransportError: Error {
-    case noQueuedResponse
-}
-
-private final class MockGitHubCredentialStore: GitHubCredentialStore, @unchecked Sendable {
-    private var session: GitHubSession?
-
-    init(session: GitHubSession? = nil) {
-        self.session = session
-    }
-
-    func loadSession() throws -> GitHubSession? {
-        session
-    }
-
-    func saveSession(_ session: GitHubSession) throws {
-        self.session = session
-    }
-
-    func deleteSession() throws {
-        session = nil
-    }
-}
-
-private func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
-    HTTPURLResponse(
-        url: URL(string: url)!,
-        statusCode: statusCode,
-        httpVersion: nil,
-        headerFields: nil
-    )!
 }

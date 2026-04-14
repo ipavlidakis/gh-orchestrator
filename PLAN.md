@@ -468,7 +468,7 @@
   - `T19` should treat the new app-side auth and UI tests as the baseline and only add extra fixtures or mocks where coverage is still missing, rather than reworking the migrated state model again.
 
 ### T19: Verification And Fixture Refresh
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T16`, `T17`, `T18`
 - goal: re-establish package/app verification under the new auth and transport model.
@@ -480,10 +480,85 @@
   - refreshed fixtures and tests
   - verification notes for the OAuth migration phase
 - verification:
-  - `tuist generate --no-open`
-  - `swift test --package-path Packages/GHOrchestratorCore`
-  - `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData`
-  - `./script/build_and_run.sh --verify`
+  - 2026-04-15: `tuist generate --no-open` succeeded after refreshing the package fixtures and transport-backed test coverage.
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded with the refreshed OAuth/token/user fixtures and shared HTTP transport mocks.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after the app-side OAuth migration and fixture refresh.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after the end-to-end OAuth migration verification pass.
+- notes:
+  - Added `Fixtures/GitHubAPI` payloads for authenticated user lookup, GraphQL viewer success/error, token exchange success, and REST auth failure coverage.
+  - `GitHubAPIClientTests` now use the shared `StubGitHubHTTPTransport`, `StubGitHubCredentialStore`, and fixture loader from `GitHubTestSupport.swift` instead of inline JSON payloads.
+  - Snapshot and Actions enrichment tests remain transport-backed from `T16`; `T19` keeps that seam and extends the fixture set instead of introducing another mock layer.
+
+### T20: OAuth App Setup Link
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T17`, `T18`, `T19`
+- goal: help source builders register the required GitHub OAuth app from Settings.
+- scope:
+  - add a Settings action that opens the browser to the GitHub OAuth app registration or setup docs flow.
+  - keep the existing OAuth architecture unchanged; this is guidance and UX, not a transport/auth redesign.
+- deliverables:
+  - settings link(s) for OAuth app registration/setup
+  - verification notes
+- verification:
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding direct OAuth app registration/docs URLs to the app metadata and settings UI.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after adding the Settings browser links and metadata assertions.
+- notes:
+  - The Settings `GitHub` pane now links directly to the GitHub OAuth app registration page and the GitHub OAuth app setup docs when the build is not configured.
+  - This is source-builder guidance only; it does not change the app’s OAuth architecture or runtime transport behavior.
+
+### T21: Build-Time OAuth Client ID Injection
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T17`, `T20`
+- goal: ensure shipped builds can sign in with one button and no runtime env var.
+- scope:
+  - inject `GitHubOAuthClientID` into the app Info.plist from the build/generation environment.
+  - keep source builds without the env var in the existing not-configured state.
+- deliverables:
+  - build-time client ID injection
+  - verification notes
+- verification:
+  - 2026-04-15: `tuist generate --no-open` succeeded after wiring `GitHubOAuthClientID` to the generation/build environment in `Project.swift`.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after the build-time client ID injection change and Settings setup-link follow-up.
+- notes:
+  - Shipped builds can now include the public OAuth client ID in the app Info.plist by generating/building with `GH_ORCHESTRATOR_GITHUB_CLIENT_ID` set once; end users do not need to provide the env var at runtime.
+  - Source builds without the env var still surface the existing not-configured state and Settings registration/docs links.
+
+### T22: Local OAuth Config File
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T21`
+- goal: support a repo-local, untracked OAuth client ID config file instead of requiring env vars.
+- scope:
+  - add a local config file format and committed example.
+  - have `Project.swift` prefer the local config file, then env vars, then empty/not-configured.
+  - update builder-facing Settings copy to mention the local config file path.
+- deliverables:
+  - local OAuth config file support
+  - verification notes
+- verification:
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding `Config/GitHubOAuth.local.json` support to `Project.swift`.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after the local config-file fallback and Settings copy update.
+- notes:
+  - `Project.swift` now prefers `Config/GitHubOAuth.local.json`, then falls back to `GH_ORCHESTRATOR_GITHUB_CLIENT_ID`, then empty/not-configured.
+  - `Config/GitHubOAuth.local.example.json` is committed as the template and `Config/GitHubOAuth.local.json` is gitignored.
+  - Builder-facing Settings copy now points to the local config file first, with env vars only mentioned as an optional fallback.
+
+### T23: OAuth Client Secret Support
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `T21`, `T22`
+- goal: complete the GitHub OAuth code exchange with the app credentials GitHub currently requires.
+- scope:
+  - add `clientSecret` support to the local config/build injection path.
+  - require both client ID and client secret for the OAuth app configured state.
+  - send `client_secret` during the OAuth token exchange and update tests accordingly.
+- deliverables:
+  - working OAuth token exchange with client secret
+  - verification notes
+- verification:
+  - pending
 
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase

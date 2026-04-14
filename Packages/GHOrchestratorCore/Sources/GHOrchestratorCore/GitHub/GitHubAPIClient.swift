@@ -104,6 +104,7 @@ public struct URLSessionGitHubAPIClient: GitHubAPIClient {
     ) async throws -> GitHubSession {
         let tokenRequest = GitHubTokenExchangeRequest(
             clientID: configuration.clientID,
+            clientSecret: configuration.clientSecret,
             code: callback.code,
             codeVerifier: codeVerifier,
             redirectURI: configuration.redirectURI

@@ -4,6 +4,7 @@ import SwiftUI
 
 @main
 struct GHOrchestratorApp: App {
+    @NSApplicationDelegateAdaptor(GitHubAuthAppDelegate.self) private var appDelegate
     @State private var controller = AppController()
     private let settingsWindowMenuVisibilityController = SettingsWindowMenuVisibilityController()
 

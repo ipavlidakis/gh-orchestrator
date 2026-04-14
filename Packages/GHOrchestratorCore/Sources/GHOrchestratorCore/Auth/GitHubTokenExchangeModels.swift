@@ -2,17 +2,20 @@ import Foundation
 
 public struct GitHubTokenExchangeRequest: Codable, Equatable, Sendable {
     public let clientID: String
+    public let clientSecret: String
     public let code: String
     public let codeVerifier: String
     public let redirectURI: String
 
     public init(
         clientID: String,
+        clientSecret: String,
         code: String,
         codeVerifier: OAuthCodeVerifier,
         redirectURI: URL = OAuthAppConfiguration.defaultRedirectURI
     ) {
         self.clientID = clientID
+        self.clientSecret = clientSecret
         self.code = code
         self.codeVerifier = codeVerifier.rawValue
         self.redirectURI = redirectURI.absoluteString
@@ -20,6 +23,7 @@ public struct GitHubTokenExchangeRequest: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case clientID = "client_id"
+        case clientSecret = "client_secret"
         case code
         case codeVerifier = "code_verifier"
         case redirectURI = "redirect_uri"
@@ -180,6 +184,7 @@ extension GitHubTokenExchangeRequest {
     func formURLEncodedData() -> Data {
         let queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "client_secret", value: clientSecret),
             URLQueryItem(name: "code", value: code),
             URLQueryItem(name: "code_verifier", value: codeVerifier),
             URLQueryItem(name: "redirect_uri", value: redirectURI),

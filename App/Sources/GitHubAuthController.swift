@@ -180,7 +180,9 @@ protocol GitHubOAuthConfigurationProviding: Sendable {
 
 struct BundleGitHubOAuthConfigurationProvider: GitHubOAuthConfigurationProviding {
     static let clientIDInfoKey = "GitHubOAuthClientID"
+    static let clientSecretInfoKey = "GitHubOAuthClientSecret"
     static let clientIDEnvironmentKey = "GH_ORCHESTRATOR_GITHUB_CLIENT_ID"
+    static let clientSecretEnvironmentKey = "GH_ORCHESTRATOR_GITHUB_CLIENT_SECRET"
 
     let bundle: Bundle
     let environment: [String: String]
@@ -194,10 +196,15 @@ struct BundleGitHubOAuthConfigurationProvider: GitHubOAuthConfigurationProviding
     }
 
     func configurationResolution() -> OAuthAppConfiguration.Resolution {
-        let environmentValue = environment[Self.clientIDEnvironmentKey]
-        let bundleValue = bundle.object(forInfoDictionaryKey: Self.clientIDInfoKey) as? String
+        let environmentClientID = environment[Self.clientIDEnvironmentKey]
+        let environmentClientSecret = environment[Self.clientSecretEnvironmentKey]
+        let bundleClientID = bundle.object(forInfoDictionaryKey: Self.clientIDInfoKey) as? String
+        let bundleClientSecret = bundle.object(forInfoDictionaryKey: Self.clientSecretInfoKey) as? String
 
-        return OAuthAppConfiguration.resolve(clientID: environmentValue ?? bundleValue)
+        return OAuthAppConfiguration.resolve(
+            clientID: environmentClientID ?? bundleClientID,
+            clientSecret: environmentClientSecret ?? bundleClientSecret
+        )
     }
 }
 
