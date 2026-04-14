@@ -356,10 +356,14 @@ private struct RepositorySettingsPane: View {
                             Text("No Observed Repositories")
                                 .foregroundStyle(.secondary)
                         } else {
-                            List(model.observedRepositories, selection: $selectedRepositoryIDs) { repository in
-                                Text(repository.fullName)
-                                    .font(.system(.body, design: .monospaced))
-                                    .tag(repository.id)
+                            List(selection: $selectedRepositoryIDs) {
+                                ForEach(model.observedRepositories) { repository in
+                                    Text(repository.fullName)
+                                        .font(.system(.body, design: .monospaced))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .contentShape(Rectangle())
+                                        .tag(repository.id)
+                                }
                             }
                             .listStyle(.plain)
                             .scrollContentBackground(.hidden)

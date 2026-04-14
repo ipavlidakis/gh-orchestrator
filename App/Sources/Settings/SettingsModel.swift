@@ -174,8 +174,17 @@ final class SettingsModel {
             return
         }
 
+        let normalizedIDs = Set(
+            ids.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+        )
+
+        guard !normalizedIDs.isEmpty else {
+            return
+        }
+
         let updatedRepositories = store.settings.observedRepositories.filter { repository in
-            !ids.contains(repository.id)
+            !normalizedIDs.contains(repository.id)
         }
 
         guard updatedRepositories != store.settings.observedRepositories else {

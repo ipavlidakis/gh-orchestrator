@@ -130,6 +130,19 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(store.settings.observedRepositories.map(\.fullName), ["swiftlang/swift"])
     }
 
+    func testRemoveObservedRepositoriesNormalizesSelectedIDs() {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings.observedRepositories = [
+            ObservedRepository(owner: "OpenAI", name: "Codex"),
+            ObservedRepository(owner: "swiftlang", name: "swift"),
+        ]
+        let model = SettingsModel(store: store)
+
+        model.removeObservedRepositories(withIDs: [" OPENAI/CODEX "])
+
+        XCTAssertEqual(store.settings.observedRepositories.map(\.fullName), ["swiftlang/swift"])
+    }
+
     private func makeIsolatedStorageURL() -> URL {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("GHOrchestrator.SettingsModelTests.\(UUID().uuidString)", isDirectory: true)

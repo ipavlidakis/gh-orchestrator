@@ -586,6 +586,23 @@
   - This task supersedes the public-binary direction implied by `T23`, because embedding a GitHub OAuth client secret in a downloadable app bundle is not acceptable for release distribution.
   - Public builds now require only `GitHubOAuthClientID`; builders must enable device flow for the corresponding GitHub OAuth app in GitHub settings before distributing the app.
 
+### T25: Observed Repository Removal Fix
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T10`, `T12`
+- goal: make repository removal from the Settings window behave reliably.
+- scope:
+  - tighten the repository-list selection wiring used by the plus/minus controls.
+  - make the removal path tolerant of normalized versus display-cased repository IDs.
+  - add or update focused tests for the removal behavior.
+- deliverables:
+  - settings removal bug fix
+  - verification notes
+- verification:
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData -only-testing:GHOrchestratorTests/SettingsModelTests` succeeded after tightening the removal path and adding mixed-case ID coverage.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after the settings list selection wiring change.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after the observed-repository removal fix.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
