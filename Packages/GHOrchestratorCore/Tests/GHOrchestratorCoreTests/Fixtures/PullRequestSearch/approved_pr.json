@@ -1,0 +1,54 @@
+{
+  "data": {
+    "search": {
+      "nodes": [
+        {
+          "__typename": "PullRequest",
+          "number": 13152,
+          "title": "chore(deps): update release workflow",
+          "url": "https://github.com/cli/cli/pull/13152",
+          "isDraft": false,
+          "updatedAt": "2026-04-14T06:01:33Z",
+          "reviewDecision": "APPROVED",
+          "reviewThreads": {
+            "nodes": []
+          },
+          "statusCheckRollup": {
+            "state": "SUCCESS",
+            "contexts": {
+              "nodes": [
+                {
+                  "__typename": "CheckRun",
+                  "name": "lint",
+                  "status": "COMPLETED",
+                  "conclusion": "SUCCESS",
+                  "detailsUrl": "https://github.com/cli/cli/actions/runs/123456789/job/111",
+                  "checkSuite": {
+                    "app": {
+                      "name": "GitHub Actions",
+                      "slug": "github-actions"
+                    },
+                    "workflowRun": {
+                      "databaseId": 123456789,
+                      "url": "https://github.com/cli/cli/actions/runs/123456789",
+                      "workflow": {
+                        "name": "Lint"
+                      }
+                    }
+                  }
+                },
+                {
+                  "__typename": "StatusContext",
+                  "context": "mergeable",
+                  "state": "SUCCESS",
+                  "targetUrl": "https://github.com/cli/cli/pull/13152",
+                  "description": "Merge checks passed"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

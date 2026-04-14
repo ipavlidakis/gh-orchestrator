@@ -1,0 +1,36 @@
+{
+  "data": {
+    "search": {
+      "nodes": [
+        {
+          "__typename": "PullRequest",
+          "number": 13154,
+          "title": "wip: restructure sync layer",
+          "url": "https://github.com/cli/cli/pull/13154",
+          "isDraft": true,
+          "updatedAt": "2026-04-14T08:45:00Z",
+          "reviewDecision": null,
+          "reviewThreads": {
+            "nodes": [
+              { "isResolved": false, "isOutdated": false }
+            ]
+          },
+          "statusCheckRollup": {
+            "state": "FAILURE",
+            "contexts": {
+              "nodes": [
+                {
+                  "__typename": "StatusContext",
+                  "context": "ci/external",
+                  "state": "FAILURE",
+                  "targetUrl": "https://example.com/checks/ci-external",
+                  "description": "External CI failed"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

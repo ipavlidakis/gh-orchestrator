@@ -18,7 +18,10 @@ let package = Package(
         ),
         .testTarget(
             name: "GHOrchestratorCoreTests",
-            dependencies: ["GHOrchestratorCore"]
+            dependencies: ["GHOrchestratorCore"],
+            resources: [
+                .process("Fixtures")
+            ]
         )
     ]
 )

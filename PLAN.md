@@ -18,7 +18,7 @@
 ## Fixed Decisions
 - Platform target: macOS 15+.
 - Authentication source: current active `gh` account on `github.com`.
-- Persistence: `UserDefaults` only for app settings; no database or disk cache.
+- Persistence: app settings live in an Application Support file (`plist` or `json`), not `UserDefaults`; no database or disk cache.
 - Empty repository list means the app is not configured yet. It does not fall back to all repositories.
 - Polling interval is configurable, defaults to `60` seconds, and must be clamped to `15...900`.
 - Step links use `job.html_url#step:<stepNumber>:1` and fall back to `job.html_url`.
@@ -69,7 +69,7 @@
   - keep model types value-based and `Sendable` where appropriate.
 - implementation notes:
   - `ObservedRepository` should normalize whitespace and expose `owner`, `name`, and `fullName`.
-  - `AppSettings` should be serializable to `UserDefaults` without custom storage infrastructure.
+  - `AppSettings` should be serializable to a file-backed settings store in Application Support without database infrastructure.
   - `GitHubCLIHealth` should model at least: `missing`, `loggedOut`, `authenticated(username:)`, and `commandFailure(message:)`.
 - deliverables:
   - core model files in the local package
@@ -104,8 +104,8 @@
   - `gh auth status` is scoped to `--hostname github.com` so health mapping matches the fixed authentication decision.
 
 ### T04: GraphQL PR Fetch And Snapshot Mapping
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T02`, `T03`
 - goal: fetch the logged-in user's open PRs for configured repositories and map them into view-ready snapshot inputs.
 - scope:
@@ -122,11 +122,15 @@
   - DTO decoding
   - snapshot mapper for PR basics, review state, unresolved comments, and check rollup
 - verification:
-  - fixture-driven tests cover at least: no PRs, approved PR, review-required PR, draft PR, and unresolved-thread counting.
+  - 2026-04-14: `swift test --package-path Packages/GHOrchestratorCore` succeeded with fixture-driven coverage for no PRs, approved PR, review-required PR, draft PR, repository-scoped query construction, and unresolved-thread counting.
+  - 2026-04-14: `tuist generate --no-open` succeeded after adding the GraphQL snapshot layer.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after integrating the fetch layer.
+- notes:
+  - Snapshot inputs now preserve raw `CheckRun` and `StatusContext` data so T05 can enrich Actions jobs without re-fetching PR basics.
 
 ### T05: Actions Jobs And Step Expansion Pipeline
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T04`
 - goal: enrich PR check data with GitHub Actions jobs and steps while preserving non-Actions checks.
 - scope:
@@ -144,11 +148,15 @@
   - REST DTO decoding and merging logic
   - step-link helper
 - verification:
-  - fixture-driven tests cover completed jobs with steps, queued jobs without steps, mixed external checks, and correct step URL generation.
+  - 2026-04-14: `swift test --package-path Packages/GHOrchestratorCore` succeeded with coverage for completed jobs with steps, queued jobs without steps, mixed external checks, per-run fetch deduplication, and correct step URL generation.
+  - 2026-04-14: `tuist generate --no-open` succeeded after adding the Actions jobs enrichment layer.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after integrating the enrichment layer.
+- notes:
+  - Actions-backed checks are grouped by workflow run using `checkSuite.workflowRun`, while non-Actions check runs and status contexts remain flat external checks.
 
 ### T06: Repository Section Aggregation And Sorting
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T04`, `T05`
 - goal: produce the exact grouped and sorted structure consumed by the UI.
 - scope:
@@ -162,30 +170,36 @@
 - deliverables:
   - aggregation service or mapper
 - verification:
-  - unit tests cover multi-repo ordering, same-timestamp tie behavior, and hidden empty sections.
+  - 2026-04-14: `swift test --package-path Packages/GHOrchestratorCore` succeeded with coverage for multi-repo ordering, same-timestamp tie behavior, and hidden empty observed repositories.
+- notes:
+  - Aggregation now accepts the observed repository list plus flat pull request items so empty configured repositories can be dropped explicitly.
 
 ### T07: Settings Persistence And Settings Model
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T02`, `T03`
 - goal: persist app configuration and expose settings editing state to the SwiftUI settings scene.
 - scope:
-  - implement `SettingsStore` backed by `UserDefaults` / `@AppStorage`.
+  - implement `SettingsStore` backed by an Application Support settings file (`plist` or `json`).
   - implement `SettingsModel` for repository editing, polling interval editing, validation messages, and live persistence.
   - wire CLI health into the settings state.
 - implementation notes:
   - repository editing UX can use a multiline text field with one `owner/repo` per line.
   - invalid repository entries should be surfaced in settings instead of silently discarded.
   - settings writes should immediately update observers.
+  - prefer the easiest reliable file format to work with (`plist` or `json`) under the app’s Application Support directory.
 - deliverables:
   - settings store
   - settings model
 - verification:
-  - unit tests cover load/save round-trips, invalid repository input handling, and polling interval persistence.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData -only-testing:GHOrchestratorTests/SettingsStoreTests -only-testing:GHOrchestratorTests/SettingsModelTests` succeeded after migrating to an Application Support JSON store.
+- notes:
+  - Reopened on 2026-04-14 after the persistence decision changed from `UserDefaults` to an Application Support file-backed store.
+  - Settings persistence now writes `settings.json` under the app’s Application Support directory.
 
 ### T08: Menu Bar Dashboard Model And Polling Lifecycle
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T03`, `T06`, `T07`
 - goal: build the single observable owner for dashboard state, refresh logic, menu visibility handling, and expansion state.
 - scope:
@@ -203,11 +217,13 @@
   - dashboard observable model
   - refresh coordinator logic
 - verification:
-  - unit tests cover initial load, configurable interval, cancellation on hide, restart on settings change, and error-state transitions.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/SettingsModelTests -only-testing:GHOrchestratorTests/SettingsStoreTests` succeeded with coverage for initial load, configurable interval, cancellation on hide, restart on settings change, and error-state transitions.
+- notes:
+  - The app now has a shared `AppController` that keeps the settings store, dashboard model, and settings model on the same state graph.
 
 ### T09: Menu Bar UI
-- status: `todo`
-- owner: `unassigned`
+- status: `in_progress`
+- owner: `codex-main`
 - depends_on: `T08`
 - goal: implement the menu bar dashboard experience.
 - scope:
@@ -226,8 +242,8 @@
   - build runs successfully and manual inspection confirms expansion, section ordering, and link opening.
 
 ### T10: Settings Window UI
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-t10`
 - depends_on: `T07`
 - goal: implement a dedicated Settings window with health and configuration controls.
 - scope:
@@ -243,7 +259,10 @@
 - deliverables:
   - settings views and supporting state wiring
 - verification:
-  - manual inspection confirms settings changes update the dashboard without relaunch.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded with the updated settings-window UI and `SettingsModelTests`.
+- notes:
+  - The settings window UI is implemented and verified against the Application Support-backed settings model/store layer.
+  - The manual refresh hook and CLI health display are now wired through the shared app controller/dashboard model.
 
 ### T11: Fixtures, Tests, And Verification Pass
 - status: `todo`
@@ -289,3 +308,4 @@
 - 2026-04-14: v1 scope updated from “all open PRs for the user” to “open PRs for a user-configured repository allowlist”.
 - 2026-04-14: polling changed from fixed cadence to a user-configurable interval with a Settings surface.
 - 2026-04-14: dedicated Settings window added to show `gh` CLI health, connected account, and app configuration.
+- 2026-04-14: app settings persistence changed from `UserDefaults` to a file-backed store in Application Support (`plist` or `json`).

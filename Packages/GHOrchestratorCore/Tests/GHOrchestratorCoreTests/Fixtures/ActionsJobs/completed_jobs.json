@@ -1,0 +1,27 @@
+{
+  "jobs": [
+    {
+      "id": 654,
+      "name": "lint",
+      "html_url": "https://github.com/cli/cli/actions/runs/321/job/654",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-04-14T06:10:00Z",
+      "completed_at": "2026-04-14T06:12:00Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "number": 2,
+          "name": "Run lint",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ]
+}

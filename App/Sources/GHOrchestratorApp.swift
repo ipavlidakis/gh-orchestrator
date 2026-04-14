@@ -4,13 +4,15 @@ import SwiftUI
 
 @main
 struct GHOrchestratorApp: App {
+    @State private var controller = AppController()
+
     var body: some Scene {
         MenuBarExtra(AppMetadata.menuBarTitle, systemImage: "arrow.triangle.branch") {
-            MenuBarPlaceholderView()
+            MenuBarPlaceholderView(model: controller.dashboardModel)
         }
 
         Settings {
-            SettingsPlaceholderView()
+            SettingsWindowView(model: controller.settingsModel)
         }
     }
 }

@@ -1,0 +1,52 @@
+{
+  "data": {
+    "search": {
+      "nodes": [
+        {
+          "__typename": "PullRequest",
+          "number": 13153,
+          "title": "feat: keep draft discussions visible",
+          "url": "https://github.com/cli/cli/pull/13153",
+          "isDraft": false,
+          "updatedAt": "2026-04-14T07:30:00Z",
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviewThreads": {
+            "nodes": [
+              { "isResolved": false, "isOutdated": false },
+              { "isResolved": false, "isOutdated": true },
+              { "isResolved": true, "isOutdated": false },
+              { "isResolved": false, "isOutdated": false }
+            ]
+          },
+          "statusCheckRollup": {
+            "state": "PENDING",
+            "contexts": {
+              "nodes": [
+                {
+                  "__typename": "CheckRun",
+                  "name": "unit-tests",
+                  "status": "IN_PROGRESS",
+                  "conclusion": null,
+                  "detailsUrl": "https://github.com/cli/cli/actions/runs/222/job/333",
+                  "checkSuite": {
+                    "app": {
+                      "name": "GitHub Actions",
+                      "slug": "github-actions"
+                    },
+                    "workflowRun": {
+                      "databaseId": 222,
+                      "url": "https://github.com/cli/cli/actions/runs/222",
+                      "workflow": {
+                        "name": "Unit Tests"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
