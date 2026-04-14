@@ -1,6 +1,27 @@
 import Foundation
 
 enum GitHubAPIErrorMessageFormatter {
+    static func normalize(data: Data) -> String {
+        if let envelope = decodeEnvelope(from: data) {
+            let messages = [
+                envelope.message,
+                envelope.errorDescription,
+                envelope.errors?.compactMap(\.message).joined(separator: " ")
+            ]
+                .compactMap { value in
+                    value?.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                .filter { !$0.isEmpty }
+
+            if !messages.isEmpty {
+                return deduplicated(messages).joined(separator: " ")
+            }
+        }
+
+        return String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     static func normalize(_ rawMessage: String) -> String {
         let trimmed = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -76,13 +97,24 @@ enum GitHubAPIErrorMessageFormatter {
             return nil
         }
 
-        return try? JSONDecoder().decode(GitHubAPIErrorEnvelope.self, from: data)
+        return decodeEnvelope(from: data)
+    }
+
+    private static func decodeEnvelope(from data: Data) -> GitHubAPIErrorEnvelope? {
+        try? JSONDecoder().decode(GitHubAPIErrorEnvelope.self, from: data)
     }
 }
 
 private struct GitHubAPIErrorEnvelope: Decodable {
     let message: String?
+    let errorDescription: String?
     let errors: [GitHubAPIErrorItem]?
+
+    enum CodingKeys: String, CodingKey {
+        case message
+        case errorDescription = "error_description"
+        case errors
+    }
 }
 
 private struct GitHubAPIErrorItem: Decodable {

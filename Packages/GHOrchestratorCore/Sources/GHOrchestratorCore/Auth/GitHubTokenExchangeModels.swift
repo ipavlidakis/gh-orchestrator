@@ -175,3 +175,37 @@ public enum GitHubTokenExchangeError: Equatable, LocalizedError, Sendable {
         }
     }
 }
+
+extension GitHubTokenExchangeRequest {
+    func formURLEncodedData() -> Data {
+        let queryItems = [
+            URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "code", value: code),
+            URLQueryItem(name: "code_verifier", value: codeVerifier),
+            URLQueryItem(name: "redirect_uri", value: redirectURI),
+        ]
+
+        let payload = queryItems
+            .map { item in
+                let value = item.value ?? ""
+                return "\(item.name.percentEncodedQueryValue)=\(value.percentEncodedQueryValue)"
+            }
+            .joined(separator: "&")
+
+        return Data(payload.utf8)
+    }
+}
+
+private extension String {
+    var percentEncodedQueryValue: String {
+        addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? self
+    }
+}
+
+private extension CharacterSet {
+    static let urlQueryValueAllowed: CharacterSet = {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: ":#[]@!$&'()*+,;=/?")
+        return allowed
+    }()
+}

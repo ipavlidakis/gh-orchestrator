@@ -157,7 +157,7 @@ extension GHPullRequestSnapshotService {
         let payload = Data(output.standardOutput.utf8)
 
         do {
-            let decoder = JSONDecoder.githubGraphQL
+            let decoder = GitHubJSONCoders.graphQLDecoder
             let response = try decoder.decode(PullRequestSearchResponseDTO.self, from: payload)
             let items = try response.data.search.nodes.compactMap { node in
                 try mapNode(node, repository: repository)
@@ -326,39 +326,4 @@ extension GHPullRequestSnapshotService {
             workflowName: workflowRun.workflow?.name
         )
     }
-}
-
-private extension JSONDecoder {
-    static let githubGraphQL: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let value = try container.decode(String.self)
-
-            if let date = parseISO8601Date(value) {
-                return date
-            }
-
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Invalid ISO-8601 date: \(value)"
-            )
-        }
-        return decoder
-    }()
-
-    static func parseISO8601Date(_ value: String) -> Date? {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: value) {
-            return date
-        }
-
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: value)
-    }
-}
-
-func parseISO8601Date(_ value: String) -> Date? {
-    JSONDecoder.parseISO8601Date(value)
 }

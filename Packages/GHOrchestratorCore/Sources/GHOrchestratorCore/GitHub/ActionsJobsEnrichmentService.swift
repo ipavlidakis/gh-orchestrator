@@ -185,7 +185,7 @@ extension ActionsJobsEnrichmentService {
         }
 
         do {
-            let response = try JSONDecoder.githubREST.decode(
+            let response = try GitHubJSONCoders.restDecoder.decode(
                 ActionsJobsResponseDTO.self,
                 from: Data(output.standardOutput.utf8)
             )
@@ -228,24 +228,4 @@ private struct WorkflowRunReference: Equatable, Sendable {
     let status: String
     let conclusion: String?
     let fallbackDetailsURL: URL?
-}
-
-private extension JSONDecoder {
-    static let githubREST: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let value = try container.decode(String.self)
-
-            if let date = parseISO8601Date(value) {
-                return date
-            }
-
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Invalid ISO-8601 date: \(value)"
-            )
-        }
-        return decoder
-    }()
 }

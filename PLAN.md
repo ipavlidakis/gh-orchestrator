@@ -388,8 +388,8 @@
   - `GitHubCLIHealth` and the current app/UI consumers were left in place intentionally; `T15` should build direct `URLSession` transport on top of `GitHubTokenExchangeRequest` / `GitHubTokenExchangeResponse` and resolve `/user` into `GitHubSession.username`, while `T17`/`T18` should migrate app state and views to `GitHubAuthenticationState`.
 
 ### T15: Direct GitHub API Transport
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T14`
 - goal: replace the CLI transport abstraction with authenticated HTTP transport.
 - scope:
@@ -400,7 +400,11 @@
   - authenticated API transport layer
   - direct GitHub GraphQL and REST request helpers
 - verification:
-  - pending
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after adding the direct `URLSession`-backed GitHub API client, OAuth token exchange flow, `/user` resolution, and transport-level tests.
+- notes:
+  - Added `URLSessionGitHubAPIClient`, `GitHubAPIClient`, `GitHubHTTPTransport`, `URLSessionGitHubHTTPTransport`, `GitHubAuthenticatedUser`, shared GitHub JSON coders, and request/error handling for REST, GraphQL, and OAuth token exchange.
+  - `GitHubTokenExchangeRequest` now produces a URL-encoded POST body for the OAuth access-token exchange, and successful exchange resolves `/user` before persisting the enriched `GitHubSession` to the credential store.
+  - Legacy `GHCLIClient`, `GHPullRequestSnapshotService`, and `ActionsJobsEnrichmentService` still exist for compatibility; `T16` should switch those services to `URLSessionGitHubAPIClient` and remove `gh`-specific request execution afterward.
 
 ### T16: Snapshot And Actions Pipeline Migration
 - status: `todo`
