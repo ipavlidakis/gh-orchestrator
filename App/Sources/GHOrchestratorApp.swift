@@ -15,7 +15,7 @@ struct GHOrchestratorApp: App {
         Settings {
             SettingsWindowView(model: controller.settingsModel)
         }
-        .defaultSize(width: 560, height: 500)
+        .defaultSize(width: 780, height: 600)
         .windowResizability(.contentSize)
     }
 }

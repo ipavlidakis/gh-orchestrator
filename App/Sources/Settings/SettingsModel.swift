@@ -68,6 +68,10 @@ final class SettingsModel {
         manualRefreshAction != nil
     }
 
+    var observedRepositories: [ObservedRepository] {
+        store.settings.observedRepositories
+    }
+
     var pollingIntervalStepperValue: Int {
         Int(pollingIntervalText) ?? store.settings.pollingIntervalSeconds
     }
@@ -82,6 +86,48 @@ final class SettingsModel {
 
     func requestManualRefresh() {
         manualRefreshAction?()
+    }
+
+    @discardableResult
+    func addObservedRepository(from rawValue: String) -> Bool {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            repositoryValidationMessages = ["Enter a repository in owner/name format."]
+            return false
+        }
+
+        guard let repository = ObservedRepository(rawValue: trimmed) else {
+            repositoryValidationMessages = ["Invalid repository entry: \(trimmed)"]
+            return false
+        }
+
+        if store.settings.observedRepositories.contains(where: { $0.normalizedLookupKey == repository.normalizedLookupKey }) {
+            repositoryValidationMessages = ["Repository already added: \(repository.fullName)"]
+            return false
+        }
+
+        repositoryValidationMessages = []
+        store.settings.observedRepositories.append(repository)
+        repositoryText = Self.repositoryText(from: store.settings.observedRepositories)
+        return true
+    }
+
+    func removeObservedRepositories(withIDs ids: Set<String>) {
+        guard !ids.isEmpty else {
+            return
+        }
+
+        let updatedRepositories = store.settings.observedRepositories.filter { repository in
+            !ids.contains(repository.id)
+        }
+
+        guard updatedRepositories != store.settings.observedRepositories else {
+            return
+        }
+
+        repositoryValidationMessages = []
+        store.settings.observedRepositories = updatedRepositories
+        repositoryText = Self.repositoryText(from: updatedRepositories)
     }
 
     private func syncRepositories() {

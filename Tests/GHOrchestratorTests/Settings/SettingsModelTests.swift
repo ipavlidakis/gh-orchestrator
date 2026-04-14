@@ -68,6 +68,42 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertTrue(reloadedStore.settings.hideDockIcon)
     }
 
+    func testAddObservedRepositoryPersistsValidEntry() {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        let model = SettingsModel(store: store)
+
+        let didAdd = model.addObservedRepository(from: "openai/codex")
+
+        XCTAssertTrue(didAdd)
+        XCTAssertEqual(store.settings.observedRepositories.map(\.fullName), ["openai/codex"])
+        XCTAssertTrue(model.repositoryValidationMessages.isEmpty)
+    }
+
+    func testAddObservedRepositoryRejectsInvalidAndDuplicateEntries() {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings.observedRepositories = [ObservedRepository(owner: "openai", name: "codex")]
+        let model = SettingsModel(store: store)
+
+        XCTAssertFalse(model.addObservedRepository(from: "not valid"))
+        XCTAssertEqual(model.repositoryValidationMessages, ["Invalid repository entry: not valid"])
+
+        XCTAssertFalse(model.addObservedRepository(from: "OPENAI/CODEX"))
+        XCTAssertEqual(model.repositoryValidationMessages, ["Repository already added: OPENAI/CODEX"])
+    }
+
+    func testRemoveObservedRepositoriesRemovesSelectedIDs() {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings.observedRepositories = [
+            ObservedRepository(owner: "openai", name: "codex"),
+            ObservedRepository(owner: "swiftlang", name: "swift"),
+        ]
+        let model = SettingsModel(store: store)
+
+        model.removeObservedRepositories(withIDs: ["openai/codex"])
+
+        XCTAssertEqual(store.settings.observedRepositories.map(\.fullName), ["swiftlang/swift"])
+    }
+
     private func makeIsolatedStorageURL() -> URL {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("GHOrchestrator.SettingsModelTests.\(UUID().uuidString)", isDirectory: true)

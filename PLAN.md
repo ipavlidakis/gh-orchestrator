@@ -282,8 +282,8 @@
   - The manual refresh hook and CLI health display are now wired through the shared app controller/dashboard model.
 
 ### T11: Fixtures, Tests, And Verification Pass
-- status: `todo`
-- owner: `unassigned`
+- status: `in_progress`
+- owner: `codex-main`
 - depends_on: `T04`, `T05`, `T06`, `T07`, `T08`
 - goal: finish test coverage and end-to-end verification for the v1 scope.
 - scope:
@@ -303,7 +303,7 @@
   - app builds successfully.
 
 ### T12: Settings Window Enhancements
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T10`
 - goal: add the requested settings-window controls and align the preferences UI more closely with macOS settings conventions.
@@ -325,11 +325,12 @@
   - 2026-04-14: `tuist generate --no-open` succeeded after adding the Dock icon visibility controller and settings-window updates.
   - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData -only-testing:GHOrchestratorTests/AppControllerTests -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/SettingsModelTests -only-testing:GHOrchestratorTests/SettingsStoreTests` succeeded.
   - 2026-04-14: `./script/build_and_run.sh --verify` succeeded.
+  - 2026-04-14: user manually validated the revised settings window structure and menu-bar controls during iterative UI review.
 - notes:
-  - The settings window now uses a native `Form`/`Section` structure instead of custom card-like grouping.
+  - The settings window now uses a sidebar/detail preferences layout with grouped settings content and a list-style repository editor.
   - Dock icon visibility is applied from the app target through `NSApplication.setActivationPolicy(_:)`, with changes triggered from persisted settings.
   - Changing the Dock icon preference no longer triggers an unnecessary dashboard refresh.
-  - Manual visual confirmation of the Dock tile appearing/disappearing is still pending because this session does not have a reliable desktop automation path for toggling the setting and observing the Dock UI directly.
+  - Repository addition now uses a native `NSAlert` with a single-line `owner/name` text field instead of a delayed SwiftUI sheet presentation.
 
 ## Suggested Parallel Pickup Order
 - Agent 1: `T01`

@@ -34,20 +34,19 @@ struct MenuBarPlaceholderView: View {
                     ProgressView()
                         .controlSize(.small)
                 } else {
-                    Button("Refresh") {
+                    Button {
                         model.refresh()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(.borderless)
                 }
             }
 
-            Button("Settings") {
-                openSettings()
-            }
-            .buttonStyle(.borderless)
-
-            Button("Quit", role: .destructive) {
-                NSApplication.shared.terminate(nil)
+            Button {
+                openSettingsWindow()
+            } label: {
+                Image(systemName: "gearshape")
             }
             .buttonStyle(.borderless)
         }
@@ -115,6 +114,15 @@ struct MenuBarPlaceholderView: View {
 
     private func openURL(_ url: URL) {
         NSWorkspace.shared.open(url)
+    }
+
+    private func openSettingsWindow() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        openSettings()
+
+        Task { @MainActor in
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
     }
 }
 
