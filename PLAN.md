@@ -282,7 +282,7 @@
   - The manual refresh hook and CLI health display are now wired through the shared app controller/dashboard model.
 
 ### T11: Fixtures, Tests, And Verification Pass
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T04`, `T05`, `T06`, `T07`, `T08`
 - goal: finish test coverage and end-to-end verification for the v1 scope.
@@ -299,8 +299,14 @@
   - test suite
   - verification notes
 - verification:
-  - all unit tests pass.
-  - app builds successfully.
+  - 2026-04-14: checked-in minimal fixtures verified under `Packages/GHOrchestratorCore/Tests/GHOrchestratorCoreTests/Fixtures/PullRequestSearch` and `Packages/GHOrchestratorCore/Tests/GHOrchestratorCoreTests/Fixtures/ActionsJobs`.
+  - 2026-04-14: `swift test --package-path Packages/GHOrchestratorCore` succeeded.
+  - 2026-04-14: `tuist generate --no-open` succeeded.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded.
+  - 2026-04-14: `./script/build_and_run.sh --verify` succeeded.
+- notes:
+  - Core GraphQL and Actions jobs fixtures are checked in as reduced, stable payloads that back the package-level snapshot and enrichment tests.
+  - Remaining acceptable v1 limitation: menu-bar popup presentation and Dock icon visibility changes still rely on manual visual verification because this session does not have a reliable desktop automation path for those macOS surfaces.
 
 ### T12: Settings Window Enhancements
 - status: `done`
