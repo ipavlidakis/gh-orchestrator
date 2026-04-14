@@ -86,6 +86,33 @@ final class PullRequestSnapshotServiceTests: XCTestCase {
         XCTAssertTrue(client.recordedArguments.first?.contains("--hostname") == true)
         XCTAssertTrue(client.recordedArguments.first?.contains("github.com") == true)
     }
+
+    func testFetchRepositorySnapshotsFormatsGitHubAPIErrorsForDisplay() async {
+        let repository = ObservedRepository(owner: "ipavlidakis", name: "gh-orchestrator")
+        let client = MockGHCLIClient(outputsBySearchQuery: [
+            "repo:ipavlidakis/gh-orchestrator is:pr is:open author:@me archived:false": .success(
+                ProcessOutput(
+                    exitCode: 1,
+                    standardOutput: #"{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded for user ID 472467."}]}"#,
+                    standardError: "gh: API rate limit exceeded for user ID 472467."
+                )
+            )
+        ])
+
+        let service = GHPullRequestSnapshotService(client: client)
+
+        do {
+            _ = try await service.fetchRepositorySnapshots(for: [repository])
+            XCTFail("Expected fetchRepositorySnapshots to throw")
+        } catch let error as PullRequestSnapshotServiceError {
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Failed to load pull requests for ipavlidakis/gh-orchestrator: API rate limit exceeded for user ID 472467."
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }
 
 private final class MockGHCLIClient: GHCLIClient, @unchecked Sendable {

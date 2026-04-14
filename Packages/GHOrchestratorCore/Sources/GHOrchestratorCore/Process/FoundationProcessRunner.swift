@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 public struct FoundationProcessRunner: ProcessRunner {
     private static let defaultFallbackSearchPaths = [
@@ -168,18 +169,17 @@ public struct FoundationProcessRunner: ProcessRunner {
 }
 
 private final class DataCollector: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage = Data()
+    private let storage = Mutex(Data())
 
     func append(_ data: Data) {
-        lock.lock()
-        storage.append(data)
-        lock.unlock()
+        storage.withLock { storedData in
+            storedData.append(data)
+        }
     }
 
     var data: Data {
-        lock.lock()
-        defer { lock.unlock() }
-        return storage
+        storage.withLock { storedData in
+            storedData
+        }
     }
 }

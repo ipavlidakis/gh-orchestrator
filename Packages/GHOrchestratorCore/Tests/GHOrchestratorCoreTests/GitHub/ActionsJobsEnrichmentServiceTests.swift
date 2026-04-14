@@ -221,6 +221,64 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             jobURL
         )
     }
+
+    func testBuildPullRequestItemsFormatsGitHubAPIErrorsForDisplay() async {
+        let repository = ObservedRepository(owner: "cli", name: "cli")
+        let snapshot = PullRequestSnapshotItem(
+            repository: repository,
+            number: 104,
+            title: "Rate limited workflow",
+            url: URL(string: "https://github.com/cli/cli/pull/104")!,
+            isDraft: false,
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_400),
+            reviewStatus: .approved,
+            unresolvedReviewThreadCount: 0,
+            unresolvedReviewComments: [],
+            checkRollupState: .pending,
+            checkRuns: [
+                CheckRunSnapshot(
+                    name: "lint",
+                    status: "COMPLETED",
+                    conclusion: "SUCCESS",
+                    detailsURL: URL(string: "https://github.com/cli/cli/actions/runs/321/job/654"),
+                    appName: "GitHub Actions",
+                    appSlug: "github-actions",
+                    workflowRun: WorkflowRunReferenceSnapshot(
+                        id: 321,
+                        url: URL(string: "https://github.com/cli/cli/actions/runs/321"),
+                        workflowName: "Lint"
+                    )
+                )
+            ],
+            statusContexts: []
+        )
+
+        let client = MockActionsGHCLIClient(outputsByEndpoint: [
+            "repos/cli/cli/actions/runs/321/jobs": .success(
+                ProcessOutput(
+                    exitCode: 1,
+                    standardOutput: #"{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded for user ID 472467."}]}"#,
+                    standardError: "gh: API rate limit exceeded for user ID 472467."
+                )
+            )
+        ])
+
+        let service = ActionsJobsEnrichmentService(client: client)
+
+        do {
+            _ = try await service.buildPullRequestItems(
+                from: [RepositoryPullRequestSnapshot(repository: repository, pullRequests: [snapshot])]
+            )
+            XCTFail("Expected buildPullRequestItems to throw")
+        } catch let error as ActionsJobsEnrichmentError {
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Failed to load Actions jobs for cli/cli: API rate limit exceeded for user ID 472467."
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }
 
 private final class MockActionsGHCLIClient: GHCLIClient, @unchecked Sendable {

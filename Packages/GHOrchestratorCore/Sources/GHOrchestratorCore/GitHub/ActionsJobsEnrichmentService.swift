@@ -11,6 +11,17 @@ public enum ActionsJobsEnrichmentError: Error, Equatable, Sendable {
     case invalidWorkflowJobsResponse(repository: ObservedRepository, runID: Int, message: String)
 }
 
+extension ActionsJobsEnrichmentError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .workflowJobsRequestFailed(let repository, _, let message):
+            return "Failed to load Actions jobs for \(repository.fullName): \(message)"
+        case .invalidWorkflowJobsResponse(let repository, _, let message):
+            return "Received an invalid Actions jobs response for \(repository.fullName): \(message)"
+        }
+    }
+}
+
 public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
     public let client: any GHCLIClient
 
@@ -167,7 +178,9 @@ extension ActionsJobsEnrichmentService {
             throw ActionsJobsEnrichmentError.workflowJobsRequestFailed(
                 repository: repository,
                 runID: runID,
-                message: output.combinedOutput.isEmpty ? "gh api exited with code \(output.exitCode)" : output.combinedOutput
+                message: output.combinedOutput.isEmpty
+                    ? "gh api exited with code \(output.exitCode)"
+                    : GitHubAPIErrorMessageFormatter.normalize(output.combinedOutput)
             )
         }
 

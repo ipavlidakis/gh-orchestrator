@@ -148,7 +148,9 @@ extension GHPullRequestSnapshotService {
         guard output.exitCode == 0 else {
             throw PullRequestSnapshotServiceError.repositoryRequestFailed(
                 repository: repository,
-                message: output.combinedOutput.isEmpty ? "gh api graphql exited with code \(output.exitCode)" : output.combinedOutput
+                message: output.combinedOutput.isEmpty
+                    ? "gh api graphql exited with code \(output.exitCode)"
+                    : GitHubAPIErrorMessageFormatter.normalize(output.combinedOutput)
             )
         }
 

@@ -219,14 +219,15 @@ private struct PullRequestRowView: View {
         if hasExpandableChecks {
             Button(action: onToggleChecks) {
                 MetadataBadge(
-                    text: checksLabel(for: pullRequest.checkRollupState, isExpanded: isChecksExpanded),
-                    tone: checksTone(for: pullRequest.checkRollupState)
+                    text: checksLabel(for: pullRequest.checkRollupState),
+                    tone: checksTone(for: pullRequest.checkRollupState),
+                    systemImage: disclosureChevronName(isExpanded: isChecksExpanded)
                 )
             }
             .buttonStyle(.plain)
         } else {
             MetadataBadge(
-                text: checksLabel(for: pullRequest.checkRollupState, isExpanded: false),
+                text: checksLabel(for: pullRequest.checkRollupState),
                 tone: checksTone(for: pullRequest.checkRollupState)
             )
         }
@@ -237,14 +238,15 @@ private struct PullRequestRowView: View {
         if hasExpandableComments {
             Button(action: onToggleComments) {
                 MetadataBadge(
-                    text: commentsLabel(isExpanded: isCommentsExpanded),
-                    tone: pullRequest.unresolvedReviewThreadCount == 0 ? .secondary : .warning
+                    text: commentsLabel(),
+                    tone: pullRequest.unresolvedReviewThreadCount == 0 ? .secondary : .warning,
+                    systemImage: disclosureChevronName(isExpanded: isCommentsExpanded)
                 )
             }
             .buttonStyle(.plain)
         } else {
             MetadataBadge(
-                text: commentsLabel(isExpanded: false),
+                text: commentsLabel(),
                 tone: pullRequest.unresolvedReviewThreadCount == 0 ? .secondary : .warning
             )
         }
@@ -290,8 +292,8 @@ private struct PullRequestRowView: View {
         }
     }
 
-    private func checksLabel(for state: CheckRollupState, isExpanded: Bool) -> String {
-        let label = switch state {
+    private func checksLabel(for state: CheckRollupState) -> String {
+        switch state {
         case .none:
             "No checks"
         case .pending:
@@ -301,13 +303,10 @@ private struct PullRequestRowView: View {
         case .failing:
             "Checks failing"
         }
-
-        return label + (hasExpandableChecks ? (isExpanded ? "  ^" : "  v") : "")
     }
 
-    private func commentsLabel(isExpanded: Bool) -> String {
-        let label = "\(pullRequest.unresolvedReviewThreadCount) unresolved"
-        return label + (hasExpandableComments ? (isExpanded ? "  ^" : "  v") : "")
+    private func commentsLabel() -> String {
+        "\(pullRequest.unresolvedReviewThreadCount) unresolved"
     }
 
     private func checksTone(for state: CheckRollupState) -> MetadataBadge.Tone {
@@ -321,6 +320,10 @@ private struct PullRequestRowView: View {
         case .none:
             return .secondary
         }
+    }
+
+    private func disclosureChevronName(isExpanded: Bool) -> String {
+        isExpanded ? "chevron.down" : "chevron.right"
     }
 }
 
@@ -354,23 +357,10 @@ private struct ExpandedPullRequestDetailsView: View {
                                 .foregroundStyle(.secondary)
 
                             ForEach(workflowRun.jobs, id: \.id) { job in
-                                Button {
-                                    if let url = job.detailsURL {
-                                        onOpenURL(url)
-                                    }
-                                } label: {
-                                    HStack(alignment: .top, spacing: 8) {
-                                        Image(systemName: jobStatusIcon(for: job))
-                                            .foregroundStyle(jobStatusColor(for: job))
-
-                                        Text(jobSummary(for: job))
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                    .font(.caption)
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.leading, 14)
-                                .disabled(job.detailsURL == nil)
+                                WorkflowJobView(
+                                    job: job,
+                                    onOpenURL: onOpenURL
+                                )
                             }
                         }
                     }
@@ -464,6 +454,188 @@ private struct ExpandedPullRequestDetailsView: View {
     }
 }
 
+private struct WorkflowJobView: View {
+    let job: ActionJobItem
+    let onOpenURL: (URL) -> Void
+
+    @State private var isStepsExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 8) {
+                Button {
+                    if let url = job.detailsURL {
+                        onOpenURL(url)
+                    }
+                } label: {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: jobStatusIcon)
+                            .foregroundStyle(jobStatusColor)
+
+                        Text(jobSummary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .font(.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .disabled(job.detailsURL == nil)
+
+                if hasExpandableSteps {
+                    Button {
+                        isStepsExpanded.toggle()
+                    } label: {
+                        MetadataBadge(
+                            text: stepsToggleLabel,
+                            tone: .secondary,
+                            systemImage: disclosureChevronName
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if isStepsExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(job.steps, id: \.number) { step in
+                        Button {
+                            if let url = step.detailsURL {
+                                onOpenURL(url)
+                            }
+                        } label: {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: stepStatusIcon(for: step))
+                                    .foregroundStyle(stepStatusColor(for: step))
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Step \(step.number): \(step.name)")
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                                    Text(stepSummary(for: step))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .font(.caption2)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(step.detailsURL == nil)
+                    }
+                }
+                .padding(.leading, 18)
+            }
+        }
+        .padding(.leading, 14)
+    }
+
+    private var hasExpandableSteps: Bool {
+        !job.steps.isEmpty
+    }
+
+    private var stepsToggleLabel: String {
+        "\(job.steps.count) steps"
+    }
+
+    private var jobSummary: String {
+        if let failedStep = firstFailedStep {
+            return "\(job.name) · Failed on \(failedStep.name)"
+        }
+
+        if let conclusion = job.conclusion?.lowercased(), conclusion != "success" {
+            return "\(job.name) · \(conclusion)"
+        }
+
+        if job.status.lowercased() != "completed" {
+            return "\(job.name) · \(job.status.lowercased())"
+        }
+
+        return job.name
+    }
+
+    private var firstFailedStep: ActionStepItem? {
+        job.steps.first { step in
+            guard let conclusion = step.conclusion?.lowercased() else {
+                return false
+            }
+
+            return conclusion != "success" && conclusion != "skipped"
+        }
+    }
+
+    private var jobStatusIcon: String {
+        if firstFailedStep != nil || (job.conclusion?.lowercased() != nil && job.conclusion?.lowercased() != "success") {
+            return "xmark.circle.fill"
+        }
+
+        if job.status.lowercased() != "completed" {
+            return "clock.fill"
+        }
+
+        return "checkmark.circle.fill"
+    }
+
+    private var jobStatusColor: Color {
+        if firstFailedStep != nil || (job.conclusion?.lowercased() != nil && job.conclusion?.lowercased() != "success") {
+            return .red
+        }
+
+        if job.status.lowercased() != "completed" {
+            return .orange
+        }
+
+        return .green
+    }
+
+    private var disclosureChevronName: String {
+        isStepsExpanded ? "chevron.down" : "chevron.right"
+    }
+
+    private func stepSummary(for step: ActionStepItem) -> String {
+        if let conclusion = step.conclusion?.lowercased() {
+            return "\(step.status.lowercased()) · \(conclusion)"
+        }
+
+        return step.status.lowercased()
+    }
+
+    private func stepStatusIcon(for step: ActionStepItem) -> String {
+        if stepConclusionIsFailure(step) {
+            return "xmark.circle.fill"
+        }
+
+        if stepStatusIsPending(step) {
+            return "clock.fill"
+        }
+
+        return "checkmark.circle.fill"
+    }
+
+    private func stepStatusColor(for step: ActionStepItem) -> Color {
+        if stepConclusionIsFailure(step) {
+            return .red
+        }
+
+        if stepStatusIsPending(step) {
+            return .orange
+        }
+
+        return .green
+    }
+
+    private func stepConclusionIsFailure(_ step: ActionStepItem) -> Bool {
+        guard let conclusion = step.conclusion?.lowercased() else {
+            return false
+        }
+
+        return conclusion != "success" && conclusion != "skipped"
+    }
+
+    private func stepStatusIsPending(_ step: ActionStepItem) -> Bool {
+        let status = step.status.lowercased()
+        return status != "completed"
+    }
+}
+
 private struct ExpandedUnresolvedCommentsView: View {
     let comments: [UnresolvedReviewCommentItem]
     let onOpenURL: (URL) -> Void
@@ -539,10 +711,24 @@ private struct MetadataBadge: View {
 
     let text: String
     let tone: Tone
+    let systemImage: String?
+
+    init(text: String, tone: Tone, systemImage: String? = nil) {
+        self.text = text
+        self.tone = tone
+        self.systemImage = systemImage
+    }
 
     var body: some View {
-        Text(text)
-            .font(.caption2.weight(.medium))
+        HStack(spacing: 4) {
+            Text(text)
+
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.caption2.weight(.semibold))
+            }
+        }
+        .font(.caption2.weight(.medium))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(backgroundColor.opacity(0.12), in: Capsule())

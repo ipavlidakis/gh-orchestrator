@@ -245,13 +245,17 @@
 - deliverables:
   - app scene and dashboard views
 - verification:
-  - build runs successfully and manual inspection confirms expansion, section ordering, and link opening.
+  - 2026-04-14: `tuist generate --no-open` succeeded after the menu-bar dashboard view was extended to render Actions step rows.
+  - 2026-04-14: `swift test --package-path Packages/GHOrchestratorCore` succeeded after the menu-bar step-row changes.
+  - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData -only-testing:GHOrchestratorTests/AppControllerTests -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/SettingsModelTests -only-testing:GHOrchestratorTests/SettingsStoreTests` succeeded.
+  - 2026-04-14: `./script/build_and_run.sh --verify` succeeded.
 - notes:
   - The placeholder menu content has been replaced with a real repository/PR dashboard view on top of `MenuBarDashboardModel`.
   - Metadata bubbles are rendered horizontally.
   - The checks and unresolved-comment bubbles own their own expansion states and show an expanded/collapsed indicator.
   - Refresh shows a header `ProgressView` in place of the refresh button; the list keeps its previous content while loading.
-  - Manual visual verification of the menu-bar presentation is still pending.
+  - Expanded Actions content now renders workflow rows, job rows, and nested step rows with browser links derived from the job step URLs.
+  - Manual visual verification of the menu-bar presentation is still pending because this session does not have macOS assistive access to open and inspect the popup automatically.
 
 ### T10: Settings Window UI
 - status: `done`
