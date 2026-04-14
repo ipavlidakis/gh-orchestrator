@@ -19,6 +19,7 @@ public struct PullRequestSnapshotItem: Equatable, Identifiable, Sendable {
     public let updatedAt: Date
     public let reviewStatus: ReviewStatus
     public let unresolvedReviewThreadCount: Int
+    public let unresolvedReviewComments: [UnresolvedReviewCommentSnapshot]
     public let checkRollupState: CheckRollupState
     public let checkRuns: [CheckRunSnapshot]
     public let statusContexts: [StatusContextSnapshot]
@@ -36,6 +37,7 @@ public struct PullRequestSnapshotItem: Equatable, Identifiable, Sendable {
         updatedAt: Date,
         reviewStatus: ReviewStatus,
         unresolvedReviewThreadCount: Int,
+        unresolvedReviewComments: [UnresolvedReviewCommentSnapshot],
         checkRollupState: CheckRollupState,
         checkRuns: [CheckRunSnapshot],
         statusContexts: [StatusContextSnapshot]
@@ -48,9 +50,33 @@ public struct PullRequestSnapshotItem: Equatable, Identifiable, Sendable {
         self.updatedAt = updatedAt
         self.reviewStatus = reviewStatus
         self.unresolvedReviewThreadCount = unresolvedReviewThreadCount
+        self.unresolvedReviewComments = unresolvedReviewComments
         self.checkRollupState = checkRollupState
         self.checkRuns = checkRuns
         self.statusContexts = statusContexts
+    }
+}
+
+public struct UnresolvedReviewCommentSnapshot: Equatable, Identifiable, Sendable {
+    public let url: URL
+    public let authorLogin: String
+    public let bodyText: String
+    public let filePath: String
+
+    public var id: String {
+        url.absoluteString
+    }
+
+    public init(
+        url: URL,
+        authorLogin: String,
+        bodyText: String,
+        filePath: String
+    ) {
+        self.url = url
+        self.authorLogin = authorLogin
+        self.bodyText = bodyText
+        self.filePath = filePath
     }
 }
 

@@ -120,6 +120,29 @@ public struct WorkflowRunItem: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+public struct UnresolvedReviewCommentItem: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public let url: URL
+    public let authorLogin: String
+    public let bodyText: String
+    public let filePath: String
+
+    public var id: String {
+        url.absoluteString
+    }
+
+    public init(
+        url: URL,
+        authorLogin: String,
+        bodyText: String,
+        filePath: String
+    ) {
+        self.url = url
+        self.authorLogin = authorLogin
+        self.bodyText = bodyText
+        self.filePath = filePath
+    }
+}
+
 public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Sendable {
     public let repository: ObservedRepository
     public let number: Int
@@ -129,6 +152,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
     public let updatedAt: Date
     public let reviewStatus: ReviewStatus
     public let unresolvedReviewThreadCount: Int
+    public let unresolvedReviewComments: [UnresolvedReviewCommentItem]
     public let checkRollupState: CheckRollupState
     public let externalChecks: [ExternalCheckItem]
     public let workflowRuns: [WorkflowRunItem]
@@ -146,6 +170,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
         updatedAt: Date,
         reviewStatus: ReviewStatus,
         unresolvedReviewThreadCount: Int,
+        unresolvedReviewComments: [UnresolvedReviewCommentItem] = [],
         checkRollupState: CheckRollupState,
         externalChecks: [ExternalCheckItem] = [],
         workflowRuns: [WorkflowRunItem] = []
@@ -158,6 +183,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
         self.updatedAt = updatedAt
         self.reviewStatus = reviewStatus
         self.unresolvedReviewThreadCount = unresolvedReviewThreadCount
+        self.unresolvedReviewComments = unresolvedReviewComments
         self.checkRollupState = checkRollupState
         self.externalChecks = externalChecks
         self.workflowRuns = workflowRuns

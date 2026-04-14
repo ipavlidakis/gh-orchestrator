@@ -12,10 +12,70 @@
           "reviewDecision": "REVIEW_REQUIRED",
           "reviewThreads": {
             "nodes": [
-              { "isResolved": false, "isOutdated": false },
-              { "isResolved": false, "isOutdated": true },
-              { "isResolved": true, "isOutdated": false },
-              { "isResolved": false, "isOutdated": false }
+              {
+                "isResolved": false,
+                "isOutdated": false,
+                "path": "Sources/Feature/CallView.swift",
+                "comments": {
+                  "nodes": [
+                    {
+                      "url": "https://github.com/cli/cli/pull/13153#discussion_r1001",
+                      "bodyText": "This branch should stay on the main actor.",
+                      "author": {
+                        "login": "octocat"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "isResolved": false,
+                "isOutdated": true,
+                "path": "Sources/Feature/CallView.swift",
+                "comments": {
+                  "nodes": [
+                    {
+                      "url": "https://github.com/cli/cli/pull/13153#discussion_r1002",
+                      "bodyText": "Outdated comment",
+                      "author": {
+                        "login": "hubot"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "isResolved": true,
+                "isOutdated": false,
+                "path": "Sources/Feature/CallView.swift",
+                "comments": {
+                  "nodes": [
+                    {
+                      "url": "https://github.com/cli/cli/pull/13153#discussion_r1003",
+                      "bodyText": "Resolved comment",
+                      "author": {
+                        "login": "hubot"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "isResolved": false,
+                "isOutdated": false,
+                "path": "Sources/Core/Store.swift",
+                "comments": {
+                  "nodes": [
+                    {
+                      "url": "https://github.com/cli/cli/pull/13153#discussion_r1004",
+                      "bodyText": "Consider narrowing this API surface.",
+                      "author": {
+                        "login": "monalisa"
+                      }
+                    }
+                  ]
+                }
+              }
             ]
           },
           "statusCheckRollup": {

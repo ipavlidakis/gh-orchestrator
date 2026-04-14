@@ -48,6 +48,14 @@ final class PullRequestSnapshotServiceTests: XCTestCase {
         XCTAssertEqual(pullRequest.reviewStatus, .reviewRequired)
         XCTAssertEqual(pullRequest.checkRollupState, .pending)
         XCTAssertEqual(pullRequest.unresolvedReviewThreadCount, 2)
+        XCTAssertEqual(
+            pullRequest.unresolvedReviewComments.map(\.authorLogin),
+            ["octocat", "monalisa"]
+        )
+        XCTAssertEqual(
+            pullRequest.unresolvedReviewComments.map(\.filePath),
+            ["Sources/Feature/CallView.swift", "Sources/Core/Store.swift"]
+        )
     }
 
     func testFetchRepositorySnapshotsMapsDraftPullRequestFixture() async throws {

@@ -13,7 +13,7 @@
 - Observe only user-configured repositories, then list the logged-in user's open PRs in those repositories.
 - Group PRs by repository and sort repositories and PRs by most recent `updatedAt`.
 - Show PR review state, checks state, unresolved review-thread count, and expandable Actions jobs plus steps.
-- Poll on menu open and at a user-configurable interval while the dashboard is visible.
+- Do not auto-refresh when the menu window opens or while it is visible; background polling runs only while the menu window is hidden.
 
 ## Fixed Decisions
 - Platform target: macOS 15+.
@@ -112,6 +112,7 @@
   - for each configured repository, call `gh api graphql` with `repo:<owner/repo> is:pr is:open author:@me archived:false`.
   - request PR title, number, URL, draft state, `updatedAt`, `reviewDecision`, `reviewThreads`, and `statusCheckRollup`.
   - count unresolved review threads where `isResolved == false` and `isOutdated == false`.
+  - capture unresolved review comment details needed by the UI, including comment text, author, file path, and comment URL.
   - normalize GraphQL payloads into intermediate core models.
 - implementation notes:
   - aggregate results across repositories concurrently with Swift concurrency.
@@ -127,6 +128,7 @@
   - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after integrating the fetch layer.
 - notes:
   - Snapshot inputs now preserve raw `CheckRun` and `StatusContext` data so T05 can enrich Actions jobs without re-fetching PR basics.
+  - Unresolved review comment details are now captured from GraphQL with a bounded nested comment query to stay under GitHub's node-limit constraints.
 
 ### T05: Actions Jobs And Step Expansion Pipeline
 - status: `done`
@@ -205,10 +207,11 @@
 - scope:
   - implement `MenuBarDashboardModel`.
   - add loading, empty, `gh missing`, `not logged in`, `no repositories configured`, and command-failure states.
-  - refresh on menu open.
-  - poll while visible using the configured interval.
-  - cancel stale in-flight refreshes when the menu closes or a newer refresh starts.
-  - restart polling immediately when settings change.
+  - do not auto-refresh on menu open.
+  - poll only while the menu window is hidden using the configured interval.
+  - cancel stale in-flight refreshes when a newer refresh starts.
+  - preserve an in-flight hidden-window refresh when the menu opens so the first visible load can complete.
+  - restart hidden-window polling immediately when settings change.
 - implementation notes:
   - expansion state should be keyed by PR identity and preserved across refreshes where possible.
   - avoid overlapping refreshes.
@@ -220,6 +223,7 @@
   - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/SettingsModelTests -only-testing:GHOrchestratorTests/SettingsStoreTests` succeeded with coverage for initial load, configurable interval, cancellation on hide, restart on settings change, and error-state transitions.
 - notes:
   - The app now has a shared `AppController` that keeps the settings store, dashboard model, and settings model on the same state graph.
+  - Opening the menu stops future background polling but does not cancel an already-running hidden refresh.
 
 ### T09: Menu Bar UI
 - status: `in_progress`
@@ -230,8 +234,10 @@
   - add the `MenuBarExtra` scene.
   - render a scrollable dashboard with repository sections and PR rows.
   - show title, number, draft state, relative last-updated text, review state, checks state, and unresolved-thread count.
-  - implement split-action PR headers: chevron toggles expansion, title/open control opens the PR URL.
+  - implement split-action PR headers: title/open control opens the PR URL, checks badge toggles checks expansion, and unresolved-comments badge toggles unresolved comment expansion.
   - expanded content renders Actions workflow/job/step rows plus flat external check rows.
+  - unresolved comment expansion renders comment rows with author, file path, and comment text, plus a trailing chevron to indicate browser navigation to the comment URL.
+  - keep loading feedback in the header action area instead of replacing visible list content.
   - add top-level actions for opening Settings, manual refresh, and quitting the app.
 - implementation notes:
   - keep the menu layout compact enough for menu-bar use, but allow richer detail in the expanded rows.
@@ -240,6 +246,12 @@
   - app scene and dashboard views
 - verification:
   - build runs successfully and manual inspection confirms expansion, section ordering, and link opening.
+- notes:
+  - The placeholder menu content has been replaced with a real repository/PR dashboard view on top of `MenuBarDashboardModel`.
+  - Metadata bubbles are rendered horizontally.
+  - The checks and unresolved-comment bubbles own their own expansion states and show an expanded/collapsed indicator.
+  - Refresh shows a header `ProgressView` in place of the refresh button; the list keeps its previous content while loading.
+  - Manual visual verification of the menu-bar presentation is still pending.
 
 ### T10: Settings Window UI
 - status: `done`
@@ -309,3 +321,6 @@
 - 2026-04-14: polling changed from fixed cadence to a user-configurable interval with a Settings surface.
 - 2026-04-14: dedicated Settings window added to show `gh` CLI health, connected account, and app configuration.
 - 2026-04-14: app settings persistence changed from `UserDefaults` to a file-backed store in Application Support (`plist` or `json`).
+- 2026-04-14: automatic refresh while the menu window is visible was disabled; polling now runs only while the window is hidden, and opening the menu must not trigger a reload.
+- 2026-04-14: tapping the unresolved-comments badge should expand a list of unresolved review comments showing author, file path, and comment text, with comment rows linking to the browser.
+- 2026-04-14: opening the menu must preserve an already-running hidden refresh rather than cancelling it, and loading feedback belongs in the header instead of replacing list content.

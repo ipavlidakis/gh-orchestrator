@@ -42,6 +42,22 @@ struct PullRequestSearchResponseDTO: Decodable {
     struct ReviewThreadDTO: Decodable {
         let isResolved: Bool
         let isOutdated: Bool
+        let path: String?
+        let comments: ReviewCommentConnectionDTO?
+    }
+
+    struct ReviewCommentConnectionDTO: Decodable {
+        let nodes: [ReviewCommentDTO]
+    }
+
+    struct ReviewCommentDTO: Decodable {
+        let url: URL?
+        let bodyText: String?
+        let author: AuthorDTO?
+    }
+
+    struct AuthorDTO: Decodable {
+        let login: String?
     }
 
     struct StatusCheckRollupDTO: Decodable {

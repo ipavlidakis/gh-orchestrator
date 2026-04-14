@@ -38,6 +38,14 @@ public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
                         updatedAt: snapshot.updatedAt,
                         reviewStatus: snapshot.reviewStatus,
                         unresolvedReviewThreadCount: snapshot.unresolvedReviewThreadCount,
+                        unresolvedReviewComments: snapshot.unresolvedReviewComments.map { comment in
+                            UnresolvedReviewCommentItem(
+                                url: comment.url,
+                                authorLogin: comment.authorLogin,
+                                bodyText: comment.bodyText,
+                                filePath: comment.filePath
+                            )
+                        },
                         checkRollupState: snapshot.checkRollupState,
                         externalChecks: externalChecks,
                         workflowRuns: workflowRuns

@@ -10,6 +10,7 @@ struct GHOrchestratorApp: App {
         MenuBarExtra(AppMetadata.menuBarTitle, systemImage: "arrow.triangle.branch") {
             MenuBarPlaceholderView(model: controller.dashboardModel)
         }
+        .menuBarExtraStyle(.window)
 
         Settings {
             SettingsWindowView(model: controller.settingsModel)

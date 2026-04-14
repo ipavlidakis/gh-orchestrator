@@ -11,6 +11,17 @@ public enum PullRequestSnapshotServiceError: Error, Equatable, Sendable {
     case invalidResponse(repository: ObservedRepository, message: String)
 }
 
+extension PullRequestSnapshotServiceError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .repositoryRequestFailed(let repository, let message):
+            return "Failed to load pull requests for \(repository.fullName): \(message)"
+        case .invalidResponse(let repository, let message):
+            return "Received an invalid pull request response for \(repository.fullName): \(message)"
+        }
+    }
+}
+
 public struct GHPullRequestSnapshotService: PullRequestSnapshotFetching {
     public let client: any GHCLIClient
 
@@ -62,6 +73,16 @@ extension GHPullRequestSnapshotService {
               nodes {
                 isResolved
                 isOutdated
+                path
+                comments(last: 20) {
+                  nodes {
+                    url
+                    bodyText
+                    author {
+                      login
+                    }
+                  }
+                }
               }
             }
             statusCheckRollup {
@@ -182,6 +203,29 @@ extension GHPullRequestSnapshotService {
             }
         } ?? 0
 
+        let unresolvedComments = (node.reviewThreads?.nodes ?? [])
+            .filter { !$0.isResolved && !$0.isOutdated }
+            .flatMap { thread in
+                (thread.comments?.nodes ?? []).compactMap { comment -> UnresolvedReviewCommentSnapshot? in
+                    guard
+                        let url = comment.url,
+                        let authorLogin = comment.author?.login,
+                        let bodyText = comment.bodyText,
+                        let filePath = thread.path,
+                        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    else {
+                        return nil
+                    }
+
+                    return UnresolvedReviewCommentSnapshot(
+                        url: url,
+                        authorLogin: authorLogin,
+                        bodyText: bodyText,
+                        filePath: filePath
+                    )
+                }
+            }
+
         let mappedCheckRuns = node.statusCheckRollup?.contexts.nodes.compactMap { context in
             mapCheckRun(context)
         } ?? []
@@ -199,6 +243,7 @@ extension GHPullRequestSnapshotService {
             updatedAt: updatedAt,
             reviewStatus: mapReviewStatus(node.reviewDecision),
             unresolvedReviewThreadCount: unresolvedCount,
+            unresolvedReviewComments: unresolvedComments,
             checkRollupState: mapCheckRollupState(node.statusCheckRollup?.state),
             checkRuns: mappedCheckRuns,
             statusContexts: mappedStatusContexts

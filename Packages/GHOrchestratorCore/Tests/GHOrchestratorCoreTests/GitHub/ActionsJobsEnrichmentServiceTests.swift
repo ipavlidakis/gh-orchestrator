@@ -14,6 +14,7 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             updatedAt: Date(timeIntervalSince1970: 1_700_000_000),
             reviewStatus: .approved,
             unresolvedReviewThreadCount: 0,
+            unresolvedReviewComments: [],
             checkRollupState: .passing,
             checkRuns: [
                 CheckRunSnapshot(
@@ -63,6 +64,7 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             updatedAt: Date(timeIntervalSince1970: 1_700_000_100),
             reviewStatus: .reviewRequired,
             unresolvedReviewThreadCount: 1,
+            unresolvedReviewComments: [],
             checkRollupState: .pending,
             checkRuns: [
                 CheckRunSnapshot(
@@ -107,6 +109,7 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             updatedAt: Date(timeIntervalSince1970: 1_700_000_200),
             reviewStatus: .approved,
             unresolvedReviewThreadCount: 0,
+            unresolvedReviewComments: [],
             checkRollupState: .passing,
             checkRuns: [
                 CheckRunSnapshot(
@@ -172,6 +175,7 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             updatedAt: Date(timeIntervalSince1970: 1_700_000_300),
             reviewStatus: .approved,
             unresolvedReviewThreadCount: 0,
+            unresolvedReviewComments: [],
             checkRollupState: .passing,
             checkRuns: [
                 CheckRunSnapshot(

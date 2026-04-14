@@ -5,7 +5,7 @@ import GHOrchestratorCore
 
 @MainActor
 final class MenuBarDashboardModelTests: XCTestCase {
-    func testVisibleMenuLoadsSectionsWhenRepositoriesAreConfigured() async throws {
+    func testHiddenDashboardLoadsSectionsWhenRepositoriesAreConfigured() async throws {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings = AppSettings(
             observedRepositories: [ObservedRepository(owner: "openai", name: "codex")]
@@ -28,14 +28,13 @@ final class MenuBarDashboardModelTests: XCTestCase {
             sleeper: RecordingSleeper()
         )
 
-        model.setMenuVisible(true)
         await waitForLoadedState(on: model)
 
         XCTAssertEqual(model.state, .loaded(dataSource.sections))
         XCTAssertEqual(model.cliHealth, .authenticated(username: "octocat"))
     }
 
-    func testEmptyRepositoryListShowsNoRepositoriesConfigured() {
+    func testEmptyRepositoryListShowsNoRepositoriesConfiguredWhileHidden() {
         let model = MenuBarDashboardModel(
             settingsStore: SettingsStore(storageURL: makeIsolatedStorageURL()),
             dataSource: MockDashboardDataSource(
@@ -45,12 +44,10 @@ final class MenuBarDashboardModelTests: XCTestCase {
             sleeper: RecordingSleeper()
         )
 
-        model.setMenuVisible(true)
-
         XCTAssertEqual(model.state, .noRepositoriesConfigured)
     }
 
-    func testPollingUsesConfiguredIntervalAndRestartsWhenSettingsChange() async throws {
+    func testHiddenPollingUsesConfiguredIntervalAndRestartsWhenSettingsChange() async throws {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings = AppSettings(
             observedRepositories: [ObservedRepository(owner: "openai", name: "codex")],
@@ -67,7 +64,6 @@ final class MenuBarDashboardModelTests: XCTestCase {
             sleeper: sleeper
         )
 
-        model.setMenuVisible(true)
         await waitForDurations(count: 1, sleeper: sleeper)
 
         store.settings.pollingIntervalSeconds = 120
@@ -75,28 +71,90 @@ final class MenuBarDashboardModelTests: XCTestCase {
 
         let durations = await sleeper.recordedDurations
         XCTAssertEqual(durations.map { $0.components.seconds }, [60, 120])
+        XCTAssertFalse(model.isMenuVisible)
     }
 
-    func testHidingMenuCancelsInFlightRefresh() async throws {
+    func testShowingMenuKeepsInFlightRefreshRunning() async throws {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings = AppSettings(
             observedRepositories: [ObservedRepository(owner: "openai", name: "codex")]
         )
 
-        let dataSource = CancellableDashboardDataSource()
+        let expectedSections = [
+            RepositorySection(
+                repository: ObservedRepository(owner: "openai", name: "codex"),
+                pullRequests: [pullRequest(number: 1)]
+            )
+        ]
+        let dataSource = DelayedDashboardDataSource(sections: expectedSections)
         let model = MenuBarDashboardModel(
             settingsStore: store,
             dataSource: dataSource,
             sleeper: RecordingSleeper()
         )
 
-        model.setMenuVisible(true)
         await dataSource.waitUntilLoadStarts()
 
-        model.setMenuVisible(false)
-        await dataSource.waitUntilCancelled()
+        model.setMenuVisible(true)
+        await dataSource.finishLoading()
+        await waitForLoadedState(on: model)
 
-        XCTAssertFalse(model.isMenuVisible)
+        XCTAssertTrue(model.isMenuVisible)
+        XCTAssertEqual(model.state, .loaded(expectedSections))
+    }
+
+    func testShowingMenuDoesNotTriggerAdditionalRefresh() async throws {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings = AppSettings(
+            observedRepositories: [ObservedRepository(owner: "openai", name: "codex")]
+        )
+
+        let dataSource = CountingDashboardDataSource(
+            health: .authenticated(username: "octocat"),
+            sections: []
+        )
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: dataSource,
+            sleeper: RecordingSleeper()
+        )
+
+        await dataSource.waitForLoadCount(1)
+        model.setMenuVisible(true)
+        await Task.yield()
+
+        let loadCount = await dataSource.currentLoadCount()
+        XCTAssertEqual(loadCount, 1)
+    }
+
+    func testRefreshKeepsLoadedContentVisibleWhileLoading() async throws {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings = AppSettings(
+            observedRepositories: [ObservedRepository(owner: "openai", name: "codex")]
+        )
+
+        let initialSections = [
+            RepositorySection(
+                repository: ObservedRepository(owner: "openai", name: "codex"),
+                pullRequests: [pullRequest(number: 1)]
+            )
+        ]
+        let dataSource = SequencedDashboardDataSource(
+            firstSections: initialSections,
+            subsequentSections: []
+        )
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: dataSource,
+            sleeper: RecordingSleeper()
+        )
+
+        await waitForLoadedState(on: model)
+        model.refresh()
+        await dataSource.waitForLoadCount(2)
+
+        XCTAssertTrue(model.isRefreshing)
+        XCTAssertEqual(model.contentState, .loaded(initialSections))
     }
 
     func testHealthAndCommandFailureStatesTransition() async throws {
@@ -110,7 +168,6 @@ final class MenuBarDashboardModelTests: XCTestCase {
             dataSource: MockDashboardDataSource(health: .missing, sections: []),
             sleeper: RecordingSleeper()
         )
-        missingModel.setMenuVisible(true)
         XCTAssertEqual(missingModel.state, .ghMissing)
 
         let failingModel = MenuBarDashboardModel(
@@ -118,7 +175,6 @@ final class MenuBarDashboardModelTests: XCTestCase {
             dataSource: FailingDashboardDataSource(),
             sleeper: RecordingSleeper()
         )
-        failingModel.setMenuVisible(true)
         await waitForCommandFailure(on: failingModel)
 
         if case .commandFailure(let message) = failingModel.state {
@@ -204,6 +260,68 @@ private struct MockDashboardDataSource: DashboardDataSource {
     }
 }
 
+private actor CountingDashboardDataSource: DashboardDataSource {
+    let health: GitHubCLIHealth
+    let sections: [RepositorySection]
+    private(set) var loadCount = 0
+
+    init(health: GitHubCLIHealth, sections: [RepositorySection]) {
+        self.health = health
+        self.sections = sections
+    }
+
+    nonisolated func cliHealth() -> GitHubCLIHealth {
+        health
+    }
+
+    func loadSections(for settings: AppSettings) async throws -> [RepositorySection] {
+        loadCount += 1
+        return sections
+    }
+
+    func waitForLoadCount(_ expectedCount: Int) async {
+        while loadCount < expectedCount {
+            await Task.yield()
+        }
+    }
+
+    func currentLoadCount() -> Int {
+        loadCount
+    }
+}
+
+private actor SequencedDashboardDataSource: DashboardDataSource {
+    let firstSections: [RepositorySection]
+    let subsequentSections: [RepositorySection]
+    private(set) var loadCount = 0
+
+    init(firstSections: [RepositorySection], subsequentSections: [RepositorySection]) {
+        self.firstSections = firstSections
+        self.subsequentSections = subsequentSections
+    }
+
+    nonisolated func cliHealth() -> GitHubCLIHealth {
+        .authenticated(username: "octocat")
+    }
+
+    func loadSections(for settings: AppSettings) async throws -> [RepositorySection] {
+        loadCount += 1
+
+        if loadCount == 1 {
+            return firstSections
+        }
+
+        try await Task.sleep(for: .seconds(10))
+        return subsequentSections
+    }
+
+    func waitForLoadCount(_ expectedCount: Int) async {
+        while loadCount < expectedCount {
+            await Task.yield()
+        }
+    }
+}
+
 private struct FailingDashboardDataSource: DashboardDataSource {
     func cliHealth() -> GitHubCLIHealth {
         .authenticated(username: "octocat")
@@ -227,9 +345,14 @@ private actor RecordingSleeper: DashboardSleepProviding {
     }
 }
 
-private actor CancellableDashboardDataSource: DashboardDataSource {
+private actor DelayedDashboardDataSource: DashboardDataSource {
+    let sections: [RepositorySection]
     private(set) var didStartLoading = false
-    private(set) var didCancel = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    init(sections: [RepositorySection]) {
+        self.sections = sections
+    }
 
     nonisolated func cliHealth() -> GitHubCLIHealth {
         .authenticated(username: "octocat")
@@ -237,14 +360,10 @@ private actor CancellableDashboardDataSource: DashboardDataSource {
 
     func loadSections(for settings: AppSettings) async throws -> [RepositorySection] {
         didStartLoading = true
-
-        do {
-            try await Task.sleep(for: .seconds(10))
-            return []
-        } catch {
-            didCancel = true
-            throw error
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
         }
+        return sections
     }
 
     func waitUntilLoadStarts() async {
@@ -253,9 +372,8 @@ private actor CancellableDashboardDataSource: DashboardDataSource {
         }
     }
 
-    func waitUntilCancelled() async {
-        while !didCancel {
-            await Task.yield()
-        }
+    func finishLoading() {
+        continuation?.resume()
+        continuation = nil
     }
 }

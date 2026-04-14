@@ -30,10 +30,30 @@ final class MenuBarDashboardModel {
     @ObservationIgnored
     private var refreshGeneration = 0
 
+    @ObservationIgnored
+    private var stateBeforeLoading: State = .idle
+
     var state: State = .idle
     var cliHealth: GitHubCLIHealth = .missing
     var isMenuVisible = false
-    var expandedPullRequestIDs = Set<String>()
+    var expandedChecksPullRequestIDs = Set<String>()
+    var expandedCommentPullRequestIDs = Set<String>()
+
+    var isRefreshing: Bool {
+        if case .loading = state {
+            return true
+        }
+
+        return false
+    }
+
+    var contentState: State {
+        guard case .loading = state else {
+            return state
+        }
+
+        return stateBeforeLoading
+    }
 
     init(
         settingsStore: SettingsStore = SettingsStore(),
@@ -44,7 +64,20 @@ final class MenuBarDashboardModel {
         self.dataSource = dataSource
         self.sleeper = sleeper
 
-        observeSettings()
+        self.settingsStore.onSettingsChange = { [weak self] in
+            Task { @MainActor in
+                guard let self else {
+                    return
+                }
+
+                if !self.isMenuVisible {
+                    self.refresh()
+                    self.restartPolling()
+                }
+            }
+        }
+        refresh()
+        restartPolling()
     }
 
     deinit {
@@ -60,11 +93,10 @@ final class MenuBarDashboardModel {
         self.isMenuVisible = isVisible
 
         if isVisible {
+            cancelPolling()
+        } else {
             refresh()
             restartPolling()
-        } else {
-            cancelPolling()
-            cancelRefresh()
         }
     }
 
@@ -80,6 +112,11 @@ final class MenuBarDashboardModel {
             return
         }
 
+        if case .loading = state {
+            // Keep the previous stable state snapshot for restoration on cancellation.
+        } else {
+            stateBeforeLoading = state
+        }
         state = .loading
         let health = dataSource.cliHealth()
         cliHealth = health
@@ -130,11 +167,19 @@ final class MenuBarDashboardModel {
         }
     }
 
-    func toggleExpansion(for pullRequestID: String) {
-        if expandedPullRequestIDs.contains(pullRequestID) {
-            expandedPullRequestIDs.remove(pullRequestID)
+    func toggleChecksExpansion(for pullRequestID: String) {
+        if expandedChecksPullRequestIDs.contains(pullRequestID) {
+            expandedChecksPullRequestIDs.remove(pullRequestID)
         } else {
-            expandedPullRequestIDs.insert(pullRequestID)
+            expandedChecksPullRequestIDs.insert(pullRequestID)
+        }
+    }
+
+    func toggleCommentsExpansion(for pullRequestID: String) {
+        if expandedCommentPullRequestIDs.contains(pullRequestID) {
+            expandedCommentPullRequestIDs.remove(pullRequestID)
+        } else {
+            expandedCommentPullRequestIDs.insert(pullRequestID)
         }
     }
 
@@ -144,20 +189,25 @@ final class MenuBarDashboardModel {
                 section.pullRequests.map(\.id)
             }
         )
-        expandedPullRequestIDs.formIntersection(visibleIDs)
+        expandedChecksPullRequestIDs.formIntersection(visibleIDs)
+        expandedCommentPullRequestIDs.formIntersection(visibleIDs)
 
         state = sections.isEmpty ? .empty : .loaded(sections)
     }
 
-    private func cancelRefresh() {
+    private func cancelRefresh(restorePreviousState: Bool = false) {
         refreshTask?.cancel()
         refreshTask = nil
+
+        if restorePreviousState, case .loading = state {
+            state = stateBeforeLoading
+        }
     }
 
     private func restartPolling() {
         cancelPolling()
 
-        guard isMenuVisible else {
+        guard !isMenuVisible else {
             return
         }
 
@@ -184,24 +234,5 @@ final class MenuBarDashboardModel {
     private func cancelPolling() {
         pollingTask?.cancel()
         pollingTask = nil
-    }
-
-    private func observeSettings() {
-        withObservationTracking {
-            _ = settingsStore.settings
-        } onChange: { [weak self] in
-            Task { @MainActor in
-                guard let self else {
-                    return
-                }
-
-                if self.isMenuVisible {
-                    self.refresh()
-                    self.restartPolling()
-                }
-
-                self.observeSettings()
-            }
-        }
     }
 }

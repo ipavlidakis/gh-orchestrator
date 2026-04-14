@@ -13,9 +13,13 @@ final class SettingsStore {
     @ObservationIgnored
     private let storageURL: URL
 
+    @ObservationIgnored
+    var onSettingsChange: (() -> Void)?
+
     var settings: AppSettings {
         didSet {
             persist(settings)
+            onSettingsChange?()
         }
     }
 
