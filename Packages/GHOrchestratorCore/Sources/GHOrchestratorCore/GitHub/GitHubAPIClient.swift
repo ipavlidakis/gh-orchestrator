@@ -6,6 +6,10 @@ public protocol GitHubAPIClient: Sendable {
         query: String,
         variables: Variables?
     ) async throws -> Response
+    func rerunWorkflowJob(
+        repository: ObservedRepository,
+        jobID: Int
+    ) async throws
     func authenticatedUser() async throws -> GitHubAuthenticatedUser
     func startDeviceAuthorization(
         configuration: OAuthAppConfiguration
@@ -103,6 +107,19 @@ public struct URLSessionGitHubAPIClient: GitHubAPIClient {
 
     public func authenticatedUser() async throws -> GitHubAuthenticatedUser {
         try await get("/user")
+    }
+
+    public func rerunWorkflowJob(
+        repository: ObservedRepository,
+        jobID: Int
+    ) async throws {
+        var request = try authenticatedRequest(
+            url: endpointURL(path: "/repos/\(repository.fullName)/actions/jobs/\(jobID)/rerun"),
+            method: "POST"
+        )
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        _ = try await perform(request)
     }
 
     public func startDeviceAuthorization(

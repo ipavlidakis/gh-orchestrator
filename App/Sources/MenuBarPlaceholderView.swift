@@ -114,6 +114,18 @@ struct MenuBarPlaceholderView: View {
                             onToggleComments: { pullRequestID in
                                 model.toggleCommentsExpansion(for: pullRequestID)
                             },
+                            isRetryingJob: { jobID in
+                                model.isRetryingJob(jobID)
+                            },
+                            retryErrorMessage: { jobID in
+                                model.retryErrorMessage(for: jobID)
+                            },
+                            onRetryWorkflowJob: { repository, jobID in
+                                model.retryWorkflowJob(
+                                    repository: repository,
+                                    jobID: jobID
+                                )
+                            },
                             onOpenURL: openURL
                         )
                     }
@@ -144,6 +156,9 @@ private struct RepositorySectionView: View {
     let expandedCommentIDs: Set<String>
     let onToggleChecks: (String) -> Void
     let onToggleComments: (String) -> Void
+    let isRetryingJob: (Int) -> Bool
+    let retryErrorMessage: (Int) -> String?
+    let onRetryWorkflowJob: (ObservedRepository, Int) -> Void
     let onOpenURL: (URL) -> Void
 
     var body: some View {
@@ -170,6 +185,9 @@ private struct RepositorySectionView: View {
                     onToggleComments: {
                         onToggleComments(pullRequest.id)
                     },
+                    isRetryingJob: isRetryingJob,
+                    retryErrorMessage: retryErrorMessage,
+                    onRetryWorkflowJob: onRetryWorkflowJob,
                     onOpenURL: onOpenURL
                 )
             }
@@ -184,6 +202,9 @@ private struct PullRequestRowView: View {
     let isCommentsExpanded: Bool
     let onToggleChecks: () -> Void
     let onToggleComments: () -> Void
+    let isRetryingJob: (Int) -> Bool
+    let retryErrorMessage: (Int) -> String?
+    let onRetryWorkflowJob: (ObservedRepository, Int) -> Void
     let onOpenURL: (URL) -> Void
 
     var body: some View {
@@ -223,6 +244,9 @@ private struct PullRequestRowView: View {
                 if isChecksExpanded {
                     ExpandedPullRequestDetailsView(
                         pullRequest: pullRequest,
+                        isRetryingJob: isRetryingJob,
+                        retryErrorMessage: retryErrorMessage,
+                        onRetryWorkflowJob: onRetryWorkflowJob,
                         onOpenURL: onOpenURL
                     )
                 }
@@ -346,6 +370,9 @@ private struct PullRequestRowView: View {
 
 private struct ExpandedPullRequestDetailsView: View {
     let pullRequest: PullRequestItem
+    let isRetryingJob: (Int) -> Bool
+    let retryErrorMessage: (Int) -> String?
+    let onRetryWorkflowJob: (ObservedRepository, Int) -> Void
     let onOpenURL: (URL) -> Void
 
     var body: some View {
@@ -376,6 +403,14 @@ private struct ExpandedPullRequestDetailsView: View {
                             ForEach(workflowRun.jobs, id: \.id) { job in
                                 WorkflowJobView(
                                     job: job,
+                                    isRetrying: isRetryingJob(job.id),
+                                    retryErrorMessage: retryErrorMessage(job.id),
+                                    onRetryWorkflowJob: {
+                                        onRetryWorkflowJob(
+                                            pullRequest.repository,
+                                            job.id
+                                        )
+                                    },
                                     onOpenURL: onOpenURL
                                 )
                             }
@@ -473,6 +508,9 @@ private struct ExpandedPullRequestDetailsView: View {
 
 private struct WorkflowJobView: View {
     let job: ActionJobItem
+    let isRetrying: Bool
+    let retryErrorMessage: String?
+    let onRetryWorkflowJob: () -> Void
     let onOpenURL: (URL) -> Void
 
     @State private var isStepsExpanded = false
@@ -515,31 +553,31 @@ private struct WorkflowJobView: View {
             if isStepsExpanded {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(job.steps, id: \.number) { step in
-                        Button {
-                            if let url = step.detailsURL {
-                                onOpenURL(url)
-                            }
-                        } label: {
-                            HStack(alignment: .top, spacing: 8) {
-                                Image(systemName: stepStatusIcon(for: step))
-                                    .foregroundStyle(stepStatusColor(for: step))
+                        HStack(alignment: .top, spacing: 8) {
+                            stepContent(for: step)
 
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Step \(step.number): \(step.name)")
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                                    Text(stepSummary(for: step))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                            if stepConclusionIsFailure(step) {
+                                if isRetrying {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Button("Retry job", action: onRetryWorkflowJob)
+                                        .buttonStyle(.borderless)
+                                        .font(.caption2.weight(.medium))
+                                        .help("Re-run this job in GitHub Actions")
                                 }
                             }
-                            .font(.caption2)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(step.detailsURL == nil)
                     }
                 }
                 .padding(.leading, 18)
+            }
+
+            if let retryErrorMessage, !retryErrorMessage.isEmpty {
+                Text(retryErrorMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .padding(.leading, 18)
             }
         }
         .padding(.leading, 14)
@@ -613,6 +651,38 @@ private struct WorkflowJobView: View {
         }
 
         return step.status.lowercased()
+    }
+
+    @ViewBuilder
+    private func stepContent(for step: ActionStepItem) -> some View {
+        if let url = step.detailsURL {
+            Button {
+                onOpenURL(url)
+            } label: {
+                stepLabel(for: step)
+            }
+            .buttonStyle(.plain)
+        } else {
+            stepLabel(for: step)
+        }
+    }
+
+    private func stepLabel(for step: ActionStepItem) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: stepStatusIcon(for: step))
+                .foregroundStyle(stepStatusColor(for: step))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Step \(step.number): \(step.name)")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(stepSummary(for: step))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.caption2)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func stepStatusIcon(for step: ActionStepItem) -> String {

@@ -33,6 +33,9 @@ final class MenuBarDashboardModel {
     private var refreshGeneration = 0
 
     @ObservationIgnored
+    private var retryTasksByJobID: [Int: Task<Void, Never>] = [:]
+
+    @ObservationIgnored
     private var stateBeforeLoading: State = .idle
 
     var state: State = .idle
@@ -40,6 +43,8 @@ final class MenuBarDashboardModel {
     var isMenuVisible = false
     var expandedChecksPullRequestIDs = Set<String>()
     var expandedCommentPullRequestIDs = Set<String>()
+    var retryingJobIDs = Set<Int>()
+    var retryErrorMessagesByJobID: [Int: String] = [:]
 
     var isRefreshing: Bool {
         if case .loading = state {
@@ -90,6 +95,7 @@ final class MenuBarDashboardModel {
     deinit {
         refreshTask?.cancel()
         pollingTask?.cancel()
+        retryTasksByJobID.values.forEach { $0.cancel() }
     }
 
     func setMenuVisible(_ isVisible: Bool) {
@@ -200,14 +206,81 @@ final class MenuBarDashboardModel {
         }
     }
 
+    func retryWorkflowJob(
+        repository: ObservedRepository,
+        jobID: Int
+    ) {
+        guard retryTasksByJobID[jobID] == nil else {
+            return
+        }
+
+        retryErrorMessagesByJobID[jobID] = nil
+        retryingJobIDs.insert(jobID)
+
+        let task = Task { [dataSource] in
+            do {
+                try await dataSource.rerunWorkflowJob(
+                    repository: repository,
+                    jobID: jobID
+                )
+
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                await MainActor.run {
+                    self.retryingJobIDs.remove(jobID)
+                    self.retryTasksByJobID[jobID] = nil
+                    self.refresh()
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    self.retryingJobIDs.remove(jobID)
+                    self.retryTasksByJobID[jobID] = nil
+                }
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                await MainActor.run {
+                    self.retryingJobIDs.remove(jobID)
+                    self.retryTasksByJobID[jobID] = nil
+                    self.retryErrorMessagesByJobID[jobID] = error.localizedDescription
+                }
+            }
+        }
+
+        retryTasksByJobID[jobID] = task
+    }
+
+    func isRetryingJob(_ jobID: Int) -> Bool {
+        retryingJobIDs.contains(jobID)
+    }
+
+    func retryErrorMessage(for jobID: Int) -> String? {
+        retryErrorMessagesByJobID[jobID]
+    }
+
     private func applyLoadedSections(_ sections: [RepositorySection]) {
         let visibleIDs = Set(
             sections.flatMap { section in
                 section.pullRequests.map(\.id)
             }
         )
+        let visibleJobIDs = Set(
+            sections.flatMap { section in
+                section.pullRequests.flatMap { pullRequest in
+                    pullRequest.workflowRuns.flatMap { workflowRun in
+                        workflowRun.jobs.map(\.id)
+                    }
+                }
+            }
+        )
         expandedChecksPullRequestIDs.formIntersection(visibleIDs)
         expandedCommentPullRequestIDs.formIntersection(visibleIDs)
+        retryingJobIDs.formIntersection(visibleJobIDs)
+        retryErrorMessagesByJobID = retryErrorMessagesByJobID.filter { visibleJobIDs.contains($0.key) }
 
         state = sections.isEmpty ? .empty : .loaded(sections)
     }

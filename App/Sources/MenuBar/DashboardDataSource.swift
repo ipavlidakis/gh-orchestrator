@@ -2,11 +2,16 @@ import GHOrchestratorCore
 
 protocol DashboardDataSource: Sendable {
     func loadSections(for settings: AppSettings) async throws -> [RepositorySection]
+    func rerunWorkflowJob(
+        repository: ObservedRepository,
+        jobID: Int
+    ) async throws
 }
 
 struct LiveDashboardDataSource: DashboardDataSource {
     let snapshotService: any PullRequestSnapshotFetching
     let actionsService: any ActionsJobsEnriching
+    let retryService: any ActionsJobRetrying
     let aggregationService: any RepositorySectionAggregating
 
     init(
@@ -15,6 +20,7 @@ struct LiveDashboardDataSource: DashboardDataSource {
     ) {
         self.snapshotService = GHPullRequestSnapshotService(client: client)
         self.actionsService = ActionsJobsEnrichmentService(client: client)
+        self.retryService = ActionsJobRetryService(client: client)
         self.aggregationService = aggregationService
     }
 
@@ -26,6 +32,16 @@ struct LiveDashboardDataSource: DashboardDataSource {
         return aggregationService.makeSections(
             observedRepositories: settings.observedRepositories,
             pullRequests: items
+        )
+    }
+
+    func rerunWorkflowJob(
+        repository: ObservedRepository,
+        jobID: Int
+    ) async throws {
+        try await retryService.rerunJob(
+            repository: repository,
+            jobID: jobID
         )
     }
 }

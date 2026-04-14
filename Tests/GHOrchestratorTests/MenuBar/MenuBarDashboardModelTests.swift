@@ -204,6 +204,85 @@ final class MenuBarDashboardModelTests: XCTestCase {
         }
     }
 
+    func testRetryWorkflowJobRefreshesLoadedContentOnSuccess() async throws {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings = AppSettings(
+            observedRepositories: [ObservedRepository(owner: "openai", name: "codex")]
+        )
+
+        let sections = [
+            RepositorySection(
+                repository: ObservedRepository(owner: "openai", name: "codex"),
+                pullRequests: [pullRequestWithFailedJob(number: 7)]
+            )
+        ]
+        let dataSource = RetryableDashboardDataSource(sections: sections)
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: dataSource,
+            sleeper: RecordingSleeper(),
+            authenticationState: .authenticated(username: "octocat")
+        )
+
+        await waitForLoadedState(on: model)
+        model.retryWorkflowJob(
+            repository: ObservedRepository(owner: "openai", name: "codex"),
+            jobID: 700
+        )
+
+        XCTAssertTrue(model.isRetryingJob(700))
+        await dataSource.waitForRerunCount(1)
+        await waitForLoadCount(2, dataSource: dataSource)
+
+        XCTAssertFalse(model.isRetryingJob(700))
+        XCTAssertNil(model.retryErrorMessage(for: 700))
+
+        let rerunRequests = await dataSource.recordedRerunRequests()
+        XCTAssertEqual(rerunRequests.count, 1)
+        XCTAssertEqual(rerunRequests[0].repository, ObservedRepository(owner: "openai", name: "codex"))
+        XCTAssertEqual(rerunRequests[0].jobID, 700)
+    }
+
+    func testRetryWorkflowJobStoresInlineErrorWithoutReplacingLoadedState() async throws {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings = AppSettings(
+            observedRepositories: [ObservedRepository(owner: "openai", name: "codex")]
+        )
+
+        let sections = [
+            RepositorySection(
+                repository: ObservedRepository(owner: "openai", name: "codex"),
+                pullRequests: [pullRequestWithFailedJob(number: 9)]
+            )
+        ]
+        let dataSource = RetryableDashboardDataSource(
+            sections: sections,
+            rerunError: ActionsJobRetryError.rerunFailed(
+                repository: ObservedRepository(owner: "openai", name: "codex"),
+                jobID: 900,
+                message: "GitHub denied the retry request."
+            )
+        )
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: dataSource,
+            sleeper: RecordingSleeper(),
+            authenticationState: .authenticated(username: "octocat")
+        )
+
+        await waitForLoadedState(on: model)
+        model.retryWorkflowJob(
+            repository: ObservedRepository(owner: "openai", name: "codex"),
+            jobID: 900
+        )
+
+        await waitForRetryError(jobID: 900, on: model)
+
+        XCTAssertFalse(model.isRetryingJob(900))
+        XCTAssertEqual(model.retryErrorMessage(for: 900), "Failed to retry Actions job for openai/codex: GitHub denied the retry request.")
+        XCTAssertEqual(model.state, .loaded(sections))
+    }
+
     private func waitForLoadedState(on model: MenuBarDashboardModel) async {
         for _ in 0..<50 {
             if case .loaded = model.state {
@@ -237,6 +316,34 @@ final class MenuBarDashboardModelTests: XCTestCase {
         XCTFail("Timed out waiting for recorded sleep durations")
     }
 
+    private func waitForLoadCount(
+        _ count: Int,
+        dataSource: RetryableDashboardDataSource
+    ) async {
+        for _ in 0..<50 {
+            if await dataSource.currentLoadCount() >= count {
+                return
+            }
+            await Task.yield()
+        }
+
+        XCTFail("Timed out waiting for expected load count")
+    }
+
+    private func waitForRetryError(
+        jobID: Int,
+        on model: MenuBarDashboardModel
+    ) async {
+        for _ in 0..<50 {
+            if model.retryErrorMessage(for: jobID) != nil {
+                return
+            }
+            await Task.yield()
+        }
+
+        XCTFail("Timed out waiting for retry error")
+    }
+
     private func makeIsolatedStorageURL() -> URL {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("GHOrchestrator.MenuBarDashboardModelTests.\(UUID().uuidString)", isDirectory: true)
@@ -267,12 +374,65 @@ private func pullRequest(number: Int) -> PullRequestItem {
     )
 }
 
+private func pullRequestWithFailedJob(number: Int) -> PullRequestItem {
+    PullRequestItem(
+        repository: ObservedRepository(owner: "openai", name: "codex"),
+        number: number,
+        title: "PR #\(number)",
+        url: URL(string: "https://github.com/openai/codex/pull/\(number)")!,
+        isDraft: false,
+        updatedAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(number)),
+        reviewStatus: .approved,
+        unresolvedReviewThreadCount: 0,
+        checkRollupState: .failing,
+        workflowRuns: [
+            WorkflowRunItem(
+                id: number * 10,
+                name: "CI",
+                status: "completed",
+                conclusion: "failure",
+                detailsURL: URL(string: "https://github.com/openai/codex/actions/runs/\(number * 10)")!,
+                jobs: [
+                    ActionJobItem(
+                        id: number * 100,
+                        name: "Build",
+                        status: "completed",
+                        conclusion: "failure",
+                        detailsURL: URL(string: "https://github.com/openai/codex/actions/runs/\(number * 10)/job/\(number * 100)")!,
+                        steps: [
+                            ActionStepItem(
+                                number: 1,
+                                name: "Checkout",
+                                status: "completed",
+                                conclusion: "success",
+                                detailsURL: URL(string: "https://github.com/openai/codex/actions/runs/\(number * 10)/job/\(number * 100)#step:1:1")!
+                            ),
+                            ActionStepItem(
+                                number: 2,
+                                name: "Test",
+                                status: "completed",
+                                conclusion: "failure",
+                                detailsURL: URL(string: "https://github.com/openai/codex/actions/runs/\(number * 10)/job/\(number * 100)#step:2:1")!
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    )
+}
+
 private struct MockDashboardDataSource: DashboardDataSource {
     let sections: [RepositorySection]
 
     func loadSections(for _: AppSettings) async throws -> [RepositorySection] {
         sections
     }
+
+    func rerunWorkflowJob(
+        repository _: ObservedRepository,
+        jobID _: Int
+    ) async throws {}
 }
 
 private actor CountingDashboardDataSource: DashboardDataSource {
@@ -287,6 +447,11 @@ private actor CountingDashboardDataSource: DashboardDataSource {
         loadCount += 1
         return sections
     }
+
+    func rerunWorkflowJob(
+        repository _: ObservedRepository,
+        jobID _: Int
+    ) async throws {}
 
     func waitForLoadCount(_ expectedCount: Int) async {
         while loadCount < expectedCount {
@@ -320,6 +485,11 @@ private actor SequencedDashboardDataSource: DashboardDataSource {
         return subsequentSections
     }
 
+    func rerunWorkflowJob(
+        repository _: ObservedRepository,
+        jobID _: Int
+    ) async throws {}
+
     func waitForLoadCount(_ expectedCount: Int) async {
         while loadCount < expectedCount {
             await Task.yield()
@@ -335,6 +505,11 @@ private struct FailingDashboardDataSource: DashboardDataSource {
 
         throw SyntheticError()
     }
+
+    func rerunWorkflowJob(
+        repository _: ObservedRepository,
+        jobID _: Int
+    ) async throws {}
 }
 
 private actor RecordingSleeper: DashboardSleepProviding {
@@ -363,6 +538,11 @@ private actor DelayedDashboardDataSource: DashboardDataSource {
         return sections
     }
 
+    func rerunWorkflowJob(
+        repository _: ObservedRepository,
+        jobID _: Int
+    ) async throws {}
+
     func waitUntilLoadStarts() async {
         while !didStartLoading {
             await Task.yield()
@@ -372,5 +552,56 @@ private actor DelayedDashboardDataSource: DashboardDataSource {
     func finishLoading() {
         continuation?.resume()
         continuation = nil
+    }
+}
+
+private actor RetryableDashboardDataSource: DashboardDataSource {
+    struct RerunRequest: Equatable {
+        let repository: ObservedRepository
+        let jobID: Int
+    }
+
+    let sections: [RepositorySection]
+    let rerunError: (any Error & Sendable)?
+
+    private(set) var loadCount = 0
+    private(set) var rerunRequests: [RerunRequest] = []
+
+    init(
+        sections: [RepositorySection],
+        rerunError: (any Error & Sendable)? = nil
+    ) {
+        self.sections = sections
+        self.rerunError = rerunError
+    }
+
+    func loadSections(for _: AppSettings) async throws -> [RepositorySection] {
+        loadCount += 1
+        return sections
+    }
+
+    func rerunWorkflowJob(
+        repository: ObservedRepository,
+        jobID: Int
+    ) async throws {
+        rerunRequests.append(RerunRequest(repository: repository, jobID: jobID))
+
+        if let rerunError {
+            throw rerunError
+        }
+    }
+
+    func waitForRerunCount(_ expectedCount: Int) async {
+        while rerunRequests.count < expectedCount {
+            await Task.yield()
+        }
+    }
+
+    func recordedRerunRequests() -> [RerunRequest] {
+        rerunRequests
+    }
+
+    func currentLoadCount() -> Int {
+        loadCount
     }
 }

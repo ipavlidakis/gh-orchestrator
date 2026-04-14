@@ -603,6 +603,76 @@
   - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData` succeeded after the settings list selection wiring change.
   - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after the observed-repository removal fix.
 
+### T26: GitHub Release DMG Automation
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T24`
+- goal: produce a repeatable direct-distribution release workflow for a signed, notarized `.dmg` that can be attached to a GitHub Release.
+- scope:
+  - enable Hardened Runtime for Release builds.
+  - add repo-owned release tooling to archive the app, create a DMG, notarize/staple it, and compute checksums.
+  - add an optional GitHub Releases upload path using the GitHub REST API.
+  - document the required local Apple signing and notary prerequisites for maintainers.
+- deliverables:
+  - release automation script(s)
+  - release workflow documentation
+  - verification notes
+- verification:
+  - 2026-04-15: `bash -n script/release_dmg.sh` succeeded after adding config-file loading and GitHub upload/notarization preflight support.
+  - 2026-04-15: `./script/release_dmg.sh --dry-run --allow-dirty` succeeded using the default `Config/Release.local.json` file with no release flags.
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding the Release Hardened Runtime manifest settings.
+  - 2026-04-15: `xcodebuild -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -configuration Release -destination 'platform=macOS' -showBuildSettings` reported `ENABLE_HARDENED_RUNTIME = YES`.
+- notes:
+  - Added `Config/Release.local.example.json` and a gitignored `Config/Release.local.json` starter file so maintainers can drive releases from local JSON instead of long environment-variable command lines.
+  - `script/release_dmg.sh` now auto-loads `Config/Release.local.json` by default; a clean release run can be triggered with `./script/release_dmg.sh` once the local file contains real signing, notary, OAuth, and GitHub token values.
+
+### T27: Actions Failed-Step Retry
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T16`, `T18`, `T19`
+- goal: let the menu-bar dashboard request a GitHub Actions retry from failed step rows when GitHub permits it.
+- scope:
+  - add core transport support for GitHub's "re-run a job from a workflow run" endpoint.
+  - keep retry requests out of SwiftUI views by routing them through app/model/data-source seams.
+  - show a retry affordance next to failed Actions step rows and disable it while the request is in flight.
+  - surface permission or API failures inline without replacing the rest of the dashboard content.
+- deliverables:
+  - Actions job retry transport and model wiring
+  - menu-bar failed-step retry affordance
+  - verification notes
+- verification:
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding the Actions job-rerun transport and failed-step retry UI wiring.
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after adding the GitHub job-rerun client coverage.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData-T27` stalled twice in this session after target-graph construction and never launched an `xctest` child process, so no app-target XCTest result was emitted.
+  - 2026-04-15: `./script/build_and_run.sh --verify` stalled on the underlying `xcodebuild ... build` step in the same environment after target-graph construction, so app launch verification did not complete here.
+- notes:
+  - Failed Actions step rows now show a `Retry job` control when the step conclusion is not successful, and the control reruns the containing GitHub Actions job rather than the individual step because GitHub does not expose a step-level rerun endpoint.
+  - Retry requests flow through the app dashboard model and data-source seam into a core `ActionsJobRetryService`, preserving the app/package boundary and keeping GitHub HTTP calls out of SwiftUI views.
+  - Inline retry failures stay attached to the affected job row, and successful retry requests trigger a dashboard refresh without clearing the current visible content first.
+
+### T28: Verification Runner Stall Triage
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T27`
+- goal: identify and reduce the `xcodebuild`/verify stalls seen during local repo verification.
+- scope:
+  - reproduce the stall in the smallest meaningful build and test commands.
+  - determine whether the blocker is in the repo configuration, generated project, or stale local Xcode helper processes.
+  - add a focused repo-side mitigation if one is justified by the findings.
+- deliverables:
+  - root-cause notes
+  - any targeted verification helper/script fix if needed
+  - updated verification notes
+- verification:
+  - 2026-04-15: direct toolchain probe `/Applications/Xcode-26.4.0.app/.../clang -v -E -dM ... -c /dev/null` succeeded outside `xcodebuild`, confirming the compiler itself was healthy.
+  - 2026-04-15: after killing stale `xcodebuild` process trees tied to `GHOrchestrator.xcworkspace`, `xcodebuild -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -configuration Debug -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-build build` succeeded.
+  - 2026-04-15: after the same cleanup, `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-test` succeeded.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after adding stale-workspace-`xcodebuild` cleanup to the script.
+- notes:
+  - The apparent stall was not a project-graph or compiler crash. Stale `xcodebuild`/`SWBBuildService` process trees for this workspace were leaving child `clang -v -E -dM ...` probes blocked, which made later verification commands look hung before compilation started.
+  - `script/build_and_run.sh` now resolves the workspace/project and proactively kills stale `xcodebuild` trees for the same workspace before starting a new build.
+  - Once the runner stall was removed, the remaining real failure was a normal compile-time regression: two app-target test doubles were missing the new retry methods introduced by `T27`; those conformances are now updated.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -643,3 +713,5 @@
 - 2026-04-14: the Settings window now needs a persisted Dock icon visibility preference, a Quit action, and more native macOS settings presentation.
 - 2026-04-14: authentication and transport pivoted from the local `gh` CLI to GitHub OAuth App login with PKCE, Keychain-backed token storage, and direct GitHub GraphQL and REST requests because the app must work without per-repository GitHub App installation.
 - 2026-04-15: downloadable public builds must not embed a GitHub OAuth client secret; GHOrchestrator will use GitHub OAuth device flow with a client ID only, and the OAuth app must have device flow enabled in GitHub settings.
+- 2026-04-15: direct distribution will use a stapled Developer ID-signed `.dmg` attached to a GitHub Release, with release uploads performed through the GitHub REST API.
+- 2026-04-15: failed GitHub Actions steps in the menu-bar dashboard should expose a retry affordance that reruns the containing job when GitHub allows it; step-level rerun is not available, so permission or API failures must stay inline with the existing dashboard content.

@@ -214,6 +214,13 @@ private final class StubGitHubAPIClient: GitHubAPIClient, @unchecked Sendable {
         fatalError("Unexpected graphQL call for \(query)")
     }
 
+    func rerunWorkflowJob(
+        repository _: ObservedRepository,
+        jobID _: Int
+    ) async throws {
+        fatalError("Unexpected rerunWorkflowJob call")
+    }
+
     func authenticatedUser() async throws -> GitHubAuthenticatedUser {
         GitHubAuthenticatedUser(login: "octocat")
     }

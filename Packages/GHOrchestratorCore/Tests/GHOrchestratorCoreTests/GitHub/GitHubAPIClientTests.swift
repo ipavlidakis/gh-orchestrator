@@ -102,6 +102,42 @@ final class GitHubAPIClientTests: XCTestCase {
         }
     }
 
+    func testRerunWorkflowJobPostsToJobRerunEndpoint() async throws {
+        let transport = StubGitHubHTTPTransport(
+            results: [
+                .success(
+                    data: Data(),
+                    response: makeHTTPResponse(
+                        url: "https://api.github.com/repos/openai/codex/actions/jobs/42/rerun",
+                        statusCode: 201
+                    )
+                )
+            ]
+        )
+        let credentialStore = StubGitHubCredentialStore(
+            session: GitHubSession(accessToken: "access-token", tokenType: "bearer")
+        )
+        let client = URLSessionGitHubAPIClient(
+            transport: transport,
+            credentialStore: credentialStore
+        )
+
+        try await client.rerunWorkflowJob(
+            repository: ObservedRepository(owner: "openai", name: "codex"),
+            jobID: 42
+        )
+
+        let requests = await transport.recordedRequests()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(
+            requests[0].url?.absoluteString,
+            "https://api.github.com/repos/openai/codex/actions/jobs/42/rerun"
+        )
+        XCTAssertEqual(requests[0].httpMethod, "POST")
+        XCTAssertEqual(requests[0].value(forHTTPHeaderField: "Authorization"), "Bearer access-token")
+        XCTAssertEqual(requests[0].value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
+    }
+
     func testStartDeviceAuthorizationPostsClientIDAndScopeToGitHubEndpoint() async throws {
         let configuration = try XCTUnwrap(
             OAuthAppConfiguration.resolve(

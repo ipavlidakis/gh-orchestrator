@@ -156,6 +156,11 @@ private final class MutableDashboardDataSource: DashboardDataSource, @unchecked 
         return sections
     }
 
+    func rerunWorkflowJob(
+        repository _: ObservedRepository,
+        jobID _: Int
+    ) async throws {}
+
     func currentLoadCount() -> Int {
         loadCount.withLock { count in
             count

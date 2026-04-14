@@ -69,6 +69,59 @@ resolve_build_container() {
   PROJECT_PATH="$(find "$REPO_ROOT" -maxdepth 1 -name '*.xcodeproj' -type d -print -quit || true)"
 }
 
+collect_descendant_pids() {
+  local parent_pid="$1"
+  local child_pid
+
+  while IFS= read -r child_pid; do
+    [[ -n "$child_pid" ]] || continue
+    collect_descendant_pids "$child_pid"
+    printf '%s\n' "$child_pid"
+  done < <(pgrep -P "$parent_pid" || true)
+}
+
+cleanup_stale_build_processes() {
+  local build_target="${WORKSPACE_PATH:-${PROJECT_PATH:-}}"
+  if [[ -z "$build_target" ]]; then
+    return 0
+  fi
+
+  local stale_root_pids=()
+  local line
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    stale_root_pids+=("${line%% *}")
+  done < <(
+    ps -ax -o pid=,command= | awk -v target="$build_target" '
+      index($0, "xcodebuild") && index($0, target) { print $0 }
+    '
+  )
+
+  if [[ "${#stale_root_pids[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  info "Stopping stale xcodebuild processes for $(basename "$build_target")..."
+
+  local kill_pids=()
+  local root_pid
+  local child_pid
+  for root_pid in "${stale_root_pids[@]}"; do
+    [[ "$root_pid" == "$$" ]] && continue
+    kill_pids+=("$root_pid")
+
+    while IFS= read -r child_pid; do
+      [[ -n "$child_pid" ]] || continue
+      kill_pids+=("$child_pid")
+    done < <(collect_descendant_pids "$root_pid")
+  done
+
+  if [[ "${#kill_pids[@]}" -gt 0 ]]; then
+    kill "${kill_pids[@]}" 2>/dev/null || true
+    sleep 1
+  fi
+}
+
 kill_running_app() {
   if pgrep -x "$APP_NAME" >/dev/null 2>&1; then
     info "Stopping running $APP_NAME..."
@@ -80,6 +133,7 @@ kill_running_app() {
 build_app() {
   maybe_generate_workspace
   resolve_build_container
+  cleanup_stale_build_processes
 
   local build_args=()
   if [[ -n "${WORKSPACE_PATH:-}" ]]; then

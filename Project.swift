@@ -54,7 +54,22 @@ let project = Project(
             resources: [],
             dependencies: [
                 .package(product: "GHOrchestratorCore")
-            ]
+            ],
+            settings: .settings(
+                base: [
+                    "CURRENT_PROJECT_VERSION": "1",
+                    "MARKETING_VERSION": "1.0.0"
+                ],
+                configurations: [
+                    .debug(name: "Debug"),
+                    .release(
+                        name: "Release",
+                        settings: [
+                            "ENABLE_HARDENED_RUNTIME": "YES"
+                        ]
+                    )
+                ]
+            )
         ),
         .target(
             name: "GHOrchestratorTests",

@@ -1,0 +1,16 @@
+{
+  "repo": "ipavlidakis/gh-orchestrator",
+  "targetCommitish": "",
+  "releaseNotesFile": "",
+  "draft": true,
+  "prerelease": false,
+  "createRelease": true,
+  "upload": true,
+  "skipNotarization": false,
+  "allowDirty": false,
+  "appleDeveloperTeamID": "UBW6JB7T2F",
+  "appleDeveloperIDApplication": "Developer ID Application: Your Name (UBW6JB7T2F)",
+  "appleNotaryProfile": "GHOrchestratorNotary",
+  "githubOAuthClientID": "YOUR_GITHUB_OAUTH_CLIENT_ID",
+  "githubToken": "YOUR_GITHUB_TOKEN"
+}
