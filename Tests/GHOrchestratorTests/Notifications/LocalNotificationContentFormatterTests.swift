@@ -1,0 +1,50 @@
+import Foundation
+import XCTest
+@testable import GHOrchestrator
+import GHOrchestratorCore
+
+final class LocalNotificationContentFormatterTests: XCTestCase {
+    func testWorkflowJobSuccessNotificationUsesRepositoryTitleAndSuccessBody() {
+        let notificationEvent = workflowJobEvent(
+            jobName: "unit-tests",
+            conclusion: "success"
+        )
+
+        XCTAssertEqual(LocalNotificationContentFormatter.title(for: notificationEvent), "codex")
+        XCTAssertEqual(LocalNotificationContentFormatter.body(for: notificationEvent), "✅ unit-tests succeed")
+    }
+
+    func testWorkflowJobFailureNotificationUsesRepositoryTitleAndFailureBody() {
+        let notificationEvent = workflowJobEvent(
+            jobName: "lint",
+            conclusion: "failure"
+        )
+
+        XCTAssertEqual(LocalNotificationContentFormatter.title(for: notificationEvent), "codex")
+        XCTAssertEqual(LocalNotificationContentFormatter.body(for: notificationEvent), "❌ lint fail")
+    }
+
+    private func workflowJobEvent(
+        jobName: String,
+        conclusion: String
+    ) -> RepositoryNotificationEvent {
+        let repository = ObservedRepository(owner: "openai", name: "codex")
+        let pullRequestURL = URL(string: "https://github.com/openai/codex/pull/1")!
+        let jobURL = URL(string: "https://github.com/openai/codex/actions/runs/1/job/2")!
+
+        return RepositoryNotificationEvent(
+            trigger: .workflowJobCompleted,
+            repository: repository,
+            pullRequestNumber: 1,
+            pullRequestTitle: "Add notifications",
+            pullRequestURL: pullRequestURL,
+            targetURL: jobURL,
+            workflowRunID: 1,
+            workflowName: "CI",
+            workflowConclusion: conclusion,
+            workflowJobID: 2,
+            workflowJobName: jobName,
+            workflowJobConclusion: conclusion
+        )
+    }
+}

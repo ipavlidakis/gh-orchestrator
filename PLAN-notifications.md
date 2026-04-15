@@ -123,3 +123,21 @@
   - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after rebuilding and launching the app with PR-created notification support.
 - notes:
   - Detection is polling-based: “created” means a PR first appears in the monitored open-PR snapshot after baseline, not a webhook-backed GitHub creation event.
+
+### N06: Workflow Job Notification Copy
+- status: `done`
+- owner: `codex-main`
+- depends_on: `N03`
+- goal: update workflow job completion notification copy to show the repository name first, then the job result with a success or failure icon.
+- scope:
+  - change app-owned local notification formatting for workflow job completion events.
+  - keep notification routing and core event evaluation unchanged.
+  - add focused app coverage for the formatted title and body.
+- deliverables:
+  - workflow job notification title/body formatting update
+  - focused notification delivery formatting test
+- verification:
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding focused notification formatting coverage.
+  - 2026-04-15: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-notification-copy -only-testing:GHOrchestratorTests/LocalNotificationContentFormatterTests` succeeded after updating workflow job notification copy.
+- notes:
+  - Requested format is title `Repo name`, body `✅/❌ {job name} succeed/fail`.

@@ -119,8 +119,8 @@ final class UserNotificationCenterDelivery: NSObject, LocalNotificationDeliverin
 
     func deliver(_ event: RepositoryNotificationEvent) async throws {
         let content = UNMutableNotificationContent()
-        content.title = Self.title(for: event)
-        content.body = Self.body(for: event)
+        content.title = LocalNotificationContentFormatter.title(for: event)
+        content.body = LocalNotificationContentFormatter.body(for: event)
         content.sound = .default
         content.userInfo = [
             LocalNotificationUserInfo.targetURLKey: event.targetURL.absoluteString
@@ -148,8 +148,10 @@ final class UserNotificationCenterDelivery: NSObject, LocalNotificationDeliverin
     ) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }
+}
 
-    private static func title(for event: RepositoryNotificationEvent) -> String {
+enum LocalNotificationContentFormatter {
+    static func title(for event: RepositoryNotificationEvent) -> String {
         switch event.trigger {
         case .pullRequestCreated:
             return "New PR in \(event.repository.fullName)"
@@ -162,11 +164,11 @@ final class UserNotificationCenterDelivery: NSObject, LocalNotificationDeliverin
         case .workflowRunCompleted:
             return "\(event.workflowName ?? "Workflow") completed"
         case .workflowJobCompleted:
-            return "\(event.workflowJobName ?? "Workflow job") completed"
+            return event.repository.name
         }
     }
 
-    private static func body(for event: RepositoryNotificationEvent) -> String {
+    static func body(for event: RepositoryNotificationEvent) -> String {
         switch event.trigger {
         case .pullRequestCreated:
             let author = event.authorLogin.map { "\($0) opened " } ?? ""
@@ -186,13 +188,16 @@ final class UserNotificationCenterDelivery: NSObject, LocalNotificationDeliverin
 
             return "\(event.repository.fullName) #\(event.pullRequestNumber): \(event.pullRequestTitle)"
         case .workflowJobCompleted:
-            let workflowName = event.workflowName ?? "Workflow"
-            let conclusion = event.workflowJobConclusion?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let conclusion, !conclusion.isEmpty {
-                return "\(workflowName) for \(event.repository.fullName) #\(event.pullRequestNumber): \(conclusion)"
-            }
-
-            return "\(workflowName) for \(event.repository.fullName) #\(event.pullRequestNumber)"
+            return workflowJobBody(for: event)
         }
+    }
+
+    private static func workflowJobBody(for event: RepositoryNotificationEvent) -> String {
+        let rawJobName = event.workflowJobName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jobName = rawJobName.flatMap { $0.isEmpty ? nil : $0 } ?? "Workflow job"
+        let conclusion = event.workflowJobConclusion?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isSuccess = conclusion?.caseInsensitiveCompare("success") == .orderedSame
+
+        return "\(isSuccess ? "✅" : "❌") \(jobName) \(isSuccess ? "succeed" : "fail")"
     }
 }
