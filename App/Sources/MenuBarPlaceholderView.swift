@@ -36,26 +36,37 @@ struct MenuBarPlaceholderView: View {
                     .help(model.areDashboardFiltersDisabled ? "Filters are disabled while the current refresh error is visible." : "")
             }
 
-            Group {
-                if model.isRefreshing {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Button {
-                        model.refresh()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(.borderless)
-                }
+            if model.isRefreshing {
+                ProgressView()
+                    .controlSize(.small)
             }
 
-            Button {
-                openSettingsWindow()
+            Menu {
+                Button {
+                    model.refresh()
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .disabled(model.isRefreshing)
+
+                Button {
+                    openSettingsWindow()
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                }
+
+                Divider()
+
+                Button {
+                    NSApplication.shared.terminate(nil)
+                } label: {
+                    Label("Quit", systemImage: "power")
+                }
             } label: {
-                Image(systemName: "gearshape")
+                Image(systemName: "ellipsis.circle")
             }
-            .buttonStyle(.borderless)
+            .menuStyle(.borderlessButton)
+            .help("More")
         }
     }
 

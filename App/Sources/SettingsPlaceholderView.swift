@@ -417,29 +417,6 @@ private struct GeneralSettingsPane: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
-            SettingsGroup(title: "Actions") {
-                SettingsRow(
-                    title: "Refresh dashboard",
-                    subtitle: "Run the existing dashboard refresh path now."
-                ) {
-                    Button("Refresh Now") {
-                        model.requestManualRefresh()
-                    }
-                    .disabled(!model.hasManualRefreshAction)
-                }
-
-                Divider()
-
-                SettingsRow(
-                    title: "Quit \(AppMetadata.menuBarTitle)",
-                    subtitle: "Close the menu bar extra and exit the app."
-                ) {
-                    Button("Quit") {
-                        NSApplication.shared.terminate(nil)
-                    }
-                }
-            }
         }
     }
 }

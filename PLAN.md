@@ -914,6 +914,27 @@
   - Raising these limits increases GraphQL cost; the Settings UI should make that tradeoff clear.
   - Defaults are 10 PRs, 10 review threads per PR, 5 comments per thread, and 15 check contexts per PR.
 
+### T40: Menu-Bar Overflow Actions
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T09`, `T12`
+- goal: consolidate menu-bar popup actions behind one overflow menu and remove duplicate General settings actions.
+- scope:
+  - replace the separate menu-bar popup refresh and settings buttons with an ellipsis/more menu.
+  - include Refresh, Settings, and Quit in the overflow menu.
+  - remove the Actions section from Settings > General.
+- deliverables:
+  - updated menu-bar popup header actions
+  - updated General settings pane
+  - focused verification notes
+- verification:
+  - 2026-04-15: `tuist generate --no-open` succeeded after replacing the menu-bar popup action buttons with an overflow menu.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T40 -only-testing:GHOrchestratorTests/AppControllerTests -only-testing:GHOrchestratorTests/SettingsModelTests -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests` succeeded.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after rebuilding and launching the app.
+- notes:
+  - Requested during UI review on 2026-04-15.
+  - Refresh, Settings, and Quit now live in the menu-bar popup overflow menu; Settings > General no longer shows a separate Actions section.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -960,3 +981,4 @@
 - 2026-04-15: refresh failures after successful dashboard loads should preserve the last visible content, show a warning banner for stale data, and disable dashboard filter controls until a refresh succeeds.
 - 2026-04-15: local macOS notifications are configured per observed repository, evaluate all open PRs independent of dashboard filters, and use first-load baselines to avoid notifying old events.
 - 2026-04-15: the persisted Dock icon preference is overridden while the Settings window is open so the window remains reachable from the Dock after it loses focus.
+- 2026-04-15: menu-bar popup actions should use one ellipsis/more menu containing Refresh, Settings, and Quit; duplicate Refresh/Quit actions should be removed from Settings > General.
