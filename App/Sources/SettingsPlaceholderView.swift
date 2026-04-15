@@ -327,7 +327,7 @@ private struct GeneralSettingsPane: View {
 
                 SettingsRow(
                     title: "Polling interval",
-                    subtitle: "Refresh only while the menu is hidden."
+                    subtitle: "Refresh on this interval whether the menu is hidden or visible."
                 ) {
                     HStack(spacing: 10) {
                         Text("Seconds")

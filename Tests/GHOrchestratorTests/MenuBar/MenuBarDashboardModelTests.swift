@@ -43,7 +43,7 @@ final class MenuBarDashboardModelTests: XCTestCase {
         XCTAssertEqual(model.state, .noRepositoriesConfigured)
     }
 
-    func testHiddenPollingUsesConfiguredIntervalAndRestartsWhenSettingsChange() async throws {
+    func testPollingUsesConfiguredIntervalAndRestartsWhenSettingsChange() async throws {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings = AppSettings(
             observedRepositories: [ObservedRepository(owner: "openai", name: "codex")],
@@ -118,6 +118,54 @@ final class MenuBarDashboardModelTests: XCTestCase {
 
         let loadCount = await dataSource.currentLoadCount()
         XCTAssertEqual(loadCount, 1)
+    }
+
+    func testVisibleDashboardContinuesPolling() async throws {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings = AppSettings(
+            observedRepositories: [ObservedRepository(owner: "openai", name: "codex")]
+        )
+
+        let dataSource = CountingDashboardDataSource(sections: [])
+        let sleeper = ResumableSleeper()
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: dataSource,
+            sleeper: sleeper,
+            authenticationState: .authenticated(username: "octocat")
+        )
+
+        await dataSource.waitForLoadCount(1)
+        model.setMenuVisible(true)
+        await sleeper.finishNextSleep()
+        await dataSource.waitForLoadCount(2)
+
+        XCTAssertTrue(model.isMenuVisible)
+    }
+
+    func testVisibleDashboardRestartsPollingWhenSettingsChange() async throws {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings = AppSettings(
+            observedRepositories: [ObservedRepository(owner: "openai", name: "codex")],
+            pollingIntervalSeconds: 60
+        )
+
+        let sleeper = RecordingSleeper()
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: CountingDashboardDataSource(sections: []),
+            sleeper: sleeper,
+            authenticationState: .authenticated(username: "octocat")
+        )
+
+        await waitForDurations(count: 1, sleeper: sleeper)
+        model.setMenuVisible(true)
+        store.settings.pollingIntervalSeconds = 120
+        await waitForDurations(count: 2, sleeper: sleeper)
+
+        let durations = await sleeper.recordedDurations
+        XCTAssertEqual(durations.map { $0.components.seconds }, [60, 120])
+        XCTAssertTrue(model.isMenuVisible)
     }
 
     func testChangingDashboardFiltersRefreshesWithScopeAndFocusedRepository() async throws {

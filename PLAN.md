@@ -14,7 +14,7 @@
 - Observe only user-configured repositories, then list either the logged-in user's open PRs or all open PRs in those repositories.
 - Group PRs by repository and sort repositories and PRs by most recent `updatedAt`.
 - Show PR review state, checks state, unresolved review-thread count, and expandable Actions jobs plus steps.
-- Do not auto-refresh when the menu window opens or while it is visible; background polling runs only while the menu window is hidden.
+- Keep dashboard polling on the configured interval whether the menu window is hidden or visible; opening or closing the menu must not force an immediate refresh.
 
 ## Fixed Decisions
 - Platform target: macOS 15+.
@@ -236,7 +236,7 @@
   - 2026-04-14: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -derivedDataPath DerivedData -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/SettingsModelTests -only-testing:GHOrchestratorTests/SettingsStoreTests` succeeded with coverage for initial load, configurable interval, cancellation on hide, restart on settings change, and error-state transitions.
 - notes:
   - The app now has a shared `AppController` that keeps the settings store, dashboard model, and settings model on the same state graph.
-  - Opening the menu stops future background polling but does not cancel an already-running hidden refresh.
+  - Opening the menu originally stopped future background polling but did not cancel an already-running hidden refresh; `T48` supersedes that hidden-window-only polling behavior.
 
 ### T09: Menu Bar UI
 - status: `done`
@@ -823,7 +823,7 @@
   - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after the menu-bar warning banner and settings advisory changes.
 - notes:
   - Initial-load failures cannot show a preserved PR list because no prior content exists in memory yet, but they now use the same warning visual treatment and disable filters.
-  - Rate-limit-style failures also stop the current hidden-window polling task so the app does not keep retrying in the background while GitHub is already rejecting requests.
+  - Rate-limit-style failures also stop the current dashboard polling task so the app does not keep retrying while GitHub is already rejecting requests.
 
 ### T36: Settings GitHub Request Quota View
 - status: `done`
@@ -1095,6 +1095,26 @@
   - Keep this direct-distribution updater scoped to the existing signed/notarized DMG release pipeline. Do not add Sparkle or another third-party dependency.
   - The app target now uses an explicit Info.plist dictionary without `NSMainStoryboardFile`; the previous generated default pointed at a missing `Main.storyboard` and prevented hosted XCTest/app launch.
 
+### T48: Visible Menu Dashboard Polling
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T08`, `T35`
+- goal: keep automatic dashboard refreshes running on the configured interval while the menu-bar window is visible.
+- scope:
+  - remove menu visibility as a dashboard polling gate.
+  - keep opening and closing the menu from forcing an immediate refresh.
+  - update Settings/docs copy that describes the polling interval.
+  - refresh tests that previously encoded hidden-window-only polling.
+- deliverables:
+  - dashboard polling lifecycle update
+  - updated UI/docs copy
+  - verification notes
+- verification:
+  - 2026-04-15: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T48 -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/RepositoryNotificationMonitorTests -only-testing:GHOrchestratorTests/AppControllerTests` succeeded after removing the menu-visible polling pause.
+- notes:
+  - Requested on 2026-04-15 to supersede the earlier hidden-window-only dashboard polling behavior.
+  - Menu visibility is still tracked for dashboard state, but it no longer cancels, blocks, or restarts polling by itself.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1144,3 +1164,4 @@
 - 2026-04-15: menu-bar popup actions should use one ellipsis/more menu containing Refresh, Settings, and Quit; duplicate Refresh/Quit actions should be removed from Settings > General.
 - 2026-04-15: start-at-login is an app-owned preference backed by `SMAppService.mainApp`, with the desired state persisted in `AppSettings` and system registration status surfaced in Settings.
 - 2026-04-15: software updates will use the existing GitHub Release DMG artifacts directly: core code checks release metadata and checksum assets, while the app target owns automatic checks, downloads, DMG mounting, replacement, and relaunch.
+- 2026-04-15: dashboard polling should continue at the configured interval while the menu-bar window is visible; opening or closing the menu should not itself force a refresh.

@@ -91,7 +91,7 @@ final class MenuBarDashboardModel {
                 let pollingIntervalChanged = oldSettings.pollingIntervalSeconds != newSettings.pollingIntervalSeconds
                 let focusedRepositoryChanged = self.reconcileFocusedRepository(with: newSettings)
 
-                if !self.isMenuVisible, (repositoriesChanged || pollingIntervalChanged || focusedRepositoryChanged) {
+                if repositoriesChanged || pollingIntervalChanged || focusedRepositoryChanged {
                     self.refresh()
                     self.restartPolling()
                 }
@@ -113,13 +113,6 @@ final class MenuBarDashboardModel {
         }
 
         self.isMenuVisible = isVisible
-
-        if isVisible {
-            cancelPolling()
-        } else {
-            refresh()
-            restartPolling()
-        }
     }
 
     func setAuthenticationState(_ authenticationState: GitHubAuthenticationState) {
@@ -399,10 +392,6 @@ final class MenuBarDashboardModel {
 
     private func restartPolling() {
         cancelPolling()
-
-        guard !isMenuVisible else {
-            return
-        }
 
         let intervalSeconds = settingsStore.settings.pollingIntervalSeconds
         pollingTask = Task { [sleeper] in

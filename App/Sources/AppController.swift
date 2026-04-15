@@ -134,7 +134,6 @@ final class AppController {
 
     func setMenuVisible(_ isVisible: Bool) {
         dashboardModel.setMenuVisible(isVisible)
-        notificationMonitor.setMenuVisible(isVisible)
     }
 
     func setSettingsWindowVisible(_ isVisible: Bool) {

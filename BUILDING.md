@@ -84,7 +84,7 @@ After the app starts:
 3. In `GitHub`, start `Sign in with GitHub`.
 4. Approve the one-time device code in your browser.
 
-The dashboard refreshes only while the menu is hidden. Opening the menu does not force an automatic refresh.
+The dashboard refreshes on the configured polling interval whether the menu is hidden or visible. Opening the menu does not force an automatic refresh.
 
 ## 5. Verification
 

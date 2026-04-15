@@ -10,7 +10,6 @@ final class RepositoryNotificationMonitor {
     private let evaluator: RepositoryNotificationEventEvaluator
 
     private var authenticationState: GitHubAuthenticationState
-    private var isMenuVisible = false
     private var baseline: RepositoryNotificationBaseline?
     private var pollingTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
@@ -47,21 +46,6 @@ final class RepositoryNotificationMonitor {
 
         if let settingsChangeHandlerID {
             settingsStore.removeSettingsChangeHandler(id: settingsChangeHandlerID)
-        }
-    }
-
-    func setMenuVisible(_ isVisible: Bool) {
-        guard isMenuVisible != isVisible else {
-            return
-        }
-
-        isMenuVisible = isVisible
-
-        if isVisible {
-            cancelPolling()
-            cancelRefresh()
-        } else {
-            restartPolling(resetBaseline: false)
         }
     }
 
@@ -218,10 +202,6 @@ final class RepositoryNotificationMonitor {
     }
 
     private var canMonitorNotifications: Bool {
-        guard !isMenuVisible else {
-            return false
-        }
-
         guard case .authenticated = authenticationState else {
             return false
         }
