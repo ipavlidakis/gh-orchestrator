@@ -15,6 +15,7 @@ public struct PullRequestSnapshotItem: Equatable, Identifiable, Sendable {
     public let number: Int
     public let title: String
     public let url: URL
+    public let authorLogin: String?
     public let isDraft: Bool
     public let updatedAt: Date
     public let reviewStatus: ReviewStatus
@@ -33,6 +34,7 @@ public struct PullRequestSnapshotItem: Equatable, Identifiable, Sendable {
         number: Int,
         title: String,
         url: URL,
+        authorLogin: String? = nil,
         isDraft: Bool,
         updatedAt: Date,
         reviewStatus: ReviewStatus,
@@ -46,6 +48,7 @@ public struct PullRequestSnapshotItem: Equatable, Identifiable, Sendable {
         self.number = number
         self.title = title
         self.url = url
+        self.authorLogin = authorLogin
         self.isDraft = isDraft
         self.updatedAt = updatedAt
         self.reviewStatus = reviewStatus

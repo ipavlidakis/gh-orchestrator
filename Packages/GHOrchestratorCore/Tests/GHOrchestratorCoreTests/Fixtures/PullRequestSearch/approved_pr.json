@@ -7,6 +7,9 @@
           "number": 13152,
           "title": "chore(deps): update release workflow",
           "url": "https://github.com/cli/cli/pull/13152",
+          "author": {
+            "login": "dependabot"
+          },
           "isDraft": false,
           "updatedAt": "2026-04-14T06:01:33Z",
           "reviewDecision": "APPROVED",

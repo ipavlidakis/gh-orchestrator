@@ -16,6 +16,7 @@ struct PullRequestSearchResponseDTO: Decodable {
         let number: Int?
         let title: String?
         let url: URL?
+        let author: AuthorDTO?
         let isDraft: Bool?
         let updatedAt: Date?
         let reviewDecision: String?
@@ -27,6 +28,7 @@ struct PullRequestSearchResponseDTO: Decodable {
             case number
             case title
             case url
+            case author
             case isDraft
             case updatedAt
             case reviewDecision

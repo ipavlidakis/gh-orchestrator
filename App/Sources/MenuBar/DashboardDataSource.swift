@@ -1,7 +1,28 @@
+import Foundation
 import GHOrchestratorCore
 
+struct DashboardFilter: Equatable, Sendable {
+    static let `default` = DashboardFilter()
+
+    let pullRequestScope: PullRequestScope
+    let focusedRepositoryID: String?
+
+    init(
+        pullRequestScope: PullRequestScope = .mine,
+        focusedRepositoryID: String? = nil
+    ) {
+        self.pullRequestScope = pullRequestScope
+        self.focusedRepositoryID = focusedRepositoryID?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+}
+
 protocol DashboardDataSource: Sendable {
-    func loadSections(for settings: AppSettings) async throws -> [RepositorySection]
+    func loadSections(
+        for settings: AppSettings,
+        filter: DashboardFilter
+    ) async throws -> [RepositorySection]
     func rerunWorkflowJob(
         repository: ObservedRepository,
         jobID: Int
@@ -24,13 +45,21 @@ struct LiveDashboardDataSource: DashboardDataSource {
         self.aggregationService = aggregationService
     }
 
-    func loadSections(for settings: AppSettings) async throws -> [RepositorySection] {
+    func loadSections(
+        for settings: AppSettings,
+        filter: DashboardFilter
+    ) async throws -> [RepositorySection] {
+        let repositories = repositories(
+            from: settings,
+            focusedRepositoryID: filter.focusedRepositoryID
+        )
         let snapshots = try await snapshotService.fetchRepositorySnapshots(
-            for: settings.observedRepositories
+            for: repositories,
+            scope: filter.pullRequestScope
         )
         let items = try await actionsService.buildPullRequestItems(from: snapshots)
         return aggregationService.makeSections(
-            observedRepositories: settings.observedRepositories,
+            observedRepositories: repositories,
             pullRequests: items
         )
     }
@@ -43,5 +72,20 @@ struct LiveDashboardDataSource: DashboardDataSource {
             repository: repository,
             jobID: jobID
         )
+    }
+
+    private func repositories(
+        from settings: AppSettings,
+        focusedRepositoryID: String?
+    ) -> [ObservedRepository] {
+        guard let focusedRepositoryID else {
+            return settings.observedRepositories
+        }
+
+        let focusedRepositories = settings.observedRepositories.filter {
+            $0.normalizedLookupKey == focusedRepositoryID
+        }
+
+        return focusedRepositories.isEmpty ? settings.observedRepositories : focusedRepositories
     }
 }

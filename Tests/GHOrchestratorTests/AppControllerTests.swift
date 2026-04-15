@@ -148,7 +148,10 @@ private final class MutableDashboardDataSource: DashboardDataSource, @unchecked 
         self.sections = sections
     }
 
-    func loadSections(for _: AppSettings) async throws -> [RepositorySection] {
+    func loadSections(
+        for _: AppSettings,
+        filter _: DashboardFilter
+    ) async throws -> [RepositorySection] {
         loadCount.withLock { count in
             count += 1
         }

@@ -10,6 +10,7 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             number: 100,
             title: "Add workflow details",
             url: URL(string: "https://github.com/cli/cli/pull/100")!,
+            authorLogin: "octocat",
             isDraft: false,
             updatedAt: Date(timeIntervalSince1970: 1_700_000_000),
             reviewStatus: .approved,
@@ -51,6 +52,7 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
         let step = try XCTUnwrap(job.steps.first)
 
         XCTAssertEqual(workflowRun.name, "Lint")
+        XCTAssertEqual(items.first?.authorLogin, "octocat")
         XCTAssertEqual(job.name, "lint")
         XCTAssertEqual(step.detailsURL?.absoluteString, "https://github.com/cli/cli/actions/runs/321/job/654#step:1:1")
         XCTAssertEqual(items.first?.externalChecks, [])

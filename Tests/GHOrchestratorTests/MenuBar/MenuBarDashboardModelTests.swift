@@ -120,6 +120,106 @@ final class MenuBarDashboardModelTests: XCTestCase {
         XCTAssertEqual(loadCount, 1)
     }
 
+    func testChangingDashboardFiltersRefreshesWithScopeAndFocusedRepository() async throws {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings = AppSettings(
+            observedRepositories: [
+                ObservedRepository(owner: "openai", name: "codex"),
+                ObservedRepository(owner: "swiftlang", name: "swift")
+            ]
+        )
+
+        let dataSource = RecordingFilterDashboardDataSource(sections: [])
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: dataSource,
+            sleeper: RecordingSleeper(),
+            authenticationState: .authenticated(username: "octocat")
+        )
+
+        await dataSource.waitForLoadCount(1)
+
+        model.setPullRequestScope(.all)
+        await dataSource.waitForLoadCount(2)
+
+        model.toggleRepositoryCollapsed(repositoryID: "swiftlang/swift")
+        XCTAssertEqual(model.collapsedRepositoryIDs, ["swiftlang/swift"])
+
+        model.setFocusedRepositoryID(" swiftlang/swift ")
+        await dataSource.waitForLoadCount(3)
+
+        let filters = await dataSource.recordedFilters()
+        XCTAssertEqual(filters.map(\.pullRequestScope), [.mine, .all, .all])
+        XCTAssertEqual(filters.map(\.focusedRepositoryID), [nil, nil, "swiftlang/swift"])
+        XCTAssertEqual(model.focusedRepositoryID, "swiftlang/swift")
+        XCTAssertTrue(model.collapsedRepositoryIDs.isEmpty)
+    }
+
+    func testChangingDashboardFiltersIgnoresUnknownFocusedRepository() async throws {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings = AppSettings(
+            observedRepositories: [
+                ObservedRepository(owner: "openai", name: "codex")
+            ]
+        )
+
+        let dataSource = RecordingFilterDashboardDataSource(sections: [])
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: dataSource,
+            sleeper: RecordingSleeper(),
+            authenticationState: .authenticated(username: "octocat")
+        )
+
+        await dataSource.waitForLoadCount(1)
+
+        model.setFocusedRepositoryID("swiftlang/swift")
+        await Task.yield()
+
+        let filters = await dataSource.recordedFilters()
+        XCTAssertEqual(filters.count, 1)
+        XCTAssertNil(model.focusedRepositoryID)
+    }
+
+    func testOnlyOnePullRequestDetailBubbleCanBeExpandedAtATime() {
+        let model = MenuBarDashboardModel(
+            settingsStore: SettingsStore(storageURL: makeIsolatedStorageURL()),
+            dataSource: MockDashboardDataSource(sections: []),
+            sleeper: RecordingSleeper(),
+            authenticationState: .signedOut
+        )
+
+        model.toggleChecksExpansion(for: "openai/codex#1")
+        XCTAssertEqual(model.expandedChecksPullRequestIDs, ["openai/codex#1"])
+        XCTAssertTrue(model.expandedCommentPullRequestIDs.isEmpty)
+
+        model.toggleCommentsExpansion(for: "openai/codex#2")
+        XCTAssertTrue(model.expandedChecksPullRequestIDs.isEmpty)
+        XCTAssertEqual(model.expandedCommentPullRequestIDs, ["openai/codex#2"])
+
+        model.toggleChecksExpansion(for: "swiftlang/swift#3")
+        XCTAssertEqual(model.expandedChecksPullRequestIDs, ["swiftlang/swift#3"])
+        XCTAssertTrue(model.expandedCommentPullRequestIDs.isEmpty)
+
+        model.toggleChecksExpansion(for: "swiftlang/swift#3")
+        XCTAssertTrue(model.expandedChecksPullRequestIDs.isEmpty)
+    }
+
+    func testRepositoryCollapseStateTogglesByRepositoryID() {
+        let model = MenuBarDashboardModel(
+            settingsStore: SettingsStore(storageURL: makeIsolatedStorageURL()),
+            dataSource: MockDashboardDataSource(sections: []),
+            sleeper: RecordingSleeper(),
+            authenticationState: .signedOut
+        )
+
+        model.toggleRepositoryCollapsed(repositoryID: " OpenAI/Codex ")
+        XCTAssertEqual(model.collapsedRepositoryIDs, ["openai/codex"])
+
+        model.toggleRepositoryCollapsed(repositoryID: "openai/codex")
+        XCTAssertTrue(model.collapsedRepositoryIDs.isEmpty)
+    }
+
     func testRefreshKeepsLoadedContentVisibleWhileLoading() async throws {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings = AppSettings(
@@ -425,7 +525,10 @@ private func pullRequestWithFailedJob(number: Int) -> PullRequestItem {
 private struct MockDashboardDataSource: DashboardDataSource {
     let sections: [RepositorySection]
 
-    func loadSections(for _: AppSettings) async throws -> [RepositorySection] {
+    func loadSections(
+        for _: AppSettings,
+        filter _: DashboardFilter
+    ) async throws -> [RepositorySection] {
         sections
     }
 
@@ -443,7 +546,10 @@ private actor CountingDashboardDataSource: DashboardDataSource {
         self.sections = sections
     }
 
-    func loadSections(for _: AppSettings) async throws -> [RepositorySection] {
+    func loadSections(
+        for _: AppSettings,
+        filter _: DashboardFilter
+    ) async throws -> [RepositorySection] {
         loadCount += 1
         return sections
     }
@@ -464,6 +570,38 @@ private actor CountingDashboardDataSource: DashboardDataSource {
     }
 }
 
+private actor RecordingFilterDashboardDataSource: DashboardDataSource {
+    let sections: [RepositorySection]
+    private(set) var filters: [DashboardFilter] = []
+
+    init(sections: [RepositorySection]) {
+        self.sections = sections
+    }
+
+    func loadSections(
+        for _: AppSettings,
+        filter: DashboardFilter
+    ) async throws -> [RepositorySection] {
+        filters.append(filter)
+        return sections
+    }
+
+    func rerunWorkflowJob(
+        repository _: ObservedRepository,
+        jobID _: Int
+    ) async throws {}
+
+    func waitForLoadCount(_ expectedCount: Int) async {
+        while filters.count < expectedCount {
+            await Task.yield()
+        }
+    }
+
+    func recordedFilters() -> [DashboardFilter] {
+        filters
+    }
+}
+
 private actor SequencedDashboardDataSource: DashboardDataSource {
     let firstSections: [RepositorySection]
     let subsequentSections: [RepositorySection]
@@ -474,7 +612,10 @@ private actor SequencedDashboardDataSource: DashboardDataSource {
         self.subsequentSections = subsequentSections
     }
 
-    func loadSections(for _: AppSettings) async throws -> [RepositorySection] {
+    func loadSections(
+        for _: AppSettings,
+        filter _: DashboardFilter
+    ) async throws -> [RepositorySection] {
         loadCount += 1
 
         if loadCount == 1 {
@@ -498,7 +639,10 @@ private actor SequencedDashboardDataSource: DashboardDataSource {
 }
 
 private struct FailingDashboardDataSource: DashboardDataSource {
-    func loadSections(for _: AppSettings) async throws -> [RepositorySection] {
+    func loadSections(
+        for _: AppSettings,
+        filter _: DashboardFilter
+    ) async throws -> [RepositorySection] {
         struct SyntheticError: LocalizedError {
             var errorDescription: String? { "synthetic failure" }
         }
@@ -530,7 +674,10 @@ private actor DelayedDashboardDataSource: DashboardDataSource {
         self.sections = sections
     }
 
-    func loadSections(for _: AppSettings) async throws -> [RepositorySection] {
+    func loadSections(
+        for _: AppSettings,
+        filter _: DashboardFilter
+    ) async throws -> [RepositorySection] {
         didStartLoading = true
         await withCheckedContinuation { continuation in
             self.continuation = continuation
@@ -575,7 +722,10 @@ private actor RetryableDashboardDataSource: DashboardDataSource {
         self.rerunError = rerunError
     }
 
-    func loadSections(for _: AppSettings) async throws -> [RepositorySection] {
+    func loadSections(
+        for _: AppSettings,
+        filter _: DashboardFilter
+    ) async throws -> [RepositorySection] {
         loadCount += 1
         return sections
     }

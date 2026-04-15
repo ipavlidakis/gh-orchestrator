@@ -41,6 +41,9 @@ final class MenuBarDashboardModel {
     var state: State = .idle
     var authenticationState: GitHubAuthenticationState
     var isMenuVisible = false
+    var pullRequestScope: PullRequestScope = .mine
+    var focusedRepositoryID: String?
+    var collapsedRepositoryIDs = Set<String>()
     var expandedChecksPullRequestIDs = Set<String>()
     var expandedCommentPullRequestIDs = Set<String>()
     var retryingJobIDs = Set<Int>()
@@ -81,8 +84,9 @@ final class MenuBarDashboardModel {
 
                 let repositoriesChanged = oldSettings.observedRepositories != newSettings.observedRepositories
                 let pollingIntervalChanged = oldSettings.pollingIntervalSeconds != newSettings.pollingIntervalSeconds
+                let focusedRepositoryChanged = self.reconcileFocusedRepository(with: newSettings)
 
-                if !self.isMenuVisible, (repositoriesChanged || pollingIntervalChanged) {
+                if !self.isMenuVisible, (repositoriesChanged || pollingIntervalChanged || focusedRepositoryChanged) {
                     self.refresh()
                     self.restartPolling()
                 }
@@ -122,8 +126,56 @@ final class MenuBarDashboardModel {
         refresh()
     }
 
+    func setPullRequestScope(_ pullRequestScope: PullRequestScope) {
+        guard self.pullRequestScope != pullRequestScope else {
+            return
+        }
+
+        self.pullRequestScope = pullRequestScope
+        refresh()
+        restartPolling()
+    }
+
+    func setFocusedRepositoryID(_ repositoryID: String?) {
+        let normalizedRepositoryID = normalizedRepositoryID(repositoryID)
+        let nextRepositoryID = normalizedRepositoryID.flatMap { repositoryID in
+            settingsStore.settings.observedRepositories.contains {
+                $0.normalizedLookupKey == repositoryID
+            } ? repositoryID : nil
+        }
+
+        guard focusedRepositoryID != nextRepositoryID else {
+            return
+        }
+
+        focusedRepositoryID = nextRepositoryID
+        if let nextRepositoryID {
+            collapsedRepositoryIDs.remove(nextRepositoryID)
+        }
+        refresh()
+        restartPolling()
+    }
+
+    func toggleRepositoryCollapsed(repositoryID: String) {
+        let repositoryID = repositoryID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !repositoryID.isEmpty else {
+            return
+        }
+
+        if collapsedRepositoryIDs.contains(repositoryID) {
+            collapsedRepositoryIDs.remove(repositoryID)
+        } else {
+            collapsedRepositoryIDs.insert(repositoryID)
+        }
+    }
+
     func refresh() {
         let settings = settingsStore.settings
+        reconcileFocusedRepository(with: settings)
+        let filter = DashboardFilter(
+            pullRequestScope: pullRequestScope,
+            focusedRepositoryID: focusedRepositoryID
+        )
 
         refreshTask?.cancel()
         refreshGeneration += 1
@@ -160,7 +212,10 @@ final class MenuBarDashboardModel {
 
         refreshTask = Task { [dataSource] in
             do {
-                let sections = try await dataSource.loadSections(for: settings)
+                let sections = try await dataSource.loadSections(
+                    for: settings,
+                    filter: filter
+                )
                 guard !Task.isCancelled else {
                     return
                 }
@@ -194,7 +249,8 @@ final class MenuBarDashboardModel {
         if expandedChecksPullRequestIDs.contains(pullRequestID) {
             expandedChecksPullRequestIDs.remove(pullRequestID)
         } else {
-            expandedChecksPullRequestIDs.insert(pullRequestID)
+            expandedChecksPullRequestIDs = [pullRequestID]
+            expandedCommentPullRequestIDs.removeAll()
         }
     }
 
@@ -202,7 +258,8 @@ final class MenuBarDashboardModel {
         if expandedCommentPullRequestIDs.contains(pullRequestID) {
             expandedCommentPullRequestIDs.remove(pullRequestID)
         } else {
-            expandedCommentPullRequestIDs.insert(pullRequestID)
+            expandedCommentPullRequestIDs = [pullRequestID]
+            expandedChecksPullRequestIDs.removeAll()
         }
     }
 
@@ -262,7 +319,31 @@ final class MenuBarDashboardModel {
         retryErrorMessagesByJobID[jobID]
     }
 
+    private func normalizedRepositoryID(_ repositoryID: String?) -> String? {
+        guard let repositoryID else {
+            return nil
+        }
+
+        let normalized = repositoryID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    @discardableResult
+    private func reconcileFocusedRepository(with settings: AppSettings) -> Bool {
+        guard let focusedRepositoryID else {
+            return false
+        }
+
+        guard settings.observedRepositories.contains(where: { $0.normalizedLookupKey == focusedRepositoryID }) else {
+            self.focusedRepositoryID = nil
+            return true
+        }
+
+        return false
+    }
+
     private func applyLoadedSections(_ sections: [RepositorySection]) {
+        let visibleRepositoryIDs = Set(sections.map(\.repository.normalizedLookupKey))
         let visibleIDs = Set(
             sections.flatMap { section in
                 section.pullRequests.map(\.id)
@@ -277,6 +358,7 @@ final class MenuBarDashboardModel {
                 }
             }
         )
+        collapsedRepositoryIDs.formIntersection(visibleRepositoryIDs)
         expandedChecksPullRequestIDs.formIntersection(visibleIDs)
         expandedCommentPullRequestIDs.formIntersection(visibleIDs)
         retryingJobIDs.formIntersection(visibleJobIDs)

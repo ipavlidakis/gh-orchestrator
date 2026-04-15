@@ -36,6 +36,7 @@ final class PullRequestSnapshotServiceTests: XCTestCase {
         let pullRequest = try XCTUnwrap(snapshots.first?.pullRequests.first)
 
         XCTAssertEqual(pullRequest.reviewStatus, .approved)
+        XCTAssertEqual(pullRequest.authorLogin, "dependabot")
         XCTAssertEqual(pullRequest.checkRollupState, .passing)
         XCTAssertEqual(pullRequest.unresolvedReviewThreadCount, 0)
         XCTAssertEqual(pullRequest.checkRuns.first?.workflowRun?.id, 123456789)
@@ -117,6 +118,35 @@ final class PullRequestSnapshotServiceTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer access-token")
         XCTAssertEqual(payload.query, GHPullRequestSnapshotService.searchQuery)
         XCTAssertEqual(payload.variables.searchQuery, "repo:openai/codex is:pr is:open author:@me archived:false")
+    }
+
+    func testFetchRepositorySnapshotsBuildsAllPullRequestsQueryWithoutAuthorQualifier() async throws {
+        let repository = ObservedRepository(owner: "openai", name: "codex")
+        let transport = StubGitHubHTTPTransport(
+            results: [
+                .success(
+                    data: fixtureData(named: "no_prs", subdirectory: "PullRequestSearch"),
+                    response: makeHTTPResponse(url: "https://api.github.com/graphql", statusCode: 200)
+                )
+            ]
+        )
+        let client = URLSessionGitHubAPIClient(
+            transport: transport,
+            credentialStore: StubGitHubCredentialStore()
+        )
+        let service = GHPullRequestSnapshotService(client: client)
+
+        _ = try await service.fetchRepositorySnapshots(
+            for: [repository],
+            scope: .all
+        )
+
+        let requests = await transport.recordedRequests()
+        let request = try XCTUnwrap(requests.first)
+        let body = try XCTUnwrap(request.httpBody)
+        let payload = try JSONDecoder().decode(PullRequestGraphQLPayload.self, from: body)
+
+        XCTAssertEqual(payload.variables.searchQuery, "repo:openai/codex is:pr is:open archived:false")
     }
 
     func testFetchRepositorySnapshotsFormatsGitHubAPIErrorsForDisplay() async {

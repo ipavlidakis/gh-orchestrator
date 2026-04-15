@@ -148,6 +148,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
     public let number: Int
     public let title: String
     public let url: URL
+    public let authorLogin: String?
     public let isDraft: Bool
     public let updatedAt: Date
     public let reviewStatus: ReviewStatus
@@ -166,6 +167,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
         number: Int,
         title: String,
         url: URL,
+        authorLogin: String? = nil,
         isDraft: Bool,
         updatedAt: Date,
         reviewStatus: ReviewStatus,
@@ -179,6 +181,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
         self.number = number
         self.title = title
         self.url = url
+        self.authorLogin = authorLogin
         self.isDraft = isDraft
         self.updatedAt = updatedAt
         self.reviewStatus = reviewStatus

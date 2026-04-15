@@ -11,7 +11,7 @@
 - Use only Swift, Tuist, SwiftPM, Apple frameworks, and direct GitHub HTTP APIs; do not depend on the `gh` CLI.
 - Ship a menu-bar-first app using `MenuBarExtra` plus a dedicated Settings window.
 - Authenticate the user via GitHub OAuth device flow launched from the app.
-- Observe only user-configured repositories, then list the logged-in user's open PRs in those repositories.
+- Observe only user-configured repositories, then list either the logged-in user's open PRs or all open PRs in those repositories.
 - Group PRs by repository and sort repositories and PRs by most recent `updatedAt`.
 - Show PR review state, checks state, unresolved review-thread count, and expandable Actions jobs plus steps.
 - Do not auto-refresh when the menu window opens or while it is visible; background polling runs only while the menu window is hidden.
@@ -752,6 +752,54 @@
   - Added `README.md` for repo orientation and `BUILDING.md` for source-build setup, local OAuth config, verification, and troubleshooting.
   - The new docs intentionally link to `RELEASING.md` instead of duplicating the release pipeline.
 
+### T33: Dashboard PR Scope And Repository Focus
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T16`, `T18`, `T27`
+- goal: let the menu-bar dashboard switch between the signed-in user's PRs and all PRs across configured repositories, focus a single configured repository, and manage expanded dashboard detail predictably.
+- scope:
+  - add a dashboard control for `My PRs` versus `All PRs`.
+  - add a dashboard repository focus control with `All repositories` and each configured repository.
+  - keep GitHub query construction and repository filtering out of SwiftUI views.
+  - let repository sections collapse and expand without removing them from the loaded data.
+  - make opening a PR detail bubble collapse other expanded checks/comment bubbles first.
+- deliverables:
+  - core query-scope support
+  - app dashboard filter state and controls
+  - repository section collapse state
+  - focused tests and verification notes
+- verification:
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after adding query-scope support for `My PRs` versus `All PRs`.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T33 -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/AppControllerTests` succeeded after adding dashboard filter and expansion-state coverage.
+  - 2026-04-15: `tuist generate --no-open` succeeded.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T33-full` succeeded.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded.
+- notes:
+  - This task keeps the configured repository allowlist as the source of truth. `All repositories` means all configured repositories, not every repository the GitHub account can access.
+  - Dashboard filters are app-state controls, not persisted settings: the current session can switch PR scope and focus a configured repository without changing the repository allowlist.
+  - Opening a checks or unresolved-comments detail bubble now collapses all other checks/comments detail bubbles; repository section collapse state is independent.
+
+### T34: Dashboard Filter Header And PR Author Display
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T33`
+- goal: tighten the menu-bar filter placement and show pull request authors when viewing all PRs.
+- scope:
+  - move the PR scope and repository focus controls into the header row before refresh/settings actions.
+  - carry PR author login from GraphQL snapshots into dashboard rows.
+  - show the PR author's username in `All PRs` mode without adding noise to `My PRs` mode.
+- deliverables:
+  - updated menu-bar header layout
+  - author-login mapping through core and app models
+  - focused tests and verification notes
+- verification:
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after adding PR author mapping through snapshot and enrichment models.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T33 -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/AppControllerTests` succeeded after moving filters into the menu header row.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after the header and author-display changes.
+- notes:
+  - The author display is scoped to `All PRs` because `My PRs` is already implied by the selected query scope.
+  - Filters are hidden until the dashboard is authenticated and repositories are configured, then render inline before the refresh and settings actions.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -794,3 +842,4 @@
 - 2026-04-15: downloadable public builds must not embed a GitHub OAuth client secret; GHOrchestrator will use GitHub OAuth device flow with a client ID only, and the OAuth app must have device flow enabled in GitHub settings.
 - 2026-04-15: direct distribution will use a stapled Developer ID-signed `.dmg` attached to a GitHub Release, with release uploads performed through the GitHub REST API.
 - 2026-04-15: failed GitHub Actions steps in the menu-bar dashboard should expose a retry affordance that reruns the containing job when GitHub allows it; step-level rerun is not available, so permission or API failures must stay inline with the existing dashboard content.
+- 2026-04-15: the menu-bar dashboard can switch between the signed-in user's PRs and all open PRs in configured repositories, can focus one configured repository, and should collapse other expanded PR detail bubbles when a new checks/comments bubble opens.

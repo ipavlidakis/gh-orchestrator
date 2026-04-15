@@ -1,9 +1,26 @@
 import Foundation
 
+public enum PullRequestScope: String, Codable, CaseIterable, Sendable {
+    case mine
+    case all
+}
+
 public protocol PullRequestSnapshotFetching: Sendable {
     func fetchRepositorySnapshots(
-        for repositories: [ObservedRepository]
+        for repositories: [ObservedRepository],
+        scope: PullRequestScope
     ) async throws -> [RepositoryPullRequestSnapshot]
+}
+
+public extension PullRequestSnapshotFetching {
+    func fetchRepositorySnapshots(
+        for repositories: [ObservedRepository]
+    ) async throws -> [RepositoryPullRequestSnapshot] {
+        try await fetchRepositorySnapshots(
+            for: repositories,
+            scope: .mine
+        )
+    }
 }
 
 public enum PullRequestSnapshotServiceError: Error, Equatable, Sendable {
@@ -30,7 +47,8 @@ public struct GHPullRequestSnapshotService: PullRequestSnapshotFetching {
     }
 
     public func fetchRepositorySnapshots(
-        for repositories: [ObservedRepository]
+        for repositories: [ObservedRepository],
+        scope: PullRequestScope = .mine
     ) async throws -> [RepositoryPullRequestSnapshot] {
         guard !repositories.isEmpty else {
             return []
@@ -39,7 +57,10 @@ public struct GHPullRequestSnapshotService: PullRequestSnapshotFetching {
         return try await withThrowingTaskGroup(of: (Int, RepositoryPullRequestSnapshot).self) { group in
             for (index, repository) in repositories.enumerated() {
                 group.addTask {
-                    let snapshot = try await self.fetchRepositorySnapshot(for: repository)
+                    let snapshot = try await self.fetchRepositorySnapshot(
+                        for: repository,
+                        scope: scope
+                    )
                     return (index, snapshot)
                 }
             }
@@ -66,6 +87,9 @@ extension GHPullRequestSnapshotService {
             number
             title
             url
+            author {
+              login
+            }
             isDraft
             updatedAt
             reviewDecision
@@ -124,11 +148,14 @@ extension GHPullRequestSnapshotService {
     }
     """
 
-    func fetchRepositorySnapshot(for repository: ObservedRepository) async throws -> RepositoryPullRequestSnapshot {
+    func fetchRepositorySnapshot(
+        for repository: ObservedRepository,
+        scope: PullRequestScope
+    ) async throws -> RepositoryPullRequestSnapshot {
         do {
             let response: PullRequestSearchResponseDTO.SearchDataDTO = try await client.graphQL(
                 query: Self.searchQuery,
-                variables: SearchQueryVariables(searchQuery: searchQuery(for: repository))
+                variables: SearchQueryVariables(searchQuery: searchQuery(for: repository, scope: scope))
             )
             let items = try response.search.nodes.compactMap { node in
                 try mapNode(node, repository: repository)
@@ -156,8 +183,20 @@ extension GHPullRequestSnapshotService {
         }
     }
 
-    func searchQuery(for repository: ObservedRepository) -> String {
-        "repo:\(repository.fullName) is:pr is:open author:@me archived:false"
+    func searchQuery(for repository: ObservedRepository, scope: PullRequestScope) -> String {
+        var qualifiers = [
+            "repo:\(repository.fullName)",
+            "is:pr",
+            "is:open"
+        ]
+
+        if scope == .mine {
+            qualifiers.append("author:@me")
+        }
+
+        qualifiers.append("archived:false")
+
+        return qualifiers.joined(separator: " ")
     }
 
     private func mapNode(
@@ -223,6 +262,7 @@ extension GHPullRequestSnapshotService {
             number: number,
             title: title,
             url: url,
+            authorLogin: node.author?.login,
             isDraft: isDraft,
             updatedAt: updatedAt,
             reviewStatus: mapReviewStatus(node.reviewDecision),

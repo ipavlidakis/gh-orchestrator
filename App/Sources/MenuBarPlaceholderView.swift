@@ -23,11 +23,15 @@ struct MenuBarPlaceholderView: View {
     }
 
     private var headerActions: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Text(AppMetadata.menuBarTitle)
                 .font(.headline)
 
-            Spacer()
+            Spacer(minLength: 0)
+
+            if showsDashboardFilters {
+                filterControls
+            }
 
             Group {
                 if model.isRefreshing {
@@ -49,6 +53,84 @@ struct MenuBarPlaceholderView: View {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(.borderless)
+        }
+    }
+
+    private var filterControls: some View {
+        HStack(spacing: 4) {
+            Picker(
+                "Pull requests",
+                selection: Binding(
+                    get: { model.pullRequestScope },
+                    set: { model.setPullRequestScope($0) }
+                )
+            ) {
+                Text("My PRs").tag(PullRequestScope.mine)
+                Text("All PRs").tag(PullRequestScope.all)
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 112)
+
+            Menu {
+                repositoryFocusButton(
+                    title: "All repositories",
+                    repositoryID: nil
+                )
+
+                Divider()
+
+                ForEach(model.settingsStore.settings.observedRepositories) { repository in
+                    repositoryFocusButton(
+                        title: repository.fullName,
+                        repositoryID: repository.normalizedLookupKey
+                    )
+                }
+            } label: {
+                Label(repositoryFocusTitle, systemImage: "line.3.horizontal.decrease.circle")
+                    .lineLimit(1)
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 118, alignment: .leading)
+        }
+        .controlSize(.small)
+    }
+
+    private var showsDashboardFilters: Bool {
+        guard case .authenticated = model.authenticationState else {
+            return false
+        }
+
+        return !model.settingsStore.settings.observedRepositories.isEmpty
+    }
+
+    private var repositoryFocusTitle: String {
+        guard let focusedRepositoryID = model.focusedRepositoryID,
+              let repository = model.settingsStore.settings.observedRepositories.first(where: {
+                  $0.normalizedLookupKey == focusedRepositoryID
+              })
+        else {
+            return "All repositories"
+        }
+
+        return repository.fullName
+    }
+
+    @ViewBuilder
+    private func repositoryFocusButton(
+        title: String,
+        repositoryID: String?
+    ) -> some View {
+        let isSelected = model.focusedRepositoryID == repositoryID
+
+        Button {
+            model.setFocusedRepositoryID(repositoryID)
+        } label: {
+            if isSelected {
+                Label(title, systemImage: "checkmark")
+            } else {
+                Text(title)
+            }
         }
     }
 
@@ -106,8 +188,15 @@ struct MenuBarPlaceholderView: View {
                     ForEach(sections) { section in
                         RepositorySectionView(
                             section: section,
+                            showsAuthor: model.pullRequestScope == .all,
+                            isCollapsed: model.collapsedRepositoryIDs.contains(section.repository.normalizedLookupKey),
                             expandedChecksIDs: model.expandedChecksPullRequestIDs,
                             expandedCommentIDs: model.expandedCommentPullRequestIDs,
+                            onToggleCollapsed: {
+                                model.toggleRepositoryCollapsed(
+                                    repositoryID: section.repository.normalizedLookupKey
+                                )
+                            },
                             onToggleChecks: { pullRequestID in
                                 model.toggleChecksExpansion(for: pullRequestID)
                             },
@@ -152,8 +241,11 @@ struct MenuBarPlaceholderView: View {
 
 private struct RepositorySectionView: View {
     let section: RepositorySection
+    let showsAuthor: Bool
+    let isCollapsed: Bool
     let expandedChecksIDs: Set<String>
     let expandedCommentIDs: Set<String>
+    let onToggleCollapsed: () -> Void
     let onToggleChecks: (String) -> Void
     let onToggleComments: (String) -> Void
     let isRetryingJob: (Int) -> Bool
@@ -163,33 +255,43 @@ private struct RepositorySectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(section.repository.fullName)
-                    .font(.subheadline.weight(.semibold))
+            Button(action: onToggleCollapsed) {
+                HStack(spacing: 6) {
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
 
-                Spacer()
+                    Text(section.repository.fullName)
+                        .font(.subheadline.weight(.semibold))
 
-                Text("\(section.pullRequests.count)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Spacer()
+
+                    Text("\(section.pullRequests.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
+            .buttonStyle(.plain)
 
-            ForEach(section.pullRequests) { pullRequest in
-                PullRequestRowView(
-                    pullRequest: pullRequest,
-                    isChecksExpanded: expandedChecksIDs.contains(pullRequest.id),
-                    isCommentsExpanded: expandedCommentIDs.contains(pullRequest.id),
-                    onToggleChecks: {
-                        onToggleChecks(pullRequest.id)
-                    },
-                    onToggleComments: {
-                        onToggleComments(pullRequest.id)
-                    },
-                    isRetryingJob: isRetryingJob,
-                    retryErrorMessage: retryErrorMessage,
-                    onRetryWorkflowJob: onRetryWorkflowJob,
-                    onOpenURL: onOpenURL
-                )
+            if !isCollapsed {
+                ForEach(section.pullRequests) { pullRequest in
+                    PullRequestRowView(
+                        pullRequest: pullRequest,
+                        showsAuthor: showsAuthor,
+                        isChecksExpanded: expandedChecksIDs.contains(pullRequest.id),
+                        isCommentsExpanded: expandedCommentIDs.contains(pullRequest.id),
+                        onToggleChecks: {
+                            onToggleChecks(pullRequest.id)
+                        },
+                        onToggleComments: {
+                            onToggleComments(pullRequest.id)
+                        },
+                        isRetryingJob: isRetryingJob,
+                        retryErrorMessage: retryErrorMessage,
+                        onRetryWorkflowJob: onRetryWorkflowJob,
+                        onOpenURL: onOpenURL
+                    )
+                }
             }
         }
         .padding(.vertical, 2)
@@ -198,6 +300,7 @@ private struct RepositorySectionView: View {
 
 private struct PullRequestRowView: View {
     let pullRequest: PullRequestItem
+    let showsAuthor: Bool
     let isChecksExpanded: Bool
     let isCommentsExpanded: Bool
     let onToggleChecks: () -> Void
@@ -220,7 +323,7 @@ private struct PullRequestRowView: View {
                 }
                 .buttonStyle(.plain)
 
-                Text("#\(pullRequest.number) · \(relativeUpdatedText(for: pullRequest.updatedAt))")
+                Text(pullRequestMetadataText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -299,6 +402,19 @@ private struct PullRequestRowView: View {
 
     private var hasExpandableComments: Bool {
         !pullRequest.unresolvedReviewComments.isEmpty
+    }
+
+    private var pullRequestMetadataText: String {
+        var components = ["#\(pullRequest.number)"]
+
+        if showsAuthor,
+           let authorLogin = pullRequest.authorLogin?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !authorLogin.isEmpty {
+            components.append("by @\(authorLogin)")
+        }
+
+        components.append(relativeUpdatedText(for: pullRequest.updatedAt))
+        return components.joined(separator: " · ")
     }
 
     private func relativeUpdatedText(for date: Date) -> String {
