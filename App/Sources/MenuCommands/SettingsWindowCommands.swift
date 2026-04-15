@@ -5,6 +5,7 @@ import SwiftUI
 struct SettingsWindowCommandHandler {
     let showAboutPanelAction: () -> Void
     let refreshAction: () -> Void
+    let checkForUpdatesAction: () -> Void
     let openSettingsAction: () -> Void
     let openHelpAction: () -> Void
     let quitAction: () -> Void
@@ -15,6 +16,10 @@ struct SettingsWindowCommandHandler {
 
     func refresh() {
         refreshAction()
+    }
+
+    func checkForUpdates() {
+        checkForUpdatesAction()
     }
 
     func openSettings() {
@@ -34,17 +39,23 @@ extension SettingsWindowCommandHandler {
     @MainActor
     static func live(
         dashboardModel: MenuBarDashboardModel,
+        softwareUpdateModel: SoftwareUpdateModel,
         openSettings: @escaping @MainActor () -> Void,
-        application: NSApplication = .shared,
+        application: NSApplication? = nil,
         workspace: NSWorkspace = .shared
     ) -> Self {
-        Self(
+        let application = application ?? NSApplication.shared
+
+        return Self(
             showAboutPanelAction: {
                 application.activate(ignoringOtherApps: true)
                 application.orderFrontStandardAboutPanel(nil)
             },
             refreshAction: {
                 dashboardModel.refresh()
+            },
+            checkForUpdatesAction: {
+                softwareUpdateModel.requestCheckForUpdates()
             },
             openSettingsAction: {
                 application.activate(ignoringOtherApps: true)
@@ -66,6 +77,7 @@ extension SettingsWindowCommandHandler {
 
 struct SettingsWindowCommands: Commands {
     let dashboardModel: MenuBarDashboardModel
+    let softwareUpdateModel: SoftwareUpdateModel
 
     @Environment(\.openSettings) private var openSettings
 
@@ -79,6 +91,11 @@ struct SettingsWindowCommands: Commands {
                 commandHandler.refresh()
             }
             .keyboardShortcut("r")
+
+            Button("Check for Updates…") {
+                commandHandler.checkForUpdates()
+            }
+            .disabled(!softwareUpdateModel.canCheckForUpdates)
         }
 
         CommandGroup(replacing: .appSettings) {
@@ -105,6 +122,7 @@ struct SettingsWindowCommands: Commands {
     private var commandHandler: SettingsWindowCommandHandler {
         SettingsWindowCommandHandler.live(
             dashboardModel: dashboardModel,
+            softwareUpdateModel: softwareUpdateModel,
             openSettings: openSettings.callAsFunction
         )
     }

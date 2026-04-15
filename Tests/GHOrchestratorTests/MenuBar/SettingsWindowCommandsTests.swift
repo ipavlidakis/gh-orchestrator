@@ -12,6 +12,9 @@ final class SettingsWindowCommandsTests: XCTestCase {
             refreshAction: {
                 actions.append("refresh")
             },
+            checkForUpdatesAction: {
+                actions.append("updates")
+            },
             openSettingsAction: {
                 actions.append("settings")
             },
@@ -25,10 +28,11 @@ final class SettingsWindowCommandsTests: XCTestCase {
 
         handler.showAboutPanel()
         handler.refresh()
+        handler.checkForUpdates()
         handler.openSettings()
         handler.openHelp()
         handler.quit()
 
-        XCTAssertEqual(actions, ["about", "refresh", "settings", "help", "quit"])
+        XCTAssertEqual(actions, ["about", "refresh", "updates", "settings", "help", "quit"])
     }
 }

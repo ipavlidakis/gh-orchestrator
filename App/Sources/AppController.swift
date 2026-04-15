@@ -12,6 +12,7 @@ final class AppController {
     let settingsModel: SettingsModel
     let requestLogModel: GitHubRequestLogModel
     let notificationMonitor: RepositoryNotificationMonitor
+    let softwareUpdateModel: SoftwareUpdateModel
     private let dockIconVisibilityController: any DockIconVisibilityControlling
     private let startAtLoginController: any StartAtLoginControlling
     private let notificationDelivery: any LocalNotificationDelivering
@@ -26,6 +27,9 @@ final class AppController {
         dockIconVisibilityController: any DockIconVisibilityControlling = DockIconVisibilityController(),
         startAtLoginController: any StartAtLoginControlling = StartAtLoginController(),
         notificationDelivery: (any LocalNotificationDelivering)? = nil,
+        softwareUpdateChecker: (any SoftwareUpdateChecking)? = nil,
+        softwareUpdateInstaller: (any SoftwareUpdateInstalling)? = nil,
+        startsAutomaticUpdateChecks: Bool = true,
         openURL: @escaping @MainActor (URL) -> Void = { url in
             NSWorkspace.shared.open(url)
         }
@@ -51,6 +55,11 @@ final class AppController {
             credentialStore: credentialStore
         )
         let resolvedDataSource = dataSource ?? LiveDashboardDataSource(client: apiClient)
+        let resolvedSoftwareUpdateChecker = softwareUpdateChecker ?? GitHubReleaseUpdateChecker(
+            owner: AppMetadata.releaseRepositoryOwner,
+            repository: AppMetadata.releaseRepositoryName
+        )
+        let resolvedSoftwareUpdateInstaller = softwareUpdateInstaller ?? DMGSoftwareUpdateInstaller()
 
         self.authController = resolvedAuthController
         self.dashboardModel = MenuBarDashboardModel(
@@ -58,6 +67,11 @@ final class AppController {
             dataSource: resolvedDataSource,
             sleeper: sleeper,
             authenticationState: resolvedAuthController.state
+        )
+        self.softwareUpdateModel = SoftwareUpdateModel(
+            store: settingsStore,
+            checker: resolvedSoftwareUpdateChecker,
+            installer: resolvedSoftwareUpdateInstaller
         )
 
         let settingsModelBox = WeakSettingsModelBox<SettingsModel>()
@@ -109,6 +123,12 @@ final class AppController {
         }
         Task { @MainActor [resolvedNotificationDelivery, resolvedSettingsModel] in
             resolvedSettingsModel?.notificationAuthorizationStatus = await resolvedNotificationDelivery.authorizationStatus()
+        }
+        if startsAutomaticUpdateChecks {
+            let updateModel = softwareUpdateModel
+            Task { @MainActor [updateModel] in
+                updateModel.startAutomaticChecks()
+            }
         }
     }
 

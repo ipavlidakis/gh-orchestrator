@@ -16,7 +16,10 @@ final class AppControllerTests: XCTestCase {
             authController: authController,
             sleeper: CancellingSleeper(),
             startAtLoginController: RecordingStartAtLoginController(),
-            notificationDelivery: AppControllerRecordingNotificationDelivery()
+            notificationDelivery: AppControllerRecordingNotificationDelivery(),
+            softwareUpdateChecker: StubSoftwareUpdateChecker(),
+            softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false
         )
 
         XCTAssertEqual(
@@ -46,7 +49,10 @@ final class AppControllerTests: XCTestCase {
             authController: MutableAuthController(state: .authenticated(username: "octocat")),
             sleeper: CancellingSleeper(),
             startAtLoginController: RecordingStartAtLoginController(),
-            notificationDelivery: AppControllerRecordingNotificationDelivery()
+            notificationDelivery: AppControllerRecordingNotificationDelivery(),
+            softwareUpdateChecker: StubSoftwareUpdateChecker(),
+            softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false
         )
 
         await waitUntil("initial dashboard refresh") {
@@ -70,7 +76,10 @@ final class AppControllerTests: XCTestCase {
             authController: authController,
             sleeper: CancellingSleeper(),
             startAtLoginController: RecordingStartAtLoginController(),
-            notificationDelivery: AppControllerRecordingNotificationDelivery()
+            notificationDelivery: AppControllerRecordingNotificationDelivery(),
+            softwareUpdateChecker: StubSoftwareUpdateChecker(),
+            softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false
         )
 
         controller.settingsModel.requestSignIn()
@@ -90,7 +99,10 @@ final class AppControllerTests: XCTestCase {
             sleeper: CancellingSleeper(),
             dockIconVisibilityController: dockIconController,
             startAtLoginController: RecordingStartAtLoginController(),
-            notificationDelivery: AppControllerRecordingNotificationDelivery()
+            notificationDelivery: AppControllerRecordingNotificationDelivery(),
+            softwareUpdateChecker: StubSoftwareUpdateChecker(),
+            softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false
         )
 
         await waitUntil("initial dock icon preference application") {
@@ -115,7 +127,10 @@ final class AppControllerTests: XCTestCase {
             sleeper: CancellingSleeper(),
             dockIconVisibilityController: dockIconController,
             startAtLoginController: RecordingStartAtLoginController(),
-            notificationDelivery: AppControllerRecordingNotificationDelivery()
+            notificationDelivery: AppControllerRecordingNotificationDelivery(),
+            softwareUpdateChecker: StubSoftwareUpdateChecker(),
+            softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false
         )
 
         await waitUntil("initial hidden Dock icon preference application") {
@@ -140,7 +155,10 @@ final class AppControllerTests: XCTestCase {
             authController: MutableAuthController(state: .authenticated(username: "octocat")),
             sleeper: CancellingSleeper(),
             startAtLoginController: startAtLoginController,
-            notificationDelivery: AppControllerRecordingNotificationDelivery()
+            notificationDelivery: AppControllerRecordingNotificationDelivery(),
+            softwareUpdateChecker: StubSoftwareUpdateChecker(),
+            softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false
         )
 
         await waitUntil("initial start at login preference application") {
@@ -168,7 +186,10 @@ final class AppControllerTests: XCTestCase {
             authController: MutableAuthController(state: .authenticated(username: "octocat")),
             sleeper: CancellingSleeper(),
             startAtLoginController: startAtLoginController,
-            notificationDelivery: AppControllerRecordingNotificationDelivery()
+            notificationDelivery: AppControllerRecordingNotificationDelivery(),
+            softwareUpdateChecker: StubSoftwareUpdateChecker(),
+            softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false
         )
 
         XCTAssertTrue(controller.settingsModel.canOpenLoginItemsSettings)

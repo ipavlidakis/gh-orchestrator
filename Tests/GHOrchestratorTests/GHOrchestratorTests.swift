@@ -16,6 +16,8 @@ final class GHOrchestratorTests: XCTestCase {
             AppMetadata.helpURL.absoluteString,
             "https://github.com/ipavlidakis/gh-orchestrator"
         )
+        XCTAssertEqual(AppMetadata.releaseRepositoryOwner, "ipavlidakis")
+        XCTAssertEqual(AppMetadata.releaseRepositoryName, "gh-orchestrator")
     }
 
     func testAppMetadataOAuthSetupURLsTargetGitHubRegistrationAndDocs() {

@@ -139,6 +139,27 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertTrue(reloadedStore.settings.startAtLogin)
     }
 
+    func testAutomaticUpdateCheckPreferencePersists() {
+        let storageURL = makeIsolatedStorageURL()
+        let store = SettingsStore(storageURL: storageURL)
+        let model = SoftwareUpdateModel(
+            store: store,
+            checker: StubSoftwareUpdateChecker(result: .upToDate(currentVersion: "1.0.0")),
+            installer: RecordingSoftwareUpdateInstaller(),
+            currentVersionProvider: { "1.0.0" }
+        )
+
+        XCTAssertTrue(model.automaticallyCheckForUpdates)
+
+        model.automaticallyCheckForUpdates = false
+
+        XCTAssertFalse(store.settings.automaticallyCheckForUpdates)
+
+        let reloadedStore = SettingsStore(storageURL: storageURL)
+
+        XCTAssertFalse(reloadedStore.settings.automaticallyCheckForUpdates)
+    }
+
     func testGraphQLDashboardLimitPersistenceClampsAndWritesImmediately() {
         let storageURL = makeIsolatedStorageURL()
         let store = SettingsStore(storageURL: storageURL)

@@ -1070,6 +1070,31 @@
   - Reopened after `OPENAI_API_KEY` was added to `~/.zshrc` and a throwaway image-generation virtualenv was prepared under `/tmp/ghorchestrator-imagegen-venv`.
   - Blocked again on 2026-04-15 because the OpenAI account has reached its billing hard limit.
 
+### T47: Direct DMG Software Updates
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T26`, `T30`
+- goal: let GHOrchestrator check GitHub Releases for newer signed DMG builds, surface available updates in Settings, and install downloaded updates without adding third-party updater dependencies.
+- scope:
+  - add a core release-update checker that reads the latest GitHub Release over direct HTTP, compares release versions, and selects the DMG plus checksum assets.
+  - add app-owned update state, Settings controls, an app-menu check action, and automatic background checks.
+  - add an app-owned DMG installer that downloads assets, validates the SHA-256 checksum, mounts the DMG, and hands replacement/relaunch to a short helper script after GHOrchestrator exits.
+  - persist an automatic update-check preference in `AppSettings`.
+- deliverables:
+  - core update-check service and tests
+  - app update model/installer and Settings/menu wiring
+  - verification notes
+- verification:
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after adding the release-update checker, version comparison, checksum-asset enforcement, and update preference persistence.
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding app update files and switching the generated app Info.plist to a SwiftUI-compatible explicit dictionary.
+  - 2026-04-15: `xcodebuild build-for-testing -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T47-build-for-testing` succeeded.
+  - 2026-04-15: `xcodebuild test-without-building -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T47-build-for-testing -only-testing:GHOrchestratorTests/SoftwareUpdateModelTests -only-testing:GHOrchestratorTests/SettingsModelTests/testAutomaticUpdateCheckPreferencePersists -only-testing:GHOrchestratorTests/SettingsWindowCommandsTests` succeeded.
+  - 2026-04-15: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T47-full` succeeded after final installer-script hardening.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after final installer-script hardening, rebuilding, and launching the app with updater wiring.
+- notes:
+  - Keep this direct-distribution updater scoped to the existing signed/notarized DMG release pipeline. Do not add Sparkle or another third-party dependency.
+  - The app target now uses an explicit Info.plist dictionary without `NSMainStoryboardFile`; the previous generated default pointed at a missing `Main.storyboard` and prevented hosted XCTest/app launch.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1118,3 +1143,4 @@
 - 2026-04-15: the persisted Dock icon preference is overridden while the Settings window is open so the window remains reachable from the Dock after it loses focus.
 - 2026-04-15: menu-bar popup actions should use one ellipsis/more menu containing Refresh, Settings, and Quit; duplicate Refresh/Quit actions should be removed from Settings > General.
 - 2026-04-15: start-at-login is an app-owned preference backed by `SMAppService.mainApp`, with the desired state persisted in `AppSettings` and system registration status surfaced in Settings.
+- 2026-04-15: software updates will use the existing GitHub Release DMG artifacts directly: core code checks release metadata and checksum assets, while the app target owns automatic checks, downloads, DMG mounting, replacement, and relaunch.

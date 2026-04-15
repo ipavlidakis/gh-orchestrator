@@ -8,6 +8,7 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.pollingIntervalSeconds, AppSettings.defaultPollingIntervalSeconds)
         XCTAssertEqual(settings.hideDockIcon, AppSettings.defaultHideDockIcon)
         XCTAssertEqual(settings.startAtLogin, AppSettings.defaultStartAtLogin)
+        XCTAssertEqual(settings.automaticallyCheckForUpdates, AppSettings.defaultAutomaticallyCheckForUpdates)
         XCTAssertEqual(settings.graphQLSearchResultLimit, 10)
         XCTAssertEqual(settings.graphQLReviewThreadLimit, 10)
         XCTAssertEqual(settings.graphQLReviewThreadCommentLimit, 5)
@@ -48,6 +49,12 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertTrue(settings.startAtLogin)
     }
 
+    func testAutomaticUpdateCheckPreferenceRoundTripsThroughInitializer() {
+        let settings = AppSettings(automaticallyCheckForUpdates: false)
+
+        XCTAssertFalse(settings.automaticallyCheckForUpdates)
+    }
+
     func testGraphQLDashboardLimitsAreClampedToAllowedRanges() {
         let settings = AppSettings(
             graphQLSearchResultLimit: 0,
@@ -80,6 +87,7 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.graphQLReviewThreadCommentLimit, AppSettings.defaultGraphQLReviewThreadCommentLimit)
         XCTAssertEqual(settings.graphQLCheckContextLimit, AppSettings.defaultGraphQLCheckContextLimit)
         XCTAssertEqual(settings.startAtLogin, AppSettings.defaultStartAtLogin)
+        XCTAssertEqual(settings.automaticallyCheckForUpdates, AppSettings.defaultAutomaticallyCheckForUpdates)
         XCTAssertTrue(settings.repositoryNotificationSettings.isEmpty)
     }
 

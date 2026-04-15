@@ -245,6 +245,7 @@ final class RepositoryNotificationMonitor {
             pollingIntervalSeconds: settings.pollingIntervalSeconds,
             hideDockIcon: settings.hideDockIcon,
             startAtLogin: settings.startAtLogin,
+            automaticallyCheckForUpdates: settings.automaticallyCheckForUpdates,
             graphQLSearchResultLimit: settings.graphQLSearchResultLimit,
             graphQLReviewThreadLimit: settings.graphQLReviewThreadLimit,
             graphQLReviewThreadCommentLimit: settings.graphQLReviewThreadCommentLimit,

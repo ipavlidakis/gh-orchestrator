@@ -47,8 +47,21 @@ let project = Project(
             product: .app,
             bundleId: "com.ipavlidakis.GHOrchestrator",
             deploymentTargets: .macOS("15.0"),
-            infoPlist: .extendingDefault(with: [
-                "GitHubOAuthClientID": .string(gitHubOAuthClientID)
+            infoPlist: .dictionary([
+                "CFBundleDevelopmentRegion": "$(DEVELOPMENT_LANGUAGE)",
+                "CFBundleExecutable": "$(EXECUTABLE_NAME)",
+                "CFBundleIconFile": "",
+                "CFBundleIconName": "AppIcon",
+                "CFBundleIdentifier": "$(PRODUCT_BUNDLE_IDENTIFIER)",
+                "CFBundleInfoDictionaryVersion": "6.0",
+                "CFBundleName": "$(PRODUCT_NAME)",
+                "CFBundlePackageType": "APPL",
+                "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+                "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
+                "GitHubOAuthClientID": .string(gitHubOAuthClientID),
+                "LSMinimumSystemVersion": "$(MACOSX_DEPLOYMENT_TARGET)",
+                "NSHumanReadableCopyright": "Copyright ©. All rights reserved.",
+                "NSPrincipalClass": "NSApplication",
             ]),
             sources: ["App/Sources/**"],
             resources: ["App/Resources/**"],

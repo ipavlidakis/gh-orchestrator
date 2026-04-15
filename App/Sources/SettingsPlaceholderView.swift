@@ -45,6 +45,7 @@ private enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 
 struct SettingsWindowView: View {
     @Bindable var model: SettingsModel
+    @Bindable var softwareUpdateModel: SoftwareUpdateModel
     let requestLogModel: GitHubRequestLogModel
     let menuVisibilityController: any SettingsWindowMenuVisibilityControlling
     let onSettingsWindowVisibilityChange: @MainActor (Bool) -> Void
@@ -65,7 +66,10 @@ struct SettingsWindowView: View {
             SettingsDetailScrollView(title: selectedPane.title) {
                 switch selectedPane {
                 case .general:
-                    GeneralSettingsPane(model: model)
+                    GeneralSettingsPane(
+                        model: model,
+                        softwareUpdateModel: softwareUpdateModel
+                    )
                 case .github:
                     GitHubSettingsPane(model: model)
                 case .repositories:
@@ -288,6 +292,7 @@ private struct GitHubRequestRecordRow: View {
 
 private struct GeneralSettingsPane: View {
     @Bindable var model: SettingsModel
+    @Bindable var softwareUpdateModel: SoftwareUpdateModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -358,6 +363,63 @@ private struct GeneralSettingsPane: View {
                 } else {
                     Text("When the Dock icon is hidden, it reappears while Settings is open so the window stays reachable.")
                 }
+            }
+
+            SettingsGroup(title: "Software updates") {
+                SettingsRow(
+                    title: "Installed version",
+                    subtitle: softwareUpdateModel.statusDescription
+                ) {
+                    Text("\(softwareUpdateModel.currentVersion) (\(AppMetadata.currentBuild))")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                SettingsRow(
+                    title: "Automatic checks",
+                    subtitle: "Look for new GitHub Release builds periodically."
+                ) {
+                    Toggle("", isOn: $softwareUpdateModel.automaticallyCheckForUpdates)
+                        .labelsHidden()
+                }
+
+                Divider()
+
+                SettingsRow(
+                    title: "Actions",
+                    subtitle: updateActionSubtitle
+                ) {
+                    HStack(spacing: 10) {
+                        if case .checking = softwareUpdateModel.state {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+
+                        if softwareUpdateModel.canInstallUpdate {
+                            Button(softwareUpdateModel.installButtonTitle) {
+                                softwareUpdateModel.requestInstallUpdate()
+                            }
+                        }
+
+                        Button(softwareUpdateModel.checkButtonTitle) {
+                            softwareUpdateModel.requestCheckForUpdates()
+                        }
+                        .disabled(!softwareUpdateModel.canCheckForUpdates)
+                    }
+                }
+
+                if let releaseNotes = softwareUpdateModel.availableUpdate?.releaseNotes {
+                    Divider()
+
+                    SettingsTextBlock(
+                        title: "Release notes",
+                        bodyText: releaseNotes
+                    )
+                }
+            } footer: {
+                Text("Updates use the signed, notarized DMG attached to the project’s latest GitHub Release.")
             }
 
             SettingsGroup(title: "Dashboard query limits") {
@@ -435,6 +497,25 @@ private struct GeneralSettingsPane: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var updateActionSubtitle: String {
+        switch softwareUpdateModel.state {
+        case .idle:
+            return "Check the project’s latest GitHub Release."
+        case .checking:
+            return "Contacting GitHub Releases."
+        case .upToDate:
+            return softwareUpdateModel.lastCheckedAt.map {
+                "Last checked \($0.formatted(date: .omitted, time: .shortened))."
+            } ?? "No newer release was found."
+        case .updateAvailable(let update):
+            return "Download, verify, and install GHOrchestrator \(update.version)."
+        case .installing:
+            return "GHOrchestrator will relaunch after the update is copied."
+        case .failed:
+            return "The latest check did not complete."
         }
     }
 }
