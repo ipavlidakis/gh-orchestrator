@@ -1,7 +1,13 @@
 import Foundation
 
 struct ActionsJobsResponseDTO: Decodable {
+    let totalCount: Int?
     let jobs: [JobDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case totalCount = "total_count"
+        case jobs
+    }
 
     struct JobDTO: Decodable {
         let id: Int

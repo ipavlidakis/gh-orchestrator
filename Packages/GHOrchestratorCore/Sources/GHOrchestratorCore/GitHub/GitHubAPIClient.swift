@@ -284,7 +284,20 @@ extension URLSessionGitHubAPIClient {
 
     private func endpointURL(path: String) -> URL {
         let normalizedPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
-        return apiBaseURL.appendingPathComponent(normalizedPath)
+        guard let queryStartIndex = normalizedPath.firstIndex(of: "?") else {
+            return apiBaseURL.appendingPathComponent(normalizedPath)
+        }
+
+        let pathComponent = String(normalizedPath[..<queryStartIndex])
+        let query = String(normalizedPath[normalizedPath.index(after: queryStartIndex)...])
+        let url = apiBaseURL.appendingPathComponent(pathComponent)
+
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+
+        components.percentEncodedQuery = query
+        return components.url ?? url
     }
 
     private func authenticatedRequest(

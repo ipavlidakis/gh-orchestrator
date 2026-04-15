@@ -353,6 +353,72 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(model.workflowJobNameFilterSummary(repositoryID: "openai/codex", workflowName: "CI"), "All jobs")
     }
 
+    func testActionsInsightsSelectionPersistsAndRefreshesDashboard() async throws {
+        let storageURL = makeIsolatedStorageURL()
+        let store = SettingsStore(storageURL: storageURL)
+        store.settings.observedRepositories = [
+            ObservedRepository(owner: "openai", name: "codex")
+        ]
+        let workflow = ActionsWorkflowItem(id: 42, name: "CI", path: ".github/workflows/ci.yml", state: "active")
+        let insightsService = StubActionsInsightsLoading(
+            dashboard: ActionsInsightsDashboard(
+                dateInterval: DateInterval(
+                    start: Date(timeIntervalSince1970: 0),
+                    end: Date(timeIntervalSince1970: 60)
+                ),
+                summary: ActionsInsightsSummary(
+                    totalCount: 2,
+                    successCount: 1,
+                    failureCount: 1,
+                    averageDurationSeconds: 120
+                ),
+                dataPoints: []
+            )
+        )
+        let model = SettingsModel(
+            store: store,
+            authenticationState: .authenticated(username: "octocat"),
+            workflowListService: StubActionsWorkflowListing(workflows: [workflow]),
+            workflowJobListService: StubActionsWorkflowJobListing(jobNames: ["Build", "Test"]),
+            actionsInsightsService: insightsService
+        )
+
+        model.loadActionsInsightsDependenciesIfNeeded()
+
+        await waitUntil("workflow names load") {
+            !model.availableWorkflows(repositoryID: "openai/codex").isEmpty
+        }
+
+        model.setActionsInsightsRepositoryID("openai/codex")
+        model.setActionsInsightsWorkflowID(42)
+        model.setActionsInsightsJobName("Test")
+        model.actionsInsightsPeriod = .last90Days
+        model.refreshActionsInsights(now: try XCTUnwrap(parseISO8601Date("2026-04-15T12:00:00Z")))
+
+        await waitUntil("Actions insights load") {
+            if case .loaded = model.actionsInsightsState {
+                return true
+            }
+
+            return false
+        }
+
+        XCTAssertEqual(store.settings.actionsInsightsSelection.repositoryID, "openai/codex")
+        XCTAssertEqual(store.settings.actionsInsightsSelection.workflowID, 42)
+        XCTAssertEqual(store.settings.actionsInsightsSelection.workflowName, "CI")
+        XCTAssertEqual(store.settings.actionsInsightsSelection.jobName, "Test")
+        XCTAssertEqual(store.settings.actionsInsightsSelection.period, .last90Days)
+
+        let request = await insightsService.lastRequest
+        XCTAssertEqual(request?.repository.fullName, "openai/codex")
+        XCTAssertEqual(request?.workflow.id, 42)
+        XCTAssertEqual(request?.jobName, "Test")
+        XCTAssertEqual(request?.period, .last90Days)
+
+        let reloadedStore = SettingsStore(storageURL: storageURL)
+        XCTAssertEqual(reloadedStore.settings.actionsInsightsSelection, store.settings.actionsInsightsSelection)
+    }
+
     func testWorkflowNameLoadingSurfacesFailures() async {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings.observedRepositories = [
@@ -386,6 +452,13 @@ final class SettingsModelTests: XCTestCase {
                 ObservedRepository(owner: "openai", name: "codex"),
                 ObservedRepository(owner: "swiftlang", name: "swift")
             ],
+            actionsInsightsSelection: ActionsInsightsSelection(
+                repositoryID: "openai/codex",
+                workflowID: 42,
+                workflowName: "CI",
+                jobName: "Test",
+                period: .last90Days
+            ),
             repositoryNotificationSettings: [
                 RepositoryNotificationSettings(repositoryID: "openai/codex", enabled: true),
                 RepositoryNotificationSettings(repositoryID: "swiftlang/swift", enabled: true)
@@ -397,6 +470,11 @@ final class SettingsModelTests: XCTestCase {
 
         XCTAssertEqual(store.settings.observedRepositories.map(\.fullName), ["swiftlang/swift"])
         XCTAssertEqual(store.settings.repositoryNotificationSettings.map(\.repositoryID), ["swiftlang/swift"])
+        XCTAssertNil(store.settings.actionsInsightsSelection.repositoryID)
+        XCTAssertNil(store.settings.actionsInsightsSelection.workflowID)
+        XCTAssertNil(store.settings.actionsInsightsSelection.workflowName)
+        XCTAssertNil(store.settings.actionsInsightsSelection.jobName)
+        XCTAssertEqual(store.settings.actionsInsightsSelection.period, .last90Days)
     }
 
     private func makeIsolatedStorageURL() -> URL {
@@ -428,6 +506,12 @@ final class SettingsModelTests: XCTestCase {
         }
 
         XCTFail("Timed out waiting for \(description)")
+    }
+
+    private func parseISO8601Date(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
     }
 }
 
@@ -473,5 +557,39 @@ private final class StubActionsWorkflowJobListing: ActionsWorkflowJobListing, @u
         }
 
         return jobNames
+    }
+}
+
+private actor StubActionsInsightsLoading: ActionsInsightsLoading {
+    struct Request: Sendable {
+        let repository: ObservedRepository
+        let workflow: ActionsWorkflowItem
+        let jobName: String?
+        let period: ActionsInsightsPeriod
+        let now: Date
+    }
+
+    let dashboard: ActionsInsightsDashboard
+    private(set) var lastRequest: Request?
+
+    init(dashboard: ActionsInsightsDashboard) {
+        self.dashboard = dashboard
+    }
+
+    func loadInsights(
+        repository: ObservedRepository,
+        workflow: ActionsWorkflowItem,
+        jobName: String?,
+        period: ActionsInsightsPeriod,
+        now: Date
+    ) async throws -> ActionsInsightsDashboard {
+        lastRequest = Request(
+            repository: repository,
+            workflow: workflow,
+            jobName: jobName,
+            period: period,
+            now: now
+        )
+        return dashboard
     }
 }

@@ -8,6 +8,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public static let defaultGraphQLReviewThreadLimit = 10
     public static let defaultGraphQLReviewThreadCommentLimit = 5
     public static let defaultGraphQLCheckContextLimit = 15
+    public static let defaultActionsInsightsSelection = ActionsInsightsSelection()
     public static let allowedGraphQLConnectionLimitRange = 1...100
     public static let allowedGraphQLReviewThreadCommentLimitRange = 1...20
 
@@ -20,6 +21,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var graphQLReviewThreadLimit: Int
     public var graphQLReviewThreadCommentLimit: Int
     public var graphQLCheckContextLimit: Int
+    public var actionsInsightsSelection: ActionsInsightsSelection
     public var repositoryNotificationSettings: [RepositoryNotificationSettings]
 
     public init(
@@ -32,6 +34,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         graphQLReviewThreadLimit: Int = AppSettings.defaultGraphQLReviewThreadLimit,
         graphQLReviewThreadCommentLimit: Int = AppSettings.defaultGraphQLReviewThreadCommentLimit,
         graphQLCheckContextLimit: Int = AppSettings.defaultGraphQLCheckContextLimit,
+        actionsInsightsSelection: ActionsInsightsSelection = AppSettings.defaultActionsInsightsSelection,
         repositoryNotificationSettings: [RepositoryNotificationSettings] = []
     ) {
         let deduplicatedRepositories = Self.deduplicatedRepositories(observedRepositories)
@@ -45,6 +48,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.graphQLReviewThreadLimit = Self.clampGraphQLConnectionLimit(graphQLReviewThreadLimit)
         self.graphQLReviewThreadCommentLimit = Self.clampGraphQLReviewThreadCommentLimit(graphQLReviewThreadCommentLimit)
         self.graphQLCheckContextLimit = Self.clampGraphQLConnectionLimit(graphQLCheckContextLimit)
+        self.actionsInsightsSelection = actionsInsightsSelection
         self.repositoryNotificationSettings = Self.normalizedNotificationSettings(
             repositoryNotificationSettings,
             observedRepositories: deduplicatedRepositories
@@ -61,6 +65,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case graphQLReviewThreadLimit
         case graphQLReviewThreadCommentLimit
         case graphQLCheckContextLimit
+        case actionsInsightsSelection
         case repositoryNotificationSettings
     }
 
@@ -77,6 +82,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
             graphQLReviewThreadLimit: try container.decodeIfPresent(Int.self, forKey: .graphQLReviewThreadLimit) ?? Self.defaultGraphQLReviewThreadLimit,
             graphQLReviewThreadCommentLimit: try container.decodeIfPresent(Int.self, forKey: .graphQLReviewThreadCommentLimit) ?? Self.defaultGraphQLReviewThreadCommentLimit,
             graphQLCheckContextLimit: try container.decodeIfPresent(Int.self, forKey: .graphQLCheckContextLimit) ?? Self.defaultGraphQLCheckContextLimit,
+            actionsInsightsSelection: try container.decodeIfPresent(ActionsInsightsSelection.self, forKey: .actionsInsightsSelection) ?? Self.defaultActionsInsightsSelection,
             repositoryNotificationSettings: try container.decodeIfPresent([RepositoryNotificationSettings].self, forKey: .repositoryNotificationSettings) ?? []
         )
     }
@@ -131,6 +137,21 @@ public struct AppSettings: Codable, Equatable, Sendable {
             repositoryNotificationSettings,
             observedRepositories: observedRepositories
         )
+    }
+
+    public mutating func reconcileActionsInsightsSelectionWithObservedRepositories() {
+        guard let repositoryID = actionsInsightsSelection.repositoryID else {
+            return
+        }
+
+        let normalizedRepositoryID = RepositoryNotificationSettings.normalizedRepositoryID(repositoryID)
+        let observedRepositoryIDs = Set(observedRepositories.map(\.normalizedLookupKey))
+        guard observedRepositoryIDs.contains(normalizedRepositoryID) else {
+            actionsInsightsSelection = ActionsInsightsSelection(period: actionsInsightsSelection.period)
+            return
+        }
+
+        actionsInsightsSelection.repositoryID = normalizedRepositoryID
     }
 
     private static func deduplicatedRepositories(_ repositories: [ObservedRepository]) -> [ObservedRepository] {

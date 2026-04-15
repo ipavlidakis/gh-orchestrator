@@ -102,7 +102,8 @@ final class AppController {
                 startAtLoginController.openSystemSettingsLoginItems()
             },
             workflowListService: ActionsWorkflowListService(client: apiClient),
-            workflowJobListService: ActionsWorkflowJobListService(client: apiClient)
+            workflowJobListService: ActionsWorkflowJobListService(client: apiClient),
+            actionsInsightsService: ActionsInsightsService(client: apiClient)
         )
         settingsModelBox.value = resolvedSettingsModel
         self.settingsModel = resolvedSettingsModel

@@ -13,6 +13,7 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.graphQLReviewThreadLimit, 10)
         XCTAssertEqual(settings.graphQLReviewThreadCommentLimit, 5)
         XCTAssertEqual(settings.graphQLCheckContextLimit, 15)
+        XCTAssertEqual(settings.actionsInsightsSelection, AppSettings.defaultActionsInsightsSelection)
         XCTAssertTrue(settings.repositoryNotificationSettings.isEmpty)
     }
 
@@ -69,6 +70,20 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.graphQLCheckContextLimit, 1)
     }
 
+    func testActionsInsightsSelectionRoundTripsThroughInitializer() {
+        let selection = ActionsInsightsSelection(
+            repositoryID: "openai/codex",
+            workflowID: 42,
+            workflowName: "CI",
+            jobName: "Tests",
+            period: .last90Days
+        )
+
+        let settings = AppSettings(actionsInsightsSelection: selection)
+
+        XCTAssertEqual(settings.actionsInsightsSelection, selection)
+    }
+
     func testGraphQLDashboardLimitsUseDefaultsWhenMissingFromStoredSettings() throws {
         let data = Data(
             """
@@ -86,6 +101,7 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.graphQLReviewThreadLimit, AppSettings.defaultGraphQLReviewThreadLimit)
         XCTAssertEqual(settings.graphQLReviewThreadCommentLimit, AppSettings.defaultGraphQLReviewThreadCommentLimit)
         XCTAssertEqual(settings.graphQLCheckContextLimit, AppSettings.defaultGraphQLCheckContextLimit)
+        XCTAssertEqual(settings.actionsInsightsSelection, AppSettings.defaultActionsInsightsSelection)
         XCTAssertEqual(settings.startAtLogin, AppSettings.defaultStartAtLogin)
         XCTAssertEqual(settings.automaticallyCheckForUpdates, AppSettings.defaultAutomaticallyCheckForUpdates)
         XCTAssertTrue(settings.repositoryNotificationSettings.isEmpty)

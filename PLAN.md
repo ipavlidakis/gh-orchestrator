@@ -38,6 +38,7 @@
 ## Active Feature Plans
 - [PLAN-menu-bar.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-menu-bar.md): settings-window app menu commands and top-level menu pruning.
 - [PLAN-notifications.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-notifications.md): per-repository local notification triggers for PR and workflow events.
+- [PLAN-actions-insights.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-actions-insights.md): Settings dashboard for GitHub Actions workflow success and duration trends.
 - Add future independent feature tracks as `PLAN-<feature>.md` files and list them here.
 
 ## Task Board
@@ -1185,3 +1186,4 @@
 - 2026-04-15: start-at-login is an app-owned preference backed by `SMAppService.mainApp`, with the desired state persisted in `AppSettings` and system registration status surfaced in Settings.
 - 2026-04-15: software updates will use the existing GitHub Release DMG artifacts directly: core code checks release metadata and checksum assets, while the app target owns automatic checks, downloads, DMG mounting, replacement, and relaunch.
 - 2026-04-15: dashboard polling should continue at the configured interval while the menu-bar window is visible; opening or closing the menu should not itself force a refresh.
+- 2026-04-15: the Actions insights Settings dashboard will fetch selected-period GitHub Actions data live, aggregate it in memory, persist only selection preferences in the existing Application Support settings file, and avoid adding a metrics database or disk cache for the first implementation.

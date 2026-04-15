@@ -7,6 +7,7 @@ private enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
     case general
     case github
     case repositories
+    case insights
     case notifications
     case requests
 
@@ -20,6 +21,8 @@ private enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
             return "GitHub"
         case .repositories:
             return "Repositories"
+        case .insights:
+            return "Insights"
         case .notifications:
             return "Notifications"
         case .requests:
@@ -35,6 +38,8 @@ private enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
             return "person.crop.circle.badge.checkmark"
         case .repositories:
             return "tray.full"
+        case .insights:
+            return "chart.xyaxis.line"
         case .notifications:
             return "bell.badge"
         case .requests:
@@ -74,6 +79,8 @@ struct SettingsWindowView: View {
                     GitHubSettingsPane(model: model)
                 case .repositories:
                     RepositorySettingsPane(model: model)
+                case .insights:
+                    ActionsInsightsSettingsPane(model: model)
                 case .notifications:
                     NotificationSettingsPane(model: model)
                 case .requests:
@@ -1180,7 +1187,7 @@ private extension RepositoryNotificationTrigger {
     }
 }
 
-private struct SettingsGroup<Content: View, Footer: View>: View {
+struct SettingsGroup<Content: View, Footer: View>: View {
     let title: String
     @ViewBuilder let content: Content
     @ViewBuilder let footer: Footer
@@ -1214,7 +1221,7 @@ private struct SettingsGroup<Content: View, Footer: View>: View {
     }
 }
 
-private struct SettingsRow<Accessory: View>: View {
+struct SettingsRow<Accessory: View>: View {
     let title: String
     let subtitle: String?
     @ViewBuilder let accessory: Accessory
@@ -1250,7 +1257,7 @@ private struct SettingsRow<Accessory: View>: View {
     }
 }
 
-private struct SettingsTextBlock: View {
+struct SettingsTextBlock: View {
     let title: String
     let bodyText: String
 
