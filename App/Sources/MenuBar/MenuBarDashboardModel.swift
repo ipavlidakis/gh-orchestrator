@@ -48,6 +48,7 @@ final class MenuBarDashboardModel {
     var expandedCommentPullRequestIDs = Set<String>()
     var retryingJobIDs = Set<Int>()
     var retryErrorMessagesByJobID: [Int: String] = [:]
+    var refreshWarningMessage: String?
 
     var isRefreshing: Bool {
         if case .loading = state {
@@ -63,6 +64,10 @@ final class MenuBarDashboardModel {
         }
 
         return stateBeforeLoading
+    }
+
+    var areDashboardFiltersDisabled: Bool {
+        refreshWarningMessage != nil
     }
 
     init(
@@ -183,15 +188,19 @@ final class MenuBarDashboardModel {
 
         switch authenticationState {
         case .notConfigured:
+            refreshWarningMessage = nil
             state = .notConfigured
             return
         case .signedOut:
+            refreshWarningMessage = nil
             state = .signedOut
             return
         case .authorizing:
+            refreshWarningMessage = nil
             state = .authorizing
             return
         case .authFailure(let message):
+            refreshWarningMessage = nil
             state = .authFailure(message)
             return
         case .authenticated:
@@ -199,6 +208,7 @@ final class MenuBarDashboardModel {
         }
 
         guard !settings.observedRepositories.isEmpty else {
+            refreshWarningMessage = nil
             state = .noRepositoriesConfigured
             return
         }
@@ -239,7 +249,7 @@ final class MenuBarDashboardModel {
                         return
                     }
 
-                    self.state = .commandFailure(error.localizedDescription)
+                    self.applyRefreshFailure(error.localizedDescription)
                 }
             }
         }
@@ -364,7 +374,27 @@ final class MenuBarDashboardModel {
         retryingJobIDs.formIntersection(visibleJobIDs)
         retryErrorMessagesByJobID = retryErrorMessagesByJobID.filter { visibleJobIDs.contains($0.key) }
 
+        refreshWarningMessage = nil
         state = sections.isEmpty ? .empty : .loaded(sections)
+    }
+
+    private func applyRefreshFailure(_ message: String) {
+        switch stateBeforeLoading {
+        case .loaded, .empty:
+            refreshWarningMessage = message
+            state = stateBeforeLoading
+        default:
+            refreshWarningMessage = message
+            state = .commandFailure(message)
+        }
+
+        if isRateLimitFailure(message) {
+            cancelPolling()
+        }
+    }
+
+    private func isRateLimitFailure(_ message: String) -> Bool {
+        message.localizedCaseInsensitiveContains("rate limit")
     }
 
     private func restartPolling() {
@@ -388,10 +418,18 @@ final class MenuBarDashboardModel {
                 }
 
                 await MainActor.run {
-                    self.refresh()
+                    self.refreshFromPolling()
                 }
             }
         }
+    }
+
+    private func refreshFromPolling() {
+        guard !isRefreshing else {
+            return
+        }
+
+        refresh()
     }
 
     private func cancelPolling() {

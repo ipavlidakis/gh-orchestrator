@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GHOrchestratorCore
 import Observation
@@ -9,20 +10,38 @@ final class AppController {
     let authController: any GitHubAuthControlling
     let dashboardModel: MenuBarDashboardModel
     let settingsModel: SettingsModel
+    let requestLogModel: GitHubRequestLogModel
+    let notificationMonitor: RepositoryNotificationMonitor
     private let dockIconVisibilityController: any DockIconVisibilityControlling
+    private let notificationDelivery: any LocalNotificationDelivering
 
     init(
         settingsStore: SettingsStore = SettingsStore(),
         dataSource: (any DashboardDataSource)? = nil,
         authController: (any GitHubAuthControlling)? = nil,
         sleeper: any DashboardSleepProviding = TaskSleepProvider(),
-        dockIconVisibilityController: any DockIconVisibilityControlling = DockIconVisibilityController()
+        requestLogModel: GitHubRequestLogModel? = nil,
+        dockIconVisibilityController: any DockIconVisibilityControlling = DockIconVisibilityController(),
+        notificationDelivery: (any LocalNotificationDelivering)? = nil,
+        openURL: @escaping @MainActor (URL) -> Void = { url in
+            NSWorkspace.shared.open(url)
+        }
     ) {
+        let resolvedRequestLogModel = requestLogModel ?? GitHubRequestLogModel()
+        let resolvedNotificationDelivery = notificationDelivery ?? UserNotificationCenterDelivery(
+            responseRouter: NotificationResponseRouter(openURL: openURL)
+        )
+
         self.settingsStore = settingsStore
+        self.requestLogModel = resolvedRequestLogModel
         self.dockIconVisibilityController = dockIconVisibilityController
+        self.notificationDelivery = resolvedNotificationDelivery
 
         let credentialStore = KeychainGitHubCredentialStore()
-        let apiClient = URLSessionGitHubAPIClient(credentialStore: credentialStore)
+        let apiClient = URLSessionGitHubAPIClient(
+            credentialStore: credentialStore,
+            metricsRecorder: resolvedRequestLogModel
+        )
         let resolvedAuthController = authController ?? GitHubAuthController(
             apiClient: apiClient,
             credentialStore: credentialStore
@@ -36,7 +55,10 @@ final class AppController {
             sleeper: sleeper,
             authenticationState: resolvedAuthController.state
         )
-        self.settingsModel = SettingsModel(
+
+        let settingsModelBox = WeakSettingsModelBox<SettingsModel>()
+        var resolvedSettingsModel: SettingsModel!
+        resolvedSettingsModel = SettingsModel(
             store: settingsStore,
             authenticationState: resolvedAuthController.state,
             manualRefreshAction: { [dashboardModel] in
@@ -47,7 +69,27 @@ final class AppController {
             },
             signOutAction: { [resolvedAuthController] in
                 resolvedAuthController.signOut()
-            }
+            },
+            requestNotificationAuthorizationAction: { [resolvedNotificationDelivery, settingsModelBox] in
+                Task { @MainActor in
+                    do {
+                        settingsModelBox.value?.notificationAuthorizationStatus = try await resolvedNotificationDelivery.requestAuthorization()
+                    } catch {
+                        settingsModelBox.value?.notificationAuthorizationStatus = await resolvedNotificationDelivery.authorizationStatus()
+                    }
+                }
+            },
+            workflowListService: ActionsWorkflowListService(client: apiClient),
+            workflowJobListService: ActionsWorkflowJobListService(client: apiClient)
+        )
+        settingsModelBox.value = resolvedSettingsModel
+        self.settingsModel = resolvedSettingsModel
+        self.notificationMonitor = RepositoryNotificationMonitor(
+            settingsStore: settingsStore,
+            dataSource: resolvedDataSource,
+            sleeper: sleeper,
+            delivery: resolvedNotificationDelivery,
+            authenticationState: resolvedAuthController.state
         )
 
         observeAuthenticationState()
@@ -55,6 +97,14 @@ final class AppController {
         Task { @MainActor [weak self] in
             self?.applyDockIconPreference()
         }
+        Task { @MainActor [resolvedNotificationDelivery, resolvedSettingsModel] in
+            resolvedSettingsModel?.notificationAuthorizationStatus = await resolvedNotificationDelivery.authorizationStatus()
+        }
+    }
+
+    func setMenuVisible(_ isVisible: Bool) {
+        dashboardModel.setMenuVisible(isVisible)
+        notificationMonitor.setMenuVisible(isVisible)
     }
 
     private func observeAuthenticationState() {
@@ -69,6 +119,7 @@ final class AppController {
                 let state = self.authController.state
                 self.settingsModel.authenticationState = state
                 self.dashboardModel.setAuthenticationState(state)
+                self.notificationMonitor.setAuthenticationState(state)
                 self.observeAuthenticationState()
             }
         }
@@ -92,4 +143,8 @@ final class AppController {
     private func applyDockIconPreference() {
         dockIconVisibilityController.apply(hideDockIcon: settingsStore.settings.hideDockIcon)
     }
+}
+
+private final class WeakSettingsModelBox<Value: AnyObject> {
+    weak var value: Value?
 }

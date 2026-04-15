@@ -251,6 +251,67 @@ final class MenuBarDashboardModelTests: XCTestCase {
         XCTAssertEqual(model.contentState, .loaded(initialSections))
     }
 
+    func testRefreshFailurePreservesLoadedContentAndDisablesFilters() async throws {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings = AppSettings(
+            observedRepositories: [ObservedRepository(owner: "openai", name: "codex")]
+        )
+
+        let initialSections = [
+            RepositorySection(
+                repository: ObservedRepository(owner: "openai", name: "codex"),
+                pullRequests: [pullRequest(number: 1)]
+            )
+        ]
+        let dataSource = FailingAfterFirstLoadDashboardDataSource(
+            firstSections: initialSections,
+            errorMessage: "API rate limit exceeded for user ID 472467."
+        )
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: dataSource,
+            sleeper: RecordingSleeper(),
+            authenticationState: .authenticated(username: "octocat")
+        )
+
+        await waitForLoadedState(on: model)
+
+        model.refresh()
+        await dataSource.waitForLoadCount(2)
+        await waitForRefreshWarning(on: model)
+
+        XCTAssertEqual(model.state, .loaded(initialSections))
+        XCTAssertEqual(model.contentState, .loaded(initialSections))
+        XCTAssertEqual(model.refreshWarningMessage, "API rate limit exceeded for user ID 472467.")
+        XCTAssertTrue(model.areDashboardFiltersDisabled)
+    }
+
+    func testHiddenPollingSkipsRefreshWhenPreviousRefreshIsStillRunning() async throws {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings = AppSettings(
+            observedRepositories: [ObservedRepository(owner: "openai", name: "codex")]
+        )
+
+        let dataSource = DelayedDashboardDataSource(sections: [])
+        let sleeper = ResumableSleeper()
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: dataSource,
+            sleeper: sleeper,
+            authenticationState: .authenticated(username: "octocat")
+        )
+
+        await dataSource.waitUntilLoadStarts()
+        await sleeper.finishNextSleep()
+        await Task.yield()
+
+        let loadCount = await dataSource.currentLoadCount()
+        XCTAssertEqual(loadCount, 1)
+        XCTAssertTrue(model.isRefreshing)
+
+        await dataSource.finishLoading()
+    }
+
     func testAuthenticationStateAndCommandFailureTransitions() async throws {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings = AppSettings(
@@ -299,6 +360,8 @@ final class MenuBarDashboardModelTests: XCTestCase {
 
         if case .commandFailure(let message) = failingModel.state {
             XCTAssertTrue(message.contains("synthetic failure"))
+            XCTAssertEqual(failingModel.refreshWarningMessage, "synthetic failure")
+            XCTAssertTrue(failingModel.areDashboardFiltersDisabled)
         } else {
             XCTFail("Expected command failure state")
         }
@@ -442,6 +505,17 @@ final class MenuBarDashboardModelTests: XCTestCase {
         }
 
         XCTFail("Timed out waiting for retry error")
+    }
+
+    private func waitForRefreshWarning(on model: MenuBarDashboardModel) async {
+        for _ in 0..<50 {
+            if model.refreshWarningMessage != nil {
+                return
+            }
+            await Task.yield()
+        }
+
+        XCTFail("Timed out waiting for refresh warning")
     }
 
     private func makeIsolatedStorageURL() -> URL {
@@ -638,6 +712,47 @@ private actor SequencedDashboardDataSource: DashboardDataSource {
     }
 }
 
+private actor FailingAfterFirstLoadDashboardDataSource: DashboardDataSource {
+    struct SyntheticError: LocalizedError {
+        let message: String
+
+        var errorDescription: String? { message }
+    }
+
+    let firstSections: [RepositorySection]
+    let errorMessage: String
+    private(set) var loadCount = 0
+
+    init(firstSections: [RepositorySection], errorMessage: String) {
+        self.firstSections = firstSections
+        self.errorMessage = errorMessage
+    }
+
+    func loadSections(
+        for _: AppSettings,
+        filter _: DashboardFilter
+    ) async throws -> [RepositorySection] {
+        loadCount += 1
+
+        if loadCount == 1 {
+            return firstSections
+        }
+
+        throw SyntheticError(message: errorMessage)
+    }
+
+    func rerunWorkflowJob(
+        repository _: ObservedRepository,
+        jobID _: Int
+    ) async throws {}
+
+    func waitForLoadCount(_ expectedCount: Int) async {
+        while loadCount < expectedCount {
+            await Task.yield()
+        }
+    }
+}
+
 private struct FailingDashboardDataSource: DashboardDataSource {
     func loadSections(
         for _: AppSettings,
@@ -665,9 +780,28 @@ private actor RecordingSleeper: DashboardSleepProviding {
     }
 }
 
+private actor ResumableSleeper: DashboardSleepProviding {
+    private var continuations: [CheckedContinuation<Void, any Error>] = []
+
+    func sleep(for _: Duration) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            continuations.append(continuation)
+        }
+    }
+
+    func finishNextSleep() async {
+        while continuations.isEmpty {
+            await Task.yield()
+        }
+
+        continuations.removeFirst().resume()
+    }
+}
+
 private actor DelayedDashboardDataSource: DashboardDataSource {
     let sections: [RepositorySection]
     private(set) var didStartLoading = false
+    private(set) var loadCount = 0
     private var continuation: CheckedContinuation<Void, Never>?
 
     init(sections: [RepositorySection]) {
@@ -678,6 +812,7 @@ private actor DelayedDashboardDataSource: DashboardDataSource {
         for _: AppSettings,
         filter _: DashboardFilter
     ) async throws -> [RepositorySection] {
+        loadCount += 1
         didStartLoading = true
         await withCheckedContinuation { continuation in
             self.continuation = continuation
@@ -699,6 +834,10 @@ private actor DelayedDashboardDataSource: DashboardDataSource {
     func finishLoading() {
         continuation?.resume()
         continuation = nil
+    }
+
+    func currentLoadCount() -> Int {
+        loadCount
     }
 }
 

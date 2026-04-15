@@ -35,6 +35,58 @@ final class GitHubAPIClientTests: XCTestCase {
         XCTAssertEqual(requests[0].value(forHTTPHeaderField: "Accept"), "application/json")
     }
 
+    func testAuthenticatedRequestRecordsRateLimitHeaders() async throws {
+        let metricsRecorder = RecordingGitHubRequestMetrics()
+        let transport = StubGitHubHTTPTransport(
+            results: [
+                .success(
+                    data: fixtureData(named: "authenticated_user", subdirectory: "GitHubAPI"),
+                    response: makeHTTPResponse(
+                        url: "https://api.github.com/user",
+                        statusCode: 200,
+                        headerFields: [
+                            "x-ratelimit-limit": "5000",
+                            "x-ratelimit-remaining": "4991",
+                            "x-ratelimit-used": "9",
+                            "x-ratelimit-reset": "1735689600",
+                            "x-ratelimit-resource": "core",
+                        ]
+                    )
+                )
+            ]
+        )
+        let credentialStore = StubGitHubCredentialStore(
+            session: GitHubSession(
+                accessToken: "access-token",
+                tokenType: "bearer",
+                scopes: ["repo"]
+            )
+        )
+        let client = URLSessionGitHubAPIClient(
+            transport: transport,
+            credentialStore: credentialStore,
+            metricsRecorder: metricsRecorder
+        )
+
+        _ = try await client.authenticatedUser()
+
+        let records = await metricsRecorder.records()
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records[0].method, "GET")
+        XCTAssertEqual(records[0].endpoint, "api.github.com/user")
+        XCTAssertEqual(records[0].statusCode, 200)
+        XCTAssertEqual(
+            records[0].rateLimit,
+            GitHubRateLimitStatus(
+                limit: 5000,
+                remaining: 4991,
+                used: 9,
+                resetDate: Date(timeIntervalSince1970: 1_735_689_600),
+                resource: "core"
+            )
+        )
+    }
+
     func testGraphQLPostsQueryAndVariablesToGitHubEndpoint() async throws {
         let transport = StubGitHubHTTPTransport(
             results: [
@@ -301,4 +353,16 @@ private struct ViewerResponse: Decodable, Equatable {
 private struct GraphQLPayload: Decodable {
     let query: String
     let variables: [String: String]
+}
+
+private actor RecordingGitHubRequestMetrics: GitHubRequestMetricsRecording {
+    private var storedRecords: [GitHubRequestRecord] = []
+
+    func record(_ request: GitHubRequestRecord) async {
+        storedRecords.append(request)
+    }
+
+    func records() -> [GitHubRequestRecord] {
+        storedRecords
+    }
 }

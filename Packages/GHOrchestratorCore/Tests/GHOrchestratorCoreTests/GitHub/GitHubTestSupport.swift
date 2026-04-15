@@ -60,12 +60,16 @@ final class StubGitHubCredentialStore: GitHubCredentialStore, @unchecked Sendabl
     }
 }
 
-func makeHTTPResponse(url: String, statusCode: Int) -> HTTPURLResponse {
+func makeHTTPResponse(
+    url: String,
+    statusCode: Int,
+    headerFields: [String: String]? = nil
+) -> HTTPURLResponse {
     HTTPURLResponse(
         url: URL(string: url)!,
         statusCode: statusCode,
         httpVersion: nil,
-        headerFields: nil
+        headerFields: headerFields
     )!
 }
 

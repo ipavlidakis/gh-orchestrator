@@ -1,0 +1,19 @@
+{
+  "total_count": 2,
+  "workflow_runs": [
+    {
+      "id": 321,
+      "name": "CI",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/cli/cli/actions/runs/321"
+    },
+    {
+      "id": 555,
+      "name": "CI",
+      "status": "queued",
+      "conclusion": null,
+      "html_url": "https://github.com/cli/cli/actions/runs/555"
+    }
+  ]
+}

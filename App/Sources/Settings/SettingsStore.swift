@@ -16,10 +16,16 @@ final class SettingsStore {
     @ObservationIgnored
     var onSettingsChange: ((AppSettings, AppSettings) -> Void)?
 
+    @ObservationIgnored
+    private var settingsChangeHandlers: [UUID: (AppSettings, AppSettings) -> Void] = [:]
+
     var settings: AppSettings {
         didSet {
             persist(settings)
             onSettingsChange?(oldValue, settings)
+            settingsChangeHandlers.values.forEach { handler in
+                handler(oldValue, settings)
+            }
         }
     }
 
@@ -34,6 +40,17 @@ final class SettingsStore {
 
     func reload() {
         settings = Self.loadSettings(from: storageURL)
+    }
+
+    @discardableResult
+    func addSettingsChangeHandler(_ handler: @escaping (AppSettings, AppSettings) -> Void) -> UUID {
+        let id = UUID()
+        settingsChangeHandlers[id] = handler
+        return id
+    }
+
+    func removeSettingsChangeHandler(id: UUID) {
+        settingsChangeHandlers[id] = nil
     }
 
     private static func defaultStorageURL(fileManager: FileManager) -> URL {

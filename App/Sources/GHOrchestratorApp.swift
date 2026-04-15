@@ -9,13 +9,19 @@ struct GHOrchestratorApp: App {
 
     var body: some Scene {
         MenuBarExtra(AppMetadata.menuBarTitle, systemImage: "arrow.triangle.branch") {
-            MenuBarPlaceholderView(model: controller.dashboardModel)
+            MenuBarPlaceholderView(
+                model: controller.dashboardModel,
+                onMenuVisibilityChange: { isVisible in
+                    controller.setMenuVisible(isVisible)
+                }
+            )
         }
         .menuBarExtraStyle(.window)
 
         Settings {
             SettingsWindowView(
                 model: controller.settingsModel,
+                requestLogModel: controller.requestLogModel,
                 menuVisibilityController: settingsWindowMenuVisibilityController
             )
         }

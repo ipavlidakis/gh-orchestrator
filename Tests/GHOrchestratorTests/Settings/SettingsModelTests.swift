@@ -2,6 +2,7 @@ import XCTest
 @testable import GHOrchestrator
 import GHOrchestratorCore
 
+@MainActor
 final class SettingsModelTests: XCTestCase {
     func testManualRefreshHookInvokesAssignedAction() {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
@@ -78,6 +79,20 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(reloadedStore.settings.pollingIntervalSeconds, 15)
     }
 
+    func testPollingIntervalAdvisoryAppearsForShortIntervals() {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        let model = SettingsModel(store: store)
+
+        model.pollingIntervalText = "15"
+
+        XCTAssertNotNil(model.pollingIntervalAdvisoryMessage)
+        XCTAssertTrue(model.pollingIntervalAdvisoryMessage?.contains("rate limits") == true)
+
+        model.pollingIntervalText = "60"
+
+        XCTAssertNil(model.pollingIntervalAdvisoryMessage)
+    }
+
     func testHideDockIconPersistenceWritesImmediately() {
         let storageURL = makeIsolatedStorageURL()
         let store = SettingsStore(storageURL: storageURL)
@@ -92,6 +107,34 @@ final class SettingsModelTests: XCTestCase {
         let reloadedStore = SettingsStore(storageURL: storageURL)
 
         XCTAssertTrue(reloadedStore.settings.hideDockIcon)
+    }
+
+    func testGraphQLDashboardLimitPersistenceClampsAndWritesImmediately() {
+        let storageURL = makeIsolatedStorageURL()
+        let store = SettingsStore(storageURL: storageURL)
+        let model = SettingsModel(store: store)
+
+        XCTAssertEqual(model.graphQLSearchResultLimit, 10)
+        XCTAssertEqual(model.graphQLReviewThreadLimit, 10)
+        XCTAssertEqual(model.graphQLReviewThreadCommentLimit, 5)
+        XCTAssertEqual(model.graphQLCheckContextLimit, 15)
+
+        model.graphQLSearchResultLimit = 30
+        model.graphQLReviewThreadLimit = 40
+        model.graphQLReviewThreadCommentLimit = 99
+        model.graphQLCheckContextLimit = 0
+
+        XCTAssertEqual(store.settings.graphQLSearchResultLimit, 30)
+        XCTAssertEqual(store.settings.graphQLReviewThreadLimit, 40)
+        XCTAssertEqual(store.settings.graphQLReviewThreadCommentLimit, 20)
+        XCTAssertEqual(store.settings.graphQLCheckContextLimit, 1)
+
+        let reloadedStore = SettingsStore(storageURL: storageURL)
+
+        XCTAssertEqual(reloadedStore.settings.graphQLSearchResultLimit, 30)
+        XCTAssertEqual(reloadedStore.settings.graphQLReviewThreadLimit, 40)
+        XCTAssertEqual(reloadedStore.settings.graphQLReviewThreadCommentLimit, 20)
+        XCTAssertEqual(reloadedStore.settings.graphQLCheckContextLimit, 1)
     }
 
     func testAddObservedRepositoryPersistsValidEntry() {
@@ -143,6 +186,168 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(store.settings.observedRepositories.map(\.fullName), ["swiftlang/swift"])
     }
 
+    func testRepositoryNotificationSettingsPersistTriggerTogglesAndWorkflowFilters() {
+        let storageURL = makeIsolatedStorageURL()
+        let store = SettingsStore(storageURL: storageURL)
+        store.settings.observedRepositories = [
+            ObservedRepository(owner: "openai", name: "codex")
+        ]
+        let model = SettingsModel(store: store)
+
+        model.setRepositoryNotificationsEnabled(true, repositoryID: "openai/codex")
+        model.setNotificationTrigger(.approval, isEnabled: false, repositoryID: "openai/codex")
+        model.setWorkflowNameFilterText("CI\nRelease, ci", repositoryID: "openai/codex")
+
+        let settings = store.settings.notificationSettings(forRepositoryID: "openai/codex")
+
+        XCTAssertEqual(settings?.repositoryID, "openai/codex")
+        XCTAssertEqual(settings?.enabled, true)
+        XCTAssertFalse(settings?.enabledTriggers.contains(.approval) ?? true)
+        XCTAssertTrue(settings?.enabledTriggers.contains(.changesRequested) ?? false)
+        XCTAssertEqual(settings?.workflowNameFilters, ["ci", "release"])
+
+        let reloadedStore = SettingsStore(storageURL: storageURL)
+        XCTAssertEqual(reloadedStore.settings.notificationSettings(forRepositoryID: "openai/codex"), settings)
+    }
+
+    func testWorkflowNameLoadingAndSelectionUsesFetchedRepositoryWorkflows() async {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings.observedRepositories = [
+            ObservedRepository(owner: "openai", name: "codex")
+        ]
+        let workflowListService = StubActionsWorkflowListing(
+            workflows: [
+                ActionsWorkflowItem(id: 1, name: "CI", path: ".github/workflows/ci.yml", state: "active"),
+                ActionsWorkflowItem(id: 2, name: "Release", path: ".github/workflows/release.yml", state: "active")
+            ]
+        )
+        let model = SettingsModel(
+            store: store,
+            workflowListService: workflowListService
+        )
+
+        model.loadWorkflowNamesIfNeeded(repositoryID: "openai/codex")
+
+        await waitUntil("workflow names load") {
+            if case .loaded(["CI", "Release"]) = model.workflowListState(repositoryID: "openai/codex") {
+                return true
+            }
+
+            return false
+        }
+
+        XCTAssertEqual(model.workflowNameFilterSummary(repositoryID: "openai/codex"), "All workflows")
+
+        model.setWorkflowNameFilter("Release", isSelected: true, repositoryID: "openai/codex")
+
+        XCTAssertTrue(model.isWorkflowNameFilterSelected("release", repositoryID: "openai/codex"))
+        XCTAssertEqual(model.workflowNameFilterSummary(repositoryID: "openai/codex"), "1 selected")
+        XCTAssertEqual(
+            store.settings.notificationSettings(forRepositoryID: "openai/codex")?.workflowNameFilters,
+            ["release"]
+        )
+
+        model.clearWorkflowNameFilters(repositoryID: "openai/codex")
+
+        XCTAssertEqual(model.workflowNameFilterSummary(repositoryID: "openai/codex"), "All workflows")
+    }
+
+    func testWorkflowJobNameLoadingAndSelectionUsesFetchedWorkflowJobs() async {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings.observedRepositories = [
+            ObservedRepository(owner: "openai", name: "codex")
+        ]
+        let workflow = ActionsWorkflowItem(id: 1, name: "CI", path: ".github/workflows/ci.yml", state: "active")
+        let model = SettingsModel(
+            store: store,
+            workflowListService: StubActionsWorkflowListing(workflows: [workflow]),
+            workflowJobListService: StubActionsWorkflowJobListing(jobNames: ["Build", "Test"])
+        )
+
+        model.loadWorkflowNamesIfNeeded(repositoryID: "openai/codex")
+        await waitUntil("workflow names load") {
+            !model.availableWorkflows(repositoryID: "openai/codex").isEmpty
+        }
+
+        model.loadWorkflowJobNamesIfNeeded(
+            repositoryID: "openai/codex",
+            workflow: workflow
+        )
+        await waitUntil("workflow job names load") {
+            if case .loaded(["Build", "Test"]) = model.workflowJobListState(repositoryID: "openai/codex", workflowName: "CI") {
+                return true
+            }
+
+            return false
+        }
+
+        XCTAssertEqual(model.workflowJobNameFilterSummary(repositoryID: "openai/codex", workflowName: "CI"), "All jobs")
+
+        model.setWorkflowJobNameFilter(
+            "Test",
+            isSelected: true,
+            repositoryID: "openai/codex",
+            workflowName: "CI"
+        )
+
+        XCTAssertTrue(model.isWorkflowJobNameFilterSelected("test", repositoryID: "openai/codex", workflowName: "ci"))
+        XCTAssertEqual(model.workflowJobNameFilterSummary(repositoryID: "openai/codex", workflowName: "CI"), "1 selected")
+        XCTAssertEqual(
+            store.settings.notificationSettings(forRepositoryID: "openai/codex")?.workflowJobNameFiltersByWorkflowName,
+            ["ci": ["test"]]
+        )
+
+        model.clearWorkflowJobNameFilters(repositoryID: "openai/codex", workflowName: "CI")
+
+        XCTAssertEqual(model.workflowJobNameFilterSummary(repositoryID: "openai/codex", workflowName: "CI"), "All jobs")
+    }
+
+    func testWorkflowNameLoadingSurfacesFailures() async {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings.observedRepositories = [
+            ObservedRepository(owner: "openai", name: "codex")
+        ]
+        let model = SettingsModel(
+            store: store,
+            workflowListService: StubActionsWorkflowListing(
+                error: ActionsWorkflowListError.requestFailed(
+                    repository: ObservedRepository(owner: "openai", name: "codex"),
+                    message: "Actions disabled"
+                )
+            )
+        )
+
+        model.loadWorkflowNamesIfNeeded(repositoryID: "openai/codex")
+
+        await waitUntil("workflow load failure") {
+            if case .failed(let message) = model.workflowListState(repositoryID: "openai/codex") {
+                return message.contains("Actions disabled")
+            }
+
+            return false
+        }
+    }
+
+    func testRemovingObservedRepositoryReconcilesNotificationSettings() {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings = AppSettings(
+            observedRepositories: [
+                ObservedRepository(owner: "openai", name: "codex"),
+                ObservedRepository(owner: "swiftlang", name: "swift")
+            ],
+            repositoryNotificationSettings: [
+                RepositoryNotificationSettings(repositoryID: "openai/codex", enabled: true),
+                RepositoryNotificationSettings(repositoryID: "swiftlang/swift", enabled: true)
+            ]
+        )
+        let model = SettingsModel(store: store)
+
+        model.removeObservedRepositories(withIDs: ["openai/codex"])
+
+        XCTAssertEqual(store.settings.observedRepositories.map(\.fullName), ["swiftlang/swift"])
+        XCTAssertEqual(store.settings.repositoryNotificationSettings.map(\.repositoryID), ["swiftlang/swift"])
+    }
+
     private func makeIsolatedStorageURL() -> URL {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("GHOrchestrator.SettingsModelTests.\(UUID().uuidString)", isDirectory: true)
@@ -156,5 +361,66 @@ final class SettingsModelTests: XCTestCase {
         }
 
         return storageURL
+    }
+
+    private func waitUntil(
+        _ description: String,
+        timeoutIterations: Int = 100,
+        condition: @escaping () -> Bool
+    ) async {
+        for _ in 0..<timeoutIterations {
+            if condition() {
+                return
+            }
+
+            await Task.yield()
+        }
+
+        XCTFail("Timed out waiting for \(description)")
+    }
+}
+
+private final class StubActionsWorkflowListing: ActionsWorkflowListing, @unchecked Sendable {
+    let workflows: [ActionsWorkflowItem]
+    let error: (any Error)?
+
+    init(
+        workflows: [ActionsWorkflowItem] = [],
+        error: (any Error)? = nil
+    ) {
+        self.workflows = workflows
+        self.error = error
+    }
+
+    func listWorkflows(repository _: ObservedRepository) async throws -> [ActionsWorkflowItem] {
+        if let error {
+            throw error
+        }
+
+        return workflows
+    }
+}
+
+private final class StubActionsWorkflowJobListing: ActionsWorkflowJobListing, @unchecked Sendable {
+    let jobNames: [String]
+    let error: (any Error)?
+
+    init(
+        jobNames: [String] = [],
+        error: (any Error)? = nil
+    ) {
+        self.jobNames = jobNames
+        self.error = error
+    }
+
+    func listJobNames(
+        repository _: ObservedRepository,
+        workflow _: ActionsWorkflowItem
+    ) async throws -> [String] {
+        if let error {
+            throw error
+        }
+
+        return jobNames
     }
 }

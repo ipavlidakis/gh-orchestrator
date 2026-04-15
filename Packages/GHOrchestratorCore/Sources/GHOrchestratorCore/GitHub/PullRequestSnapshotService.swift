@@ -8,7 +8,8 @@ public enum PullRequestScope: String, Codable, CaseIterable, Sendable {
 public protocol PullRequestSnapshotFetching: Sendable {
     func fetchRepositorySnapshots(
         for repositories: [ObservedRepository],
-        scope: PullRequestScope
+        scope: PullRequestScope,
+        queryLimits: PullRequestSnapshotQueryLimits
     ) async throws -> [RepositoryPullRequestSnapshot]
 }
 
@@ -18,8 +19,41 @@ public extension PullRequestSnapshotFetching {
     ) async throws -> [RepositoryPullRequestSnapshot] {
         try await fetchRepositorySnapshots(
             for: repositories,
-            scope: .mine
+            scope: .mine,
+            queryLimits: .default
         )
+    }
+
+    func fetchRepositorySnapshots(
+        for repositories: [ObservedRepository],
+        scope: PullRequestScope
+    ) async throws -> [RepositoryPullRequestSnapshot] {
+        try await fetchRepositorySnapshots(
+            for: repositories,
+            scope: scope,
+            queryLimits: .default
+        )
+    }
+}
+
+public struct PullRequestSnapshotQueryLimits: Equatable, Sendable {
+    public static let `default` = PullRequestSnapshotQueryLimits()
+
+    public let searchResultLimit: Int
+    public let reviewThreadLimit: Int
+    public let reviewThreadCommentLimit: Int
+    public let checkContextLimit: Int
+
+    public init(
+        searchResultLimit: Int = AppSettings.defaultGraphQLSearchResultLimit,
+        reviewThreadLimit: Int = AppSettings.defaultGraphQLReviewThreadLimit,
+        reviewThreadCommentLimit: Int = AppSettings.defaultGraphQLReviewThreadCommentLimit,
+        checkContextLimit: Int = AppSettings.defaultGraphQLCheckContextLimit
+    ) {
+        self.searchResultLimit = AppSettings.clampGraphQLConnectionLimit(searchResultLimit)
+        self.reviewThreadLimit = AppSettings.clampGraphQLConnectionLimit(reviewThreadLimit)
+        self.reviewThreadCommentLimit = AppSettings.clampGraphQLReviewThreadCommentLimit(reviewThreadCommentLimit)
+        self.checkContextLimit = AppSettings.clampGraphQLConnectionLimit(checkContextLimit)
     }
 }
 
@@ -48,7 +82,8 @@ public struct GHPullRequestSnapshotService: PullRequestSnapshotFetching {
 
     public func fetchRepositorySnapshots(
         for repositories: [ObservedRepository],
-        scope: PullRequestScope = .mine
+        scope: PullRequestScope = .mine,
+        queryLimits: PullRequestSnapshotQueryLimits = .default
     ) async throws -> [RepositoryPullRequestSnapshot] {
         guard !repositories.isEmpty else {
             return []
@@ -59,7 +94,8 @@ public struct GHPullRequestSnapshotService: PullRequestSnapshotFetching {
                 group.addTask {
                     let snapshot = try await self.fetchRepositorySnapshot(
                         for: repository,
-                        scope: scope
+                        scope: scope,
+                        queryLimits: queryLimits
                     )
                     return (index, snapshot)
                 }
@@ -78,9 +114,10 @@ public struct GHPullRequestSnapshotService: PullRequestSnapshotFetching {
 }
 
 extension GHPullRequestSnapshotService {
-    static let searchQuery = """
+    static func searchQuery(limits: PullRequestSnapshotQueryLimits = .default) -> String {
+        """
     query($searchQuery: String!) {
-      search(query: $searchQuery, type: ISSUE, first: 100) {
+      search(query: $searchQuery, type: ISSUE, first: \(limits.searchResultLimit)) {
         nodes {
           __typename
           ... on PullRequest {
@@ -93,12 +130,12 @@ extension GHPullRequestSnapshotService {
             isDraft
             updatedAt
             reviewDecision
-            reviewThreads(first: 100) {
+            reviewThreads(first: \(limits.reviewThreadLimit)) {
               nodes {
                 isResolved
                 isOutdated
                 path
-                comments(last: 20) {
+                comments(last: \(limits.reviewThreadCommentLimit)) {
                   nodes {
                     url
                     bodyText
@@ -111,7 +148,7 @@ extension GHPullRequestSnapshotService {
             }
             statusCheckRollup {
               state
-              contexts(first: 100) {
+              contexts(first: \(limits.checkContextLimit)) {
                 nodes {
                   __typename
                   ... on CheckRun {
@@ -147,14 +184,16 @@ extension GHPullRequestSnapshotService {
       }
     }
     """
+    }
 
     func fetchRepositorySnapshot(
         for repository: ObservedRepository,
-        scope: PullRequestScope
+        scope: PullRequestScope,
+        queryLimits: PullRequestSnapshotQueryLimits
     ) async throws -> RepositoryPullRequestSnapshot {
         do {
             let response: PullRequestSearchResponseDTO.SearchDataDTO = try await client.graphQL(
-                query: Self.searchQuery,
+                query: Self.searchQuery(limits: queryLimits),
                 variables: SearchQueryVariables(searchQuery: searchQuery(for: repository, scope: scope))
             )
             let items = try response.search.nodes.compactMap { node in

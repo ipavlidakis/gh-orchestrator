@@ -34,17 +34,20 @@ public struct URLSessionGitHubAPIClient: GitHubAPIClient {
     public let credentialStore: any GitHubCredentialStore
     public let apiBaseURL: URL
     public let graphQLURL: URL
+    public let metricsRecorder: (any GitHubRequestMetricsRecording)?
 
     public init(
         transport: any GitHubHTTPTransport = URLSessionGitHubHTTPTransport(),
         credentialStore: any GitHubCredentialStore = KeychainGitHubCredentialStore(),
         apiBaseURL: URL = URLSessionGitHubAPIClient.defaultAPIBaseURL,
-        graphQLURL: URL = URLSessionGitHubAPIClient.defaultGraphQLURL
+        graphQLURL: URL = URLSessionGitHubAPIClient.defaultGraphQLURL,
+        metricsRecorder: (any GitHubRequestMetricsRecording)? = nil
     ) {
         self.transport = transport
         self.credentialStore = credentialStore
         self.apiBaseURL = apiBaseURL
         self.graphQLURL = graphQLURL
+        self.metricsRecorder = metricsRecorder
     }
 
     public func get<Response: Decodable>(_ path: String) async throws -> Response {
@@ -325,12 +328,28 @@ extension URLSessionGitHubAPIClient {
         do {
             (responseData, response) = try await transport.data(for: request)
         } catch {
+            await recordRequest(
+                request,
+                response: nil,
+                errorMessage: error.localizedDescription
+            )
             throw GitHubAPIClientError.transportFailed(message: error.localizedDescription)
         }
 
         guard let httpResponse = response as? HTTPURLResponse else {
+            await recordRequest(
+                request,
+                response: nil,
+                errorMessage: "Expected an HTTPURLResponse from GitHub."
+            )
             throw GitHubAPIClientError.invalidResponse(message: "Expected an HTTPURLResponse from GitHub.")
         }
+
+        await recordRequest(
+            request,
+            response: httpResponse,
+            errorMessage: nil
+        )
 
         guard (200...299).contains(httpResponse.statusCode) else {
             let message = GitHubAPIErrorMessageFormatter.normalize(data: responseData)
@@ -341,6 +360,58 @@ extension URLSessionGitHubAPIClient {
         }
 
         return responseData
+    }
+
+    private func recordRequest(
+        _ request: URLRequest,
+        response: HTTPURLResponse?,
+        errorMessage: String?
+    ) async {
+        guard let metricsRecorder else {
+            return
+        }
+
+        await metricsRecorder.record(
+            GitHubRequestRecord(
+                method: request.httpMethod ?? "GET",
+                endpoint: sanitizedEndpoint(from: request.url),
+                statusCode: response?.statusCode,
+                rateLimit: response.flatMap(rateLimitStatus(from:)),
+                errorMessage: errorMessage
+            )
+        )
+    }
+
+    private func sanitizedEndpoint(from url: URL?) -> String {
+        guard let url else {
+            return "Unknown endpoint"
+        }
+
+        let host = url.host ?? "github.com"
+        return "\(host)\(url.path)"
+    }
+
+    private func rateLimitStatus(from response: HTTPURLResponse) -> GitHubRateLimitStatus? {
+        guard
+            let limit = integerHeader("x-ratelimit-limit", in: response),
+            let remaining = integerHeader("x-ratelimit-remaining", in: response),
+            let used = integerHeader("x-ratelimit-used", in: response),
+            let reset = integerHeader("x-ratelimit-reset", in: response)
+        else {
+            return nil
+        }
+
+        return GitHubRateLimitStatus(
+            limit: limit,
+            remaining: remaining,
+            used: used,
+            resetDate: Date(timeIntervalSince1970: TimeInterval(reset)),
+            resource: response.value(forHTTPHeaderField: "x-ratelimit-resource") ?? "unknown"
+        )
+    }
+
+    private func integerHeader(_ field: String, in response: HTTPURLResponse) -> Int? {
+        response.value(forHTTPHeaderField: field).flatMap(Int.init)
     }
 
     private func defaultFailureMessage(for statusCode: Int, includeAuthorization: Bool) -> String {

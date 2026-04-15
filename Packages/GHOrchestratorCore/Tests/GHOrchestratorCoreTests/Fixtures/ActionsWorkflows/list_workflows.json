@@ -1,0 +1,37 @@
+{
+  "total_count": 4,
+  "workflows": [
+    {
+      "id": 30,
+      "name": "Release",
+      "path": ".github/workflows/release.yml",
+      "state": "active",
+      "html_url": "https://github.com/cli/cli/actions/workflows/release.yml",
+      "badge_url": "https://github.com/cli/cli/workflows/Release/badge.svg"
+    },
+    {
+      "id": 10,
+      "name": "CI",
+      "path": ".github/workflows/ci.yml",
+      "state": "active",
+      "html_url": "https://github.com/cli/cli/actions/workflows/ci.yml",
+      "badge_url": "https://github.com/cli/cli/workflows/CI/badge.svg"
+    },
+    {
+      "id": 20,
+      "name": "Lint",
+      "path": ".github/workflows/lint.yml",
+      "state": "disabled_manually",
+      "html_url": "https://github.com/cli/cli/actions/workflows/lint.yml",
+      "badge_url": "https://github.com/cli/cli/workflows/Lint/badge.svg"
+    },
+    {
+      "id": 40,
+      "name": "ci",
+      "path": ".github/workflows/duplicate-ci.yml",
+      "state": "active",
+      "html_url": "https://github.com/cli/cli/actions/workflows/duplicate-ci.yml",
+      "badge_url": "https://github.com/cli/cli/workflows/ci/badge.svg"
+    }
+  ]
+}

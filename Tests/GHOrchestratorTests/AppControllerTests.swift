@@ -14,7 +14,8 @@ final class AppControllerTests: XCTestCase {
             settingsStore: configuredSettingsStore(),
             dataSource: dataSource,
             authController: authController,
-            sleeper: CancellingSleeper()
+            sleeper: CancellingSleeper(),
+            notificationDelivery: AppControllerRecordingNotificationDelivery()
         )
 
         XCTAssertEqual(
@@ -42,7 +43,8 @@ final class AppControllerTests: XCTestCase {
             settingsStore: configuredSettingsStore(),
             dataSource: dataSource,
             authController: MutableAuthController(state: .authenticated(username: "octocat")),
-            sleeper: CancellingSleeper()
+            sleeper: CancellingSleeper(),
+            notificationDelivery: AppControllerRecordingNotificationDelivery()
         )
 
         await waitUntil("initial dashboard refresh") {
@@ -64,7 +66,8 @@ final class AppControllerTests: XCTestCase {
             settingsStore: configuredSettingsStore(),
             dataSource: MutableDashboardDataSource(),
             authController: authController,
-            sleeper: CancellingSleeper()
+            sleeper: CancellingSleeper(),
+            notificationDelivery: AppControllerRecordingNotificationDelivery()
         )
 
         controller.settingsModel.requestSignIn()
@@ -82,7 +85,8 @@ final class AppControllerTests: XCTestCase {
             dataSource: MutableDashboardDataSource(),
             authController: MutableAuthController(state: .authenticated(username: "octocat")),
             sleeper: CancellingSleeper(),
-            dockIconVisibilityController: dockIconController
+            dockIconVisibilityController: dockIconController,
+            notificationDelivery: AppControllerRecordingNotificationDelivery()
         )
 
         await waitUntil("initial dock icon preference application") {
@@ -195,6 +199,19 @@ private struct CancellingSleeper: DashboardSleepProviding {
     func sleep(for _: Duration) async throws {
         throw CancellationError()
     }
+}
+
+@MainActor
+private final class AppControllerRecordingNotificationDelivery: LocalNotificationDelivering {
+    func authorizationStatus() async -> LocalNotificationAuthorizationStatus {
+        .authorized
+    }
+
+    func requestAuthorization() async throws -> LocalNotificationAuthorizationStatus {
+        .authorized
+    }
+
+    func deliver(_: RepositoryNotificationEvent) async throws {}
 }
 
 @MainActor

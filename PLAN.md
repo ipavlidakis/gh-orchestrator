@@ -37,6 +37,7 @@
 
 ## Active Feature Plans
 - [PLAN-menu-bar.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-menu-bar.md): settings-window app menu commands and top-level menu pruning.
+- [PLAN-notifications.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-notifications.md): per-repository local notification triggers for PR and workflow events.
 - Add future independent feature tracks as `PLAN-<feature>.md` files and list them here.
 
 ## Task Board
@@ -800,6 +801,119 @@
   - The author display is scoped to `All PRs` because `My PRs` is already implied by the selected query scope.
   - Filters are hidden until the dashboard is authenticated and repositories are configured, then render inline before the refresh and settings actions.
 
+### T35: Dashboard Rate-Limit Failure Handling
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T08`, `T10`, `T33`
+- goal: keep the dashboard useful when GitHub rate limits or other refresh failures occur after data has already loaded.
+- scope:
+  - preserve the last loaded dashboard content when a later refresh fails.
+  - show a warning-style dashboard message for stale content and initial-load refresh failures.
+  - disable dashboard filter controls while a refresh failure is visible.
+  - surface Settings guidance when short polling intervals may increase GitHub API rate-limit failures.
+  - avoid starting a new background polling refresh when the previous refresh is still in flight.
+- deliverables:
+  - dashboard model refresh-failure handling
+  - menu-bar stale-data warning banner
+  - polling interval guidance in Settings
+  - focused tests and verification notes
+- verification:
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T35 -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/SettingsModelTests` succeeded after adding stale-content refresh-failure coverage, polling overlap coverage, and polling interval advisory coverage.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T35b -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests -only-testing:GHOrchestratorTests/SettingsModelTests` succeeded after extending initial-load failures to use warning styling and disable filters.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after the menu-bar warning banner and settings advisory changes.
+- notes:
+  - Initial-load failures cannot show a preserved PR list because no prior content exists in memory yet, but they now use the same warning visual treatment and disable filters.
+  - Rate-limit-style failures also stop the current hidden-window polling task so the app does not keep retrying in the background while GitHub is already rejecting requests.
+
+### T36: Settings GitHub Request Quota View
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T15`, `T18`, `T35`
+- goal: make GitHub request usage visible from Settings so users can understand how app traffic maps to GitHub quota.
+- scope:
+  - record app-originated GitHub HTTP requests at the core API client boundary.
+  - capture GitHub `x-ratelimit-*` response headers when present.
+  - expose an in-memory current-run request log and latest quota snapshot to the app target.
+  - add a Settings pane for latest quota and recent requests.
+  - keep tokens, request bodies, and other credentials out of the log.
+- deliverables:
+  - core request metrics types and recording hook
+  - app request log model
+  - Settings request/quota view
+  - focused tests and verification notes
+- verification:
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after adding core request metrics types, response-header parsing, and API-client recording coverage.
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding the app request log model and Settings requests pane.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T36 -only-testing:GHOrchestratorTests/AppControllerTests -only-testing:GHOrchestratorTests/GitHubRequestLogModelTests -only-testing:GHOrchestratorTests/SettingsModelTests -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests` succeeded.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after wiring the request log into the launched app.
+- notes:
+  - This view is intentionally current-run only and does not persist request history because the fixed persistence decision still says no disk cache.
+  - The request log records sanitized method/endpoint/status metadata plus quota headers, never request bodies or tokens.
+
+### T37: Settings Quota Resource Buckets
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T36`
+- goal: show GitHub quota resources side by side so GraphQL and REST/core limits do not overwrite each other in Settings.
+- scope:
+  - derive the latest quota header snapshot per `x-ratelimit-resource`.
+  - update the Settings requests pane to show all observed quota resources.
+  - clarify that GraphQL and REST/core are separate GitHub quota buckets.
+  - add focused request-log tests for multi-resource quota snapshots.
+- deliverables:
+  - request log resource-bucket summary
+  - Settings quota UI update
+  - focused tests and verification notes
+- verification:
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T37 -only-testing:GHOrchestratorTests/GitHubRequestLogModelTests -only-testing:GHOrchestratorTests/SettingsModelTests` succeeded after adding multi-resource quota aggregation and Settings UI coverage through compilation.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after updating the Settings requests pane to show all quota resources.
+- notes:
+  - GitHub documents separate rate-limit resources for REST and GraphQL; the app should not collapse them into one global remaining value.
+
+### T38: GraphQL Dashboard Query Cost Reduction
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T16`, `T36`, `T37`
+- goal: reduce per-refresh GraphQL point consumption while preserving the dashboard's primary PR, review, and checks signals.
+- scope:
+  - lower high-cardinality GraphQL connection limits used by the menu-bar dashboard query.
+  - keep enough PR, review-thread, comment, and check context for the compact menu-bar UI.
+  - add focused tests that lock the reduced query limits.
+  - document the tradeoff that very large repositories may need pagination or lazy detail loading later.
+- deliverables:
+  - reduced-cost GraphQL query limits
+  - focused query-shape tests
+  - verification notes
+- verification:
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after reducing GraphQL dashboard query limits and adding bounded-query coverage.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after rebuilding and relaunching the app with the lower-cost query.
+- notes:
+  - The previous query requested up to 100 PRs, 100 review threads per PR, 20 comments per thread, and 100 check contexts per PR per repository. That can multiply into hundreds of GraphQL points for one refresh.
+  - Initially reduced to 25 PRs, 20 review threads per PR, 3 comments per thread, and 50 check contexts per PR; `T39` supersedes the fixed values with persisted configurable limits.
+
+### T39: Configurable GraphQL Dashboard Limits
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T38`
+- goal: let users tune dashboard GraphQL limits from Settings with conservative defaults.
+- scope:
+  - add persisted settings for PR search results, review threads, review comments per thread, and check contexts per PR.
+  - default those limits to 10 PRs, 10 review threads, 5 comments per thread, and 15 check contexts per PR.
+  - clamp user-entered limits to documented GitHub GraphQL connection bounds.
+  - pass the configured limits from the app settings into the snapshot GraphQL query builder.
+  - expose the controls in Settings near the polling/rate-limit guidance.
+- deliverables:
+  - persisted limit settings
+  - query builder limit injection
+  - Settings controls and tests
+- verification:
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after adding persisted GraphQL dashboard limits, backward-compatible decoding, and custom query-limit coverage.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T39 -only-testing:GHOrchestratorTests/SettingsModelTests -only-testing:GHOrchestratorTests/SettingsStoreTests -only-testing:GHOrchestratorTests/AppControllerTests` succeeded after adding Settings model persistence coverage for the new limits.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after adding the Settings query-limit controls and relaunching the app.
+- notes:
+  - Raising these limits increases GraphQL cost; the Settings UI should make that tradeoff clear.
+  - Defaults are 10 PRs, 10 review threads per PR, 5 comments per thread, and 15 check contexts per PR.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -843,3 +957,5 @@
 - 2026-04-15: direct distribution will use a stapled Developer ID-signed `.dmg` attached to a GitHub Release, with release uploads performed through the GitHub REST API.
 - 2026-04-15: failed GitHub Actions steps in the menu-bar dashboard should expose a retry affordance that reruns the containing job when GitHub allows it; step-level rerun is not available, so permission or API failures must stay inline with the existing dashboard content.
 - 2026-04-15: the menu-bar dashboard can switch between the signed-in user's PRs and all open PRs in configured repositories, can focus one configured repository, and should collapse other expanded PR detail bubbles when a new checks/comments bubble opens.
+- 2026-04-15: refresh failures after successful dashboard loads should preserve the last visible content, show a warning banner for stale data, and disable dashboard filter controls until a refresh succeeds.
+- 2026-04-15: local macOS notifications are configured per observed repository, evaluate all open PRs independent of dashboard filters, and use first-load baselines to avoid notifying old events.

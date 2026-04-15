@@ -10,6 +10,15 @@ final class SettingsModel {
     private let manualRefreshAction: (() -> Void)?
     private let signInAction: (() -> Void)?
     private let signOutAction: (() -> Void)?
+    private let requestNotificationAuthorizationAction: (() -> Void)?
+    private let workflowListService: (any ActionsWorkflowListing)?
+    private let workflowJobListService: (any ActionsWorkflowJobListing)?
+
+    @ObservationIgnored
+    private var workflowListTasksByRepositoryID: [String: Task<Void, Never>] = [:]
+
+    @ObservationIgnored
+    private var workflowJobListTasksByKey: [String: Task<Void, Never>] = [:]
 
     var repositoryText: String {
         didSet {
@@ -28,6 +37,10 @@ final class SettingsModel {
     private(set) var pollingIntervalValidationMessage: String?
 
     var authenticationState: GitHubAuthenticationState
+    var notificationAuthorizationStatus: LocalNotificationAuthorizationStatus
+    var workflowListStatesByRepositoryID: [String: SettingsWorkflowListState] = [:]
+    var workflowJobListStatesByKey: [String: SettingsWorkflowListState] = [:]
+    var workflowItemsByRepositoryID: [String: [ActionsWorkflowItem]] = [:]
     var hideDockIcon: Bool {
         didSet {
             syncHideDockIcon()
@@ -37,20 +50,33 @@ final class SettingsModel {
     init(
         store: SettingsStore = SettingsStore(),
         authenticationState: GitHubAuthenticationState = .signedOut,
+        notificationAuthorizationStatus: LocalNotificationAuthorizationStatus = .notDetermined,
         manualRefreshAction: (() -> Void)? = nil,
         signInAction: (() -> Void)? = nil,
-        signOutAction: (() -> Void)? = nil
+        signOutAction: (() -> Void)? = nil,
+        requestNotificationAuthorizationAction: (() -> Void)? = nil,
+        workflowListService: (any ActionsWorkflowListing)? = nil,
+        workflowJobListService: (any ActionsWorkflowJobListing)? = nil
     ) {
         self.store = store
         self.authenticationState = authenticationState
+        self.notificationAuthorizationStatus = notificationAuthorizationStatus
         self.manualRefreshAction = manualRefreshAction
         self.signInAction = signInAction
         self.signOutAction = signOutAction
+        self.requestNotificationAuthorizationAction = requestNotificationAuthorizationAction
+        self.workflowListService = workflowListService
+        self.workflowJobListService = workflowJobListService
         self.repositoryText = Self.repositoryText(from: store.settings.observedRepositories)
         self.repositoryValidationMessages = []
         self.pollingIntervalText = String(store.settings.pollingIntervalSeconds)
         self.pollingIntervalValidationMessage = nil
         self.hideDockIcon = store.settings.hideDockIcon
+    }
+
+    deinit {
+        workflowListTasksByRepositoryID.values.forEach { $0.cancel() }
+        workflowJobListTasksByKey.values.forEach { $0.cancel() }
     }
 
     var settings: AppSettings {
@@ -105,8 +131,67 @@ final class SettingsModel {
         store.settings.observedRepositories
     }
 
+    var notificationAuthorizationDescription: String {
+        notificationAuthorizationStatus.description
+    }
+
+    var canRequestNotificationAuthorization: Bool {
+        guard requestNotificationAuthorizationAction != nil else {
+            return false
+        }
+
+        switch notificationAuthorizationStatus {
+        case .notDetermined, .unknown:
+            return true
+        case .denied, .authorized, .provisional, .ephemeral:
+            return false
+        }
+    }
+
     var pollingIntervalStepperValue: Int {
         Int(pollingIntervalText) ?? store.settings.pollingIntervalSeconds
+    }
+
+    var pollingIntervalAdvisoryMessage: String? {
+        guard pollingIntervalValidationMessage == nil,
+              store.settings.pollingIntervalSeconds < AppSettings.defaultPollingIntervalSeconds
+        else {
+            return nil
+        }
+
+        return "Short polling intervals can hit GitHub API rate limits, especially with many repositories or Actions checks. Use 60 seconds or longer unless you need faster updates."
+    }
+
+    var graphQLSearchResultLimit: Int {
+        get { store.settings.graphQLSearchResultLimit }
+        set {
+            store.settings.graphQLSearchResultLimit = AppSettings.clampGraphQLConnectionLimit(newValue)
+        }
+    }
+
+    var graphQLReviewThreadLimit: Int {
+        get { store.settings.graphQLReviewThreadLimit }
+        set {
+            store.settings.graphQLReviewThreadLimit = AppSettings.clampGraphQLConnectionLimit(newValue)
+        }
+    }
+
+    var graphQLReviewThreadCommentLimit: Int {
+        get { store.settings.graphQLReviewThreadCommentLimit }
+        set {
+            store.settings.graphQLReviewThreadCommentLimit = AppSettings.clampGraphQLReviewThreadCommentLimit(newValue)
+        }
+    }
+
+    var graphQLCheckContextLimit: Int {
+        get { store.settings.graphQLCheckContextLimit }
+        set {
+            store.settings.graphQLCheckContextLimit = AppSettings.clampGraphQLConnectionLimit(newValue)
+        }
+    }
+
+    var graphQLDashboardLimitAdvisoryMessage: String {
+        "Higher limits can multiply GraphQL cost because review threads, comments, and check contexts are nested under every returned PR."
     }
 
     var deviceAuthorizationUserCode: String? {
@@ -143,6 +228,10 @@ final class SettingsModel {
 
     func requestSignOut() {
         signOutAction?()
+    }
+
+    func requestNotificationAuthorization() {
+        requestNotificationAuthorizationAction?()
     }
 
     @discardableResult
@@ -192,8 +281,266 @@ final class SettingsModel {
         }
 
         repositoryValidationMessages = []
-        store.settings.observedRepositories = updatedRepositories
+
+        var updatedSettings = store.settings
+        updatedSettings.observedRepositories = updatedRepositories
+        updatedSettings.reconcileNotificationSettingsWithObservedRepositories()
+        store.settings = updatedSettings
         repositoryText = Self.repositoryText(from: updatedRepositories)
+    }
+
+    func repositoryNotificationSettings(
+        for repository: ObservedRepository
+    ) -> RepositoryNotificationSettings {
+        store.settings.effectiveNotificationSettings(for: repository)
+    }
+
+    func isRepositoryNotificationsEnabled(repositoryID: String) -> Bool {
+        store.settings
+            .notificationSettings(forRepositoryID: repositoryID)?
+            .enabled ?? false
+    }
+
+    func setRepositoryNotificationsEnabled(
+        _ isEnabled: Bool,
+        repositoryID: String
+    ) {
+        updateRepositoryNotificationSettings(repositoryID: repositoryID) { settings in
+            settings.enabled = isEnabled
+        }
+    }
+
+    func isNotificationTriggerEnabled(
+        _ trigger: RepositoryNotificationTrigger,
+        repositoryID: String
+    ) -> Bool {
+        repositoryNotificationSettings(forRepositoryID: repositoryID).enabledTriggers.contains(trigger)
+    }
+
+    func setNotificationTrigger(
+        _ trigger: RepositoryNotificationTrigger,
+        isEnabled: Bool,
+        repositoryID: String
+    ) {
+        updateRepositoryNotificationSettings(repositoryID: repositoryID) { settings in
+            if isEnabled {
+                settings.enabledTriggers.insert(trigger)
+            } else {
+                settings.enabledTriggers.remove(trigger)
+            }
+        }
+    }
+
+    func workflowNameFilterText(repositoryID: String) -> String {
+        repositoryNotificationSettings(forRepositoryID: repositoryID)
+            .workflowNameFilters
+            .joined(separator: "\n")
+    }
+
+    func setWorkflowNameFilterText(
+        _ text: String,
+        repositoryID: String
+    ) {
+        updateRepositoryNotificationSettings(repositoryID: repositoryID) { settings in
+            settings.workflowNameFilters = RepositoryNotificationSettings.parseWorkflowNameFilters(from: text)
+        }
+    }
+
+    func workflowListState(repositoryID: String) -> SettingsWorkflowListState {
+        workflowListStatesByRepositoryID[
+            RepositoryNotificationSettings.normalizedRepositoryID(repositoryID)
+        ] ?? .idle
+    }
+
+    func loadWorkflowNamesIfNeeded(repositoryID: String) {
+        let normalizedRepositoryID = RepositoryNotificationSettings.normalizedRepositoryID(repositoryID)
+        switch workflowListState(repositoryID: normalizedRepositoryID) {
+        case .idle, .failed:
+            loadWorkflowNames(repositoryID: normalizedRepositoryID)
+        case .loading, .loaded:
+            return
+        }
+    }
+
+    func refreshWorkflowNames(repositoryID: String) {
+        let normalizedRepositoryID = RepositoryNotificationSettings.normalizedRepositoryID(repositoryID)
+        workflowListTasksByRepositoryID[normalizedRepositoryID]?.cancel()
+        workflowListTasksByRepositoryID[normalizedRepositoryID] = nil
+        loadWorkflowNames(repositoryID: normalizedRepositoryID)
+    }
+
+    func availableWorkflowNames(repositoryID: String) -> [String] {
+        workflowListState(repositoryID: repositoryID).workflowNames
+    }
+
+    func availableWorkflows(repositoryID: String) -> [ActionsWorkflowItem] {
+        workflowItemsByRepositoryID[
+            RepositoryNotificationSettings.normalizedRepositoryID(repositoryID)
+        ] ?? []
+    }
+
+    func isWorkflowNameFilterSelected(
+        _ workflowName: String,
+        repositoryID: String
+    ) -> Bool {
+        let normalizedWorkflowName = RepositoryNotificationSettings.normalizedWorkflowName(workflowName)
+        return repositoryNotificationSettings(forRepositoryID: repositoryID)
+            .workflowNameFilters
+            .contains(normalizedWorkflowName)
+    }
+
+    func setWorkflowNameFilter(
+        _ workflowName: String,
+        isSelected: Bool,
+        repositoryID: String
+    ) {
+        let normalizedWorkflowName = RepositoryNotificationSettings.normalizedWorkflowName(workflowName)
+        guard !normalizedWorkflowName.isEmpty else {
+            return
+        }
+
+        updateRepositoryNotificationSettings(repositoryID: repositoryID) { settings in
+            var filters = settings.workflowNameFilters
+
+            if isSelected {
+                if !filters.contains(normalizedWorkflowName) {
+                    filters.append(normalizedWorkflowName)
+                }
+            } else {
+                filters.removeAll { $0 == normalizedWorkflowName }
+            }
+
+            settings.workflowNameFilters = RepositoryNotificationSettings.normalizedWorkflowNameFilters(filters)
+        }
+    }
+
+    func clearWorkflowNameFilters(repositoryID: String) {
+        updateRepositoryNotificationSettings(repositoryID: repositoryID) { settings in
+            settings.workflowNameFilters = []
+        }
+    }
+
+    func workflowNameFilterSummary(repositoryID: String) -> String {
+        let filters = repositoryNotificationSettings(forRepositoryID: repositoryID).workflowNameFilters
+        guard !filters.isEmpty else {
+            return "All workflows"
+        }
+
+        return "\(filters.count) selected"
+    }
+
+    func workflowJobListState(
+        repositoryID: String,
+        workflowName: String
+    ) -> SettingsWorkflowListState {
+        workflowJobListStatesByKey[
+            workflowJobListStateKey(
+                repositoryID: repositoryID,
+                workflowName: workflowName
+            )
+        ] ?? .idle
+    }
+
+    func loadWorkflowJobNamesIfNeeded(
+        repositoryID: String,
+        workflow: ActionsWorkflowItem
+    ) {
+        let key = workflowJobListStateKey(
+            repositoryID: repositoryID,
+            workflowName: workflow.name
+        )
+
+        switch workflowJobListStatesByKey[key] ?? .idle {
+        case .idle, .failed:
+            loadWorkflowJobNames(
+                repositoryID: repositoryID,
+                workflow: workflow
+            )
+        case .loading, .loaded:
+            return
+        }
+    }
+
+    func refreshWorkflowJobNames(
+        repositoryID: String,
+        workflow: ActionsWorkflowItem
+    ) {
+        let key = workflowJobListStateKey(
+            repositoryID: repositoryID,
+            workflowName: workflow.name
+        )
+        workflowJobListTasksByKey[key]?.cancel()
+        workflowJobListTasksByKey[key] = nil
+        loadWorkflowJobNames(
+            repositoryID: repositoryID,
+            workflow: workflow
+        )
+    }
+
+    func isWorkflowJobNameFilterSelected(
+        _ jobName: String,
+        repositoryID: String,
+        workflowName: String
+    ) -> Bool {
+        let normalizedWorkflowName = RepositoryNotificationSettings.normalizedWorkflowName(workflowName)
+        let normalizedJobName = RepositoryNotificationSettings.normalizedWorkflowJobName(jobName)
+        return repositoryNotificationSettings(forRepositoryID: repositoryID)
+            .workflowJobNameFiltersByWorkflowName[normalizedWorkflowName]?
+            .contains(normalizedJobName) ?? false
+    }
+
+    func setWorkflowJobNameFilter(
+        _ jobName: String,
+        isSelected: Bool,
+        repositoryID: String,
+        workflowName: String
+    ) {
+        let normalizedWorkflowName = RepositoryNotificationSettings.normalizedWorkflowName(workflowName)
+        let normalizedJobName = RepositoryNotificationSettings.normalizedWorkflowJobName(jobName)
+        guard !normalizedWorkflowName.isEmpty, !normalizedJobName.isEmpty else {
+            return
+        }
+
+        updateRepositoryNotificationSettings(repositoryID: repositoryID) { settings in
+            var filtersByWorkflowName = settings.workflowJobNameFiltersByWorkflowName
+            var filters = filtersByWorkflowName[normalizedWorkflowName] ?? []
+
+            if isSelected {
+                if !filters.contains(normalizedJobName) {
+                    filters.append(normalizedJobName)
+                }
+            } else {
+                filters.removeAll { $0 == normalizedJobName }
+            }
+
+            filtersByWorkflowName[normalizedWorkflowName] = filters
+            settings.workflowJobNameFiltersByWorkflowName = RepositoryNotificationSettings.normalizedWorkflowJobNameFilters(filtersByWorkflowName)
+        }
+    }
+
+    func clearWorkflowJobNameFilters(
+        repositoryID: String,
+        workflowName: String
+    ) {
+        let normalizedWorkflowName = RepositoryNotificationSettings.normalizedWorkflowName(workflowName)
+        updateRepositoryNotificationSettings(repositoryID: repositoryID) { settings in
+            settings.workflowJobNameFiltersByWorkflowName[normalizedWorkflowName] = nil
+        }
+    }
+
+    func workflowJobNameFilterSummary(
+        repositoryID: String,
+        workflowName: String
+    ) -> String {
+        let normalizedWorkflowName = RepositoryNotificationSettings.normalizedWorkflowName(workflowName)
+        let filters = repositoryNotificationSettings(forRepositoryID: repositoryID)
+            .workflowJobNameFiltersByWorkflowName[normalizedWorkflowName] ?? []
+
+        guard !filters.isEmpty else {
+            return "All jobs"
+        }
+
+        return "\(filters.count) selected"
     }
 
     private func syncRepositories() {
@@ -204,7 +551,10 @@ final class SettingsModel {
         }
 
         if store.settings.observedRepositories != parseResult.repositories {
-            store.settings.observedRepositories = parseResult.repositories
+            var updatedSettings = store.settings
+            updatedSettings.observedRepositories = parseResult.repositories
+            updatedSettings.reconcileNotificationSettingsWithObservedRepositories()
+            store.settings = updatedSettings
         }
     }
 
@@ -237,6 +587,139 @@ final class SettingsModel {
         if store.settings.hideDockIcon != hideDockIcon {
             store.settings.hideDockIcon = hideDockIcon
         }
+    }
+
+    private func repositoryNotificationSettings(
+        forRepositoryID repositoryID: String
+    ) -> RepositoryNotificationSettings {
+        guard let repository = store.settings.observedRepositories.first(where: {
+            $0.normalizedLookupKey == RepositoryNotificationSettings.normalizedRepositoryID(repositoryID)
+        }) else {
+            return RepositoryNotificationSettings(repositoryID: repositoryID)
+        }
+
+        return repositoryNotificationSettings(for: repository)
+    }
+
+    private func updateRepositoryNotificationSettings(
+        repositoryID: String,
+        mutate: (inout RepositoryNotificationSettings) -> Void
+    ) {
+        let normalizedRepositoryID = RepositoryNotificationSettings.normalizedRepositoryID(repositoryID)
+        guard let repository = store.settings.observedRepositories.first(where: {
+            $0.normalizedLookupKey == normalizedRepositoryID
+        }) else {
+            return
+        }
+
+        var settings = store.settings.effectiveNotificationSettings(for: repository)
+        mutate(&settings)
+        store.settings.updateNotificationSettings(settings)
+    }
+
+    private func loadWorkflowNames(repositoryID: String) {
+        guard let workflowListService else {
+            workflowListStatesByRepositoryID[repositoryID] = .failed("Sign in before loading repository workflows.")
+            return
+        }
+
+        guard let repository = store.settings.observedRepositories.first(where: {
+            $0.normalizedLookupKey == repositoryID
+        }) else {
+            return
+        }
+
+        workflowListStatesByRepositoryID[repositoryID] = .loading
+
+        let task = Task { [workflowListService] in
+            do {
+                let workflows = try await workflowListService.listWorkflows(repository: repository)
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                let names = workflows.map(\.name)
+                await MainActor.run {
+                    self.workflowListStatesByRepositoryID[repositoryID] = .loaded(names)
+                    self.workflowItemsByRepositoryID[repositoryID] = workflows
+                    self.workflowListTasksByRepositoryID[repositoryID] = nil
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                await MainActor.run {
+                    self.workflowListStatesByRepositoryID[repositoryID] = .failed(error.localizedDescription)
+                    self.workflowListTasksByRepositoryID[repositoryID] = nil
+                }
+            }
+        }
+
+        workflowListTasksByRepositoryID[repositoryID] = task
+    }
+
+    private func loadWorkflowJobNames(
+        repositoryID: String,
+        workflow: ActionsWorkflowItem
+    ) {
+        let key = workflowJobListStateKey(
+            repositoryID: repositoryID,
+            workflowName: workflow.name
+        )
+
+        guard let workflowJobListService else {
+            workflowJobListStatesByKey[key] = .failed("Sign in before loading workflow jobs.")
+            return
+        }
+
+        let normalizedRepositoryID = RepositoryNotificationSettings.normalizedRepositoryID(repositoryID)
+        guard let repository = store.settings.observedRepositories.first(where: {
+            $0.normalizedLookupKey == normalizedRepositoryID
+        }) else {
+            return
+        }
+
+        workflowJobListStatesByKey[key] = .loading
+
+        let task = Task { [workflowJobListService] in
+            do {
+                let jobNames = try await workflowJobListService.listJobNames(
+                    repository: repository,
+                    workflow: workflow
+                )
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                await MainActor.run {
+                    self.workflowJobListStatesByKey[key] = .loaded(jobNames)
+                    self.workflowJobListTasksByKey[key] = nil
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                await MainActor.run {
+                    self.workflowJobListStatesByKey[key] = .failed(error.localizedDescription)
+                    self.workflowJobListTasksByKey[key] = nil
+                }
+            }
+        }
+
+        workflowJobListTasksByKey[key] = task
+    }
+
+    private func workflowJobListStateKey(
+        repositoryID: String,
+        workflowName: String
+    ) -> String {
+        "\(RepositoryNotificationSettings.normalizedRepositoryID(repositoryID))::\(RepositoryNotificationSettings.normalizedWorkflowName(workflowName))"
     }
 
     private static func repositoryText(from repositories: [ObservedRepository]) -> String {

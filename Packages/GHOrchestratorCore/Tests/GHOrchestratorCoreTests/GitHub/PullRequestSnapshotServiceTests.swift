@@ -116,8 +116,36 @@ final class PullRequestSnapshotServiceTests: XCTestCase {
         XCTAssertEqual(request.url?.absoluteString, "https://api.github.com/graphql")
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer access-token")
-        XCTAssertEqual(payload.query, GHPullRequestSnapshotService.searchQuery)
+        XCTAssertEqual(payload.query, GHPullRequestSnapshotService.searchQuery())
         XCTAssertEqual(payload.variables.searchQuery, "repo:openai/codex is:pr is:open author:@me archived:false")
+    }
+
+    func testSearchQueryUsesBoundedDashboardConnectionLimits() {
+        let query = GHPullRequestSnapshotService.searchQuery()
+
+        XCTAssertTrue(query.contains("search(query: $searchQuery, type: ISSUE, first: 10)"))
+        XCTAssertTrue(query.contains("reviewThreads(first: 10)"))
+        XCTAssertTrue(query.contains("comments(last: 5)"))
+        XCTAssertTrue(query.contains("contexts(first: 15)"))
+
+        XCTAssertFalse(query.contains("first: 100"))
+        XCTAssertFalse(query.contains("last: 20"))
+    }
+
+    func testSearchQueryUsesCustomDashboardConnectionLimits() {
+        let query = GHPullRequestSnapshotService.searchQuery(
+            limits: PullRequestSnapshotQueryLimits(
+                searchResultLimit: 7,
+                reviewThreadLimit: 8,
+                reviewThreadCommentLimit: 4,
+                checkContextLimit: 9
+            )
+        )
+
+        XCTAssertTrue(query.contains("search(query: $searchQuery, type: ISSUE, first: 7)"))
+        XCTAssertTrue(query.contains("reviewThreads(first: 8)"))
+        XCTAssertTrue(query.contains("comments(last: 4)"))
+        XCTAssertTrue(query.contains("contexts(first: 9)"))
     }
 
     func testFetchRepositorySnapshotsBuildsAllPullRequestsQueryWithoutAuthorQualifier() async throws {

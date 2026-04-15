@@ -55,7 +55,13 @@ struct LiveDashboardDataSource: DashboardDataSource {
         )
         let snapshots = try await snapshotService.fetchRepositorySnapshots(
             for: repositories,
-            scope: filter.pullRequestScope
+            scope: filter.pullRequestScope,
+            queryLimits: PullRequestSnapshotQueryLimits(
+                searchResultLimit: settings.graphQLSearchResultLimit,
+                reviewThreadLimit: settings.graphQLReviewThreadLimit,
+                reviewThreadCommentLimit: settings.graphQLReviewThreadCommentLimit,
+                checkContextLimit: settings.graphQLCheckContextLimit
+            )
         )
         let items = try await actionsService.buildPullRequestItems(from: snapshots)
         return aggregationService.makeSections(

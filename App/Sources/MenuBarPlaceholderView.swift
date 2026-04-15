@@ -4,6 +4,7 @@ import SwiftUI
 
 struct MenuBarPlaceholderView: View {
     let model: MenuBarDashboardModel
+    let onMenuVisibilityChange: (Bool) -> Void
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -15,10 +16,10 @@ struct MenuBarPlaceholderView: View {
         .padding(14)
         .frame(width: 440, alignment: .leading)
         .task {
-            model.setMenuVisible(true)
+            onMenuVisibilityChange(true)
         }
         .onDisappear {
-            model.setMenuVisible(false)
+            onMenuVisibilityChange(false)
         }
     }
 
@@ -31,6 +32,8 @@ struct MenuBarPlaceholderView: View {
 
             if showsDashboardFilters {
                 filterControls
+                    .disabled(model.areDashboardFiltersDisabled)
+                    .help(model.areDashboardFiltersDisabled ? "Filters are disabled while the current refresh error is visible." : "")
             }
 
             Group {
@@ -136,6 +139,33 @@ struct MenuBarPlaceholderView: View {
 
     @ViewBuilder
     private var content: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if showsStaleContentWarning, let message = model.refreshWarningMessage {
+                RefreshWarningBanner(message: message)
+            }
+
+            contentBody
+        }
+    }
+
+    private var showsStaleContentWarning: Bool {
+        switch model.contentState {
+        case .loaded, .empty:
+            return true
+        case .idle,
+             .loading,
+             .notConfigured,
+             .signedOut,
+             .authorizing,
+             .noRepositoriesConfigured,
+             .authFailure(_),
+             .commandFailure(_):
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private var contentBody: some View {
         switch model.contentState {
         case .idle, .loading:
             EmptyView()
@@ -177,10 +207,7 @@ struct MenuBarPlaceholderView: View {
             )
 
         case .commandFailure(let message):
-            StateMessageView(
-                title: "Refresh failed",
-                message: message
-            )
+            RefreshFailureStateView(message: message)
 
         case .loaded(let sections):
             ScrollView {
@@ -236,6 +263,72 @@ struct MenuBarPlaceholderView: View {
         Task { @MainActor in
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
+    }
+}
+
+private struct RefreshWarningBanner: View {
+    let message: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .imageScale(.small)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Refresh failed")
+                    .font(.caption.weight(.semibold))
+
+                Text("Showing the last loaded dashboard state. \(message)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+        )
+    }
+}
+
+private struct RefreshFailureStateView: View {
+    let message: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .imageScale(.small)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Refresh failed")
+                    .font(.subheadline.weight(.semibold))
+
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("No previously loaded results are available yet. Try again after GitHub allows requests for this account.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+        )
     }
 }
 
