@@ -1,0 +1,78 @@
+{
+  "color-space-for-untagged-svg-colors" : "display-p3",
+  "fill" : {
+    "linear-gradient" : [
+      "srgb:1.00000,0.76671,0.59309,1.00000",
+      "srgb:0.48368,0.53686,1.00000,1.00000"
+    ],
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 0
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0.7
+      }
+    }
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "srgb:1.00000,0.76671,0.59309,1.00000",
+              "extended-srgb:0.79608,0.18824,0.87843,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5,
+                "y" : 0
+              },
+              "stop" : {
+                "x" : 0.5,
+                "y" : 0.5
+              }
+            }
+          },
+          "image-name" : "arrow.trianglehead.branch 2.png",
+          "name" : "arrow.trianglehead.branch 2",
+          "position" : {
+            "scale" : 2.5,
+            "translation-in-points" : [
+              17.9609375,
+              -205.8515625
+            ]
+          }
+        },
+        {
+          "image-name" : "github.svg",
+          "name" : "github",
+          "opacity" : 1,
+          "position" : {
+            "scale" : 1.0999999999999999,
+            "translation-in-points" : [
+              -0.4399999999999409,
+              -29.590000000000146
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

@@ -11,6 +11,7 @@ final class SettingsModel {
     private let signInAction: (() -> Void)?
     private let signOutAction: (() -> Void)?
     private let requestNotificationAuthorizationAction: (() -> Void)?
+    private let openLoginItemsSettingsAction: (() -> Void)?
     private let workflowListService: (any ActionsWorkflowListing)?
     private let workflowJobListService: (any ActionsWorkflowJobListing)?
 
@@ -46,15 +47,24 @@ final class SettingsModel {
             syncHideDockIcon()
         }
     }
+    var startAtLogin: Bool {
+        didSet {
+            syncStartAtLogin()
+        }
+    }
+    var startAtLoginRegistrationStatus: StartAtLoginRegistrationStatus
+    var startAtLoginErrorMessage: String?
 
     init(
         store: SettingsStore = SettingsStore(),
         authenticationState: GitHubAuthenticationState = .signedOut,
         notificationAuthorizationStatus: LocalNotificationAuthorizationStatus = .notDetermined,
+        startAtLoginRegistrationStatus: StartAtLoginRegistrationStatus = .disabled,
         manualRefreshAction: (() -> Void)? = nil,
         signInAction: (() -> Void)? = nil,
         signOutAction: (() -> Void)? = nil,
         requestNotificationAuthorizationAction: (() -> Void)? = nil,
+        openLoginItemsSettingsAction: (() -> Void)? = nil,
         workflowListService: (any ActionsWorkflowListing)? = nil,
         workflowJobListService: (any ActionsWorkflowJobListing)? = nil
     ) {
@@ -65,6 +75,7 @@ final class SettingsModel {
         self.signInAction = signInAction
         self.signOutAction = signOutAction
         self.requestNotificationAuthorizationAction = requestNotificationAuthorizationAction
+        self.openLoginItemsSettingsAction = openLoginItemsSettingsAction
         self.workflowListService = workflowListService
         self.workflowJobListService = workflowJobListService
         self.repositoryText = Self.repositoryText(from: store.settings.observedRepositories)
@@ -72,6 +83,9 @@ final class SettingsModel {
         self.pollingIntervalText = String(store.settings.pollingIntervalSeconds)
         self.pollingIntervalValidationMessage = nil
         self.hideDockIcon = store.settings.hideDockIcon
+        self.startAtLogin = store.settings.startAtLogin
+        self.startAtLoginRegistrationStatus = startAtLoginRegistrationStatus
+        self.startAtLoginErrorMessage = nil
     }
 
     deinit {
@@ -162,6 +176,41 @@ final class SettingsModel {
         return "Short polling intervals can hit GitHub API rate limits, especially with many repositories or Actions checks. Use 60 seconds or longer unless you need faster updates."
     }
 
+    var startAtLoginSubtitle: String {
+        if let startAtLoginStatusMessage {
+            return startAtLoginStatusMessage
+        }
+
+        return "Launch GHOrchestrator automatically when you sign in."
+    }
+
+    var startAtLoginStatusMessage: String? {
+        if let startAtLoginErrorMessage {
+            return "Could not update login item: \(startAtLoginErrorMessage)"
+        }
+
+        switch startAtLoginRegistrationStatus {
+        case .enabled:
+            return startAtLogin ? "GHOrchestrator is registered to launch at login." : nil
+        case .disabled:
+            return nil
+        case .requiresApproval:
+            return "macOS needs approval in Login Items before GHOrchestrator can launch at login."
+        case .notFound:
+            return "macOS could not find GHOrchestrator as a login item. Move the app to Applications and try again."
+        case .unknown:
+            return "macOS returned an unrecognized login item state."
+        }
+    }
+
+    var canOpenLoginItemsSettings: Bool {
+        openLoginItemsSettingsAction != nil &&
+            (startAtLoginErrorMessage != nil ||
+             startAtLoginRegistrationStatus == .requiresApproval ||
+             startAtLoginRegistrationStatus == .notFound ||
+             startAtLoginRegistrationStatus == .unknown)
+    }
+
     var graphQLSearchResultLimit: Int {
         get { store.settings.graphQLSearchResultLimit }
         set {
@@ -216,6 +265,7 @@ final class SettingsModel {
         pollingIntervalText = String(store.settings.pollingIntervalSeconds)
         pollingIntervalValidationMessage = nil
         hideDockIcon = store.settings.hideDockIcon
+        startAtLogin = store.settings.startAtLogin
     }
 
     func requestManualRefresh() {
@@ -232,6 +282,10 @@ final class SettingsModel {
 
     func requestNotificationAuthorization() {
         requestNotificationAuthorizationAction?()
+    }
+
+    func requestOpenLoginItemsSettings() {
+        openLoginItemsSettingsAction?()
     }
 
     @discardableResult
@@ -586,6 +640,12 @@ final class SettingsModel {
     private func syncHideDockIcon() {
         if store.settings.hideDockIcon != hideDockIcon {
             store.settings.hideDockIcon = hideDockIcon
+        }
+    }
+
+    private func syncStartAtLogin() {
+        if store.settings.startAtLogin != startAtLogin {
+            store.settings.startAtLogin = startAtLogin
         }
     }
 

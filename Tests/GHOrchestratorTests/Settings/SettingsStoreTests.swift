@@ -11,7 +11,8 @@ final class SettingsStoreTests: XCTestCase {
                 ObservedRepository(owner: "swiftlang", name: "swift")
             ],
             pollingIntervalSeconds: 120,
-            hideDockIcon: true
+            hideDockIcon: true,
+            startAtLogin: true
         )
 
         let writer = SettingsStore(storageURL: storageURL)

@@ -13,6 +13,7 @@ final class AppController {
     let requestLogModel: GitHubRequestLogModel
     let notificationMonitor: RepositoryNotificationMonitor
     private let dockIconVisibilityController: any DockIconVisibilityControlling
+    private let startAtLoginController: any StartAtLoginControlling
     private let notificationDelivery: any LocalNotificationDelivering
     private var isSettingsWindowVisible = false
 
@@ -23,6 +24,7 @@ final class AppController {
         sleeper: any DashboardSleepProviding = TaskSleepProvider(),
         requestLogModel: GitHubRequestLogModel? = nil,
         dockIconVisibilityController: any DockIconVisibilityControlling = DockIconVisibilityController(),
+        startAtLoginController: any StartAtLoginControlling = StartAtLoginController(),
         notificationDelivery: (any LocalNotificationDelivering)? = nil,
         openURL: @escaping @MainActor (URL) -> Void = { url in
             NSWorkspace.shared.open(url)
@@ -36,6 +38,7 @@ final class AppController {
         self.settingsStore = settingsStore
         self.requestLogModel = resolvedRequestLogModel
         self.dockIconVisibilityController = dockIconVisibilityController
+        self.startAtLoginController = startAtLoginController
         self.notificationDelivery = resolvedNotificationDelivery
 
         let credentialStore = KeychainGitHubCredentialStore()
@@ -62,6 +65,7 @@ final class AppController {
         resolvedSettingsModel = SettingsModel(
             store: settingsStore,
             authenticationState: resolvedAuthController.state,
+            startAtLoginRegistrationStatus: startAtLoginController.registrationStatus,
             manualRefreshAction: { [dashboardModel] in
                 dashboardModel.refresh()
             },
@@ -80,6 +84,9 @@ final class AppController {
                     }
                 }
             },
+            openLoginItemsSettingsAction: { [startAtLoginController] in
+                startAtLoginController.openSystemSettingsLoginItems()
+            },
             workflowListService: ActionsWorkflowListService(client: apiClient),
             workflowJobListService: ActionsWorkflowJobListService(client: apiClient)
         )
@@ -95,8 +102,10 @@ final class AppController {
 
         observeAuthenticationState()
         observeDockIconPreference()
+        observeStartAtLoginPreference()
         Task { @MainActor [weak self] in
             self?.applyDockIconPreference()
+            self?.applyInitialStartAtLoginPreference()
         }
         Task { @MainActor [resolvedNotificationDelivery, resolvedSettingsModel] in
             resolvedSettingsModel?.notificationAuthorizationStatus = await resolvedNotificationDelivery.authorizationStatus()
@@ -115,6 +124,9 @@ final class AppController {
 
         isSettingsWindowVisible = isVisible
         applyDockIconPreference()
+        if isVisible {
+            refreshStartAtLoginStatus()
+        }
     }
 
     private func observeAuthenticationState() {
@@ -150,9 +162,55 @@ final class AppController {
         }
     }
 
+    private func observeStartAtLoginPreference() {
+        withObservationTracking {
+            _ = settingsStore.settings.startAtLogin
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else {
+                    return
+                }
+
+                self.applyStartAtLoginPreference()
+                self.observeStartAtLoginPreference()
+            }
+        }
+    }
+
     private func applyDockIconPreference() {
         let shouldHideDockIcon = settingsStore.settings.hideDockIcon && !isSettingsWindowVisible
         dockIconVisibilityController.apply(hideDockIcon: shouldHideDockIcon)
+    }
+
+    private func applyStartAtLoginPreference() {
+        do {
+            try startAtLoginController.setStartAtLoginEnabled(settingsStore.settings.startAtLogin)
+            settingsModel.startAtLoginErrorMessage = nil
+        } catch {
+            settingsModel.startAtLoginErrorMessage = error.localizedDescription
+        }
+
+        refreshStartAtLoginStatus()
+    }
+
+    private func applyInitialStartAtLoginPreference() {
+        refreshStartAtLoginStatus()
+
+        guard settingsStore.settings.startAtLogin else {
+            return
+        }
+
+        applyStartAtLoginPreference()
+    }
+
+    private func refreshStartAtLoginStatus() {
+        let status = startAtLoginController.registrationStatus
+        settingsModel.startAtLoginRegistrationStatus = status
+
+        if (settingsStore.settings.startAtLogin && status == .enabled) ||
+            (!settingsStore.settings.startAtLogin && status == .disabled) {
+            settingsModel.startAtLoginErrorMessage = nil
+        }
     }
 }
 

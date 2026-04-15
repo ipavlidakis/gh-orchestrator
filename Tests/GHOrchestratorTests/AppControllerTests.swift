@@ -15,6 +15,7 @@ final class AppControllerTests: XCTestCase {
             dataSource: dataSource,
             authController: authController,
             sleeper: CancellingSleeper(),
+            startAtLoginController: RecordingStartAtLoginController(),
             notificationDelivery: AppControllerRecordingNotificationDelivery()
         )
 
@@ -44,6 +45,7 @@ final class AppControllerTests: XCTestCase {
             dataSource: dataSource,
             authController: MutableAuthController(state: .authenticated(username: "octocat")),
             sleeper: CancellingSleeper(),
+            startAtLoginController: RecordingStartAtLoginController(),
             notificationDelivery: AppControllerRecordingNotificationDelivery()
         )
 
@@ -67,6 +69,7 @@ final class AppControllerTests: XCTestCase {
             dataSource: MutableDashboardDataSource(),
             authController: authController,
             sleeper: CancellingSleeper(),
+            startAtLoginController: RecordingStartAtLoginController(),
             notificationDelivery: AppControllerRecordingNotificationDelivery()
         )
 
@@ -86,6 +89,7 @@ final class AppControllerTests: XCTestCase {
             authController: MutableAuthController(state: .authenticated(username: "octocat")),
             sleeper: CancellingSleeper(),
             dockIconVisibilityController: dockIconController,
+            startAtLoginController: RecordingStartAtLoginController(),
             notificationDelivery: AppControllerRecordingNotificationDelivery()
         )
 
@@ -110,6 +114,7 @@ final class AppControllerTests: XCTestCase {
             authController: MutableAuthController(state: .authenticated(username: "octocat")),
             sleeper: CancellingSleeper(),
             dockIconVisibilityController: dockIconController,
+            startAtLoginController: RecordingStartAtLoginController(),
             notificationDelivery: AppControllerRecordingNotificationDelivery()
         )
 
@@ -126,13 +131,64 @@ final class AppControllerTests: XCTestCase {
         XCTAssertEqual(dockIconController.appliedValues, [true, false, true])
     }
 
-    private func configuredSettingsStore(hideDockIcon: Bool = false) -> SettingsStore {
+    func testAppControllerAppliesStartAtLoginPreferenceAtLaunchAndWhenSettingsChange() async {
+        let store = configuredSettingsStore(startAtLogin: true)
+        let startAtLoginController = RecordingStartAtLoginController(status: .disabled)
+        let controller = AppController(
+            settingsStore: store,
+            dataSource: MutableDashboardDataSource(),
+            authController: MutableAuthController(state: .authenticated(username: "octocat")),
+            sleeper: CancellingSleeper(),
+            startAtLoginController: startAtLoginController,
+            notificationDelivery: AppControllerRecordingNotificationDelivery()
+        )
+
+        await waitUntil("initial start at login preference application") {
+            startAtLoginController.appliedValues == [true]
+        }
+        XCTAssertTrue(controller.settingsModel.startAtLogin)
+        XCTAssertEqual(controller.settingsModel.startAtLoginRegistrationStatus, .enabled)
+
+        controller.settingsModel.startAtLogin = false
+
+        await waitUntil("start at login preference update") {
+            startAtLoginController.appliedValues == [true, false]
+        }
+        XCTAssertEqual(controller.settingsModel.startAtLoginRegistrationStatus, .disabled)
+    }
+
+    func testSettingsStartAtLoginSystemSettingsActionDelegatesToController() {
+        let startAtLoginController = RecordingStartAtLoginController(
+            status: .requiresApproval,
+            updatesStatusOnSet: false
+        )
+        let controller = AppController(
+            settingsStore: configuredSettingsStore(startAtLogin: true),
+            dataSource: MutableDashboardDataSource(),
+            authController: MutableAuthController(state: .authenticated(username: "octocat")),
+            sleeper: CancellingSleeper(),
+            startAtLoginController: startAtLoginController,
+            notificationDelivery: AppControllerRecordingNotificationDelivery()
+        )
+
+        XCTAssertTrue(controller.settingsModel.canOpenLoginItemsSettings)
+
+        controller.settingsModel.requestOpenLoginItemsSettings()
+
+        XCTAssertEqual(startAtLoginController.openSystemSettingsCallCount, 1)
+    }
+
+    private func configuredSettingsStore(
+        hideDockIcon: Bool = false,
+        startAtLogin: Bool = false
+    ) -> SettingsStore {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings = AppSettings(
             observedRepositories: [
                 ObservedRepository(owner: "openai", name: "codex")
             ],
-            hideDockIcon: hideDockIcon
+            hideDockIcon: hideDockIcon,
+            startAtLogin: startAtLogin
         )
         return store
     }
@@ -245,5 +301,38 @@ private final class RecordingDockIconVisibilityController: DockIconVisibilityCon
 
     func apply(hideDockIcon: Bool) {
         appliedValues.append(hideDockIcon)
+    }
+}
+
+@MainActor
+private final class RecordingStartAtLoginController: StartAtLoginControlling {
+    var registrationStatus: StartAtLoginRegistrationStatus
+    private(set) var appliedValues: [Bool] = []
+    private(set) var openSystemSettingsCallCount = 0
+    var errorToThrow: Error?
+    private let updatesStatusOnSet: Bool
+
+    init(
+        status: StartAtLoginRegistrationStatus = .disabled,
+        updatesStatusOnSet: Bool = true
+    ) {
+        self.registrationStatus = status
+        self.updatesStatusOnSet = updatesStatusOnSet
+    }
+
+    func setStartAtLoginEnabled(_ isEnabled: Bool) throws {
+        appliedValues.append(isEnabled)
+
+        if let errorToThrow {
+            throw errorToThrow
+        }
+
+        if updatesStatusOnSet {
+            registrationStatus = isEnabled ? .enabled : .disabled
+        }
+    }
+
+    func openSystemSettingsLoginItems() {
+        openSystemSettingsCallCount += 1
     }
 }

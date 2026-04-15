@@ -303,6 +303,24 @@ private struct GeneralSettingsPane: View {
                 Divider()
 
                 SettingsRow(
+                    title: "Start at login",
+                    subtitle: model.startAtLoginSubtitle
+                ) {
+                    HStack(spacing: 10) {
+                        if model.canOpenLoginItemsSettings {
+                            Button("Open Login Items") {
+                                model.requestOpenLoginItemsSettings()
+                            }
+                        }
+
+                        Toggle("", isOn: $model.startAtLogin)
+                            .labelsHidden()
+                    }
+                }
+
+                Divider()
+
+                SettingsRow(
                     title: "Polling interval",
                     subtitle: "Refresh only while the menu is hidden."
                 ) {

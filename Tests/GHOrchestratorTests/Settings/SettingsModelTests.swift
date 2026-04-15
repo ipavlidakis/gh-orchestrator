@@ -109,6 +109,36 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertTrue(reloadedStore.settings.hideDockIcon)
     }
 
+    func testStartAtLoginPersistenceAndSystemSettingsAction() {
+        let storageURL = makeIsolatedStorageURL()
+        let store = SettingsStore(storageURL: storageURL)
+        var openLoginItemsCount = 0
+        let model = SettingsModel(
+            store: store,
+            startAtLoginRegistrationStatus: .requiresApproval,
+            openLoginItemsSettingsAction: {
+                openLoginItemsCount += 1
+            }
+        )
+
+        XCTAssertFalse(model.startAtLogin)
+        XCTAssertFalse(store.settings.startAtLogin)
+
+        model.startAtLogin = true
+
+        XCTAssertTrue(store.settings.startAtLogin)
+        XCTAssertTrue(model.canOpenLoginItemsSettings)
+        XCTAssertTrue(model.startAtLoginSubtitle.contains("needs approval"))
+
+        model.requestOpenLoginItemsSettings()
+
+        XCTAssertEqual(openLoginItemsCount, 1)
+
+        let reloadedStore = SettingsStore(storageURL: storageURL)
+
+        XCTAssertTrue(reloadedStore.settings.startAtLogin)
+    }
+
     func testGraphQLDashboardLimitPersistenceClampsAndWritesImmediately() {
         let storageURL = makeIsolatedStorageURL()
         let store = SettingsStore(storageURL: storageURL)

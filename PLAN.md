@@ -957,6 +957,119 @@
   - Requested during UI review on 2026-04-15.
   - Expanded Actions workflow and job rows now show compact elapsed labels such as `queued for 5m`, `running for 2m`, and `completed in 2m`; labels refresh on a one-minute UI timeline while the menu is visible without issuing additional GitHub requests.
 
+### T42: Start At Login
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T12`
+- goal: let users launch GHOrchestrator automatically when they sign in to macOS.
+- scope:
+  - add a persisted start-at-login preference to app settings.
+  - manage the main app login item from the app target using Apple ServiceManagement APIs.
+  - expose a General settings toggle with user-visible registration status and approval guidance.
+  - add focused persistence and app-controller tests.
+- deliverables:
+  - persisted start-at-login preference
+  - app-target login item controller seam
+  - Settings toggle and status messaging
+  - verification notes
+- verification:
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after adding the backward-compatible `startAtLogin` setting.
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding the app-target login item controller and Settings UI.
+  - 2026-04-15: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-start-login -only-testing:GHOrchestratorTests/AppControllerTests -only-testing:GHOrchestratorTests/SettingsModelTests -only-testing:GHOrchestratorTests/SettingsStoreTests` succeeded.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after rebuilding and launching the app with the start-at-login feature wired in.
+- notes:
+  - Use `SMAppService.mainApp`; do not add a helper app or third-party login item dependency.
+  - Settings now surfaces ServiceManagement registration status, including the macOS approval-required state with a button that opens Login Items settings.
+  - Launch-time reconciliation registers the app when the persisted preference is on; disabling is applied immediately when the user turns the setting off.
+
+### T43: App Icon Refresh
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T29`
+- goal: replace the current app icon with the newly provided GHOrchestrator branding asset.
+- scope:
+  - generate the macOS `AppIcon.appiconset` PNG sizes from the provided source image.
+  - keep the existing app target resource wiring intact.
+  - verify the updated asset catalog builds.
+- deliverables:
+  - refreshed `AppIcon.appiconset` PNGs
+  - verification notes
+- verification:
+  - 2026-04-15: `python3 -m json.tool App/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json` succeeded after restoring the standard macOS icon filename matrix.
+  - 2026-04-15: `tuist generate --no-open` succeeded after regenerating the icon PNG sizes from the provided source image.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded, including asset catalog compilation to `AppIcon.icns` and app launch.
+- notes:
+  - Source image: `/Users/ipavlidakis/Downloads/ghorchestrator-icon Exports 2/ghorchestrator-icon-watchOS-Default-1088x1088@1x.png`.
+  - Regenerated the standard macOS `AppIcon.appiconset` sizes from 16px through 1024px.
+
+### T44: Menu Bar Monochrome Icon Refresh
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T43`
+- goal: update the menu-bar status item icon to match the refreshed app icon using monochrome light/dark assets.
+- scope:
+  - verify macOS app icon appearance variants are not usable for the compiled app icon.
+  - add a monochrome menu-bar icon asset from the provided black-and-white exports.
+  - wire the `MenuBarExtra` label to use the monochrome asset.
+  - verify the app builds and launches.
+- deliverables:
+  - menu-bar monochrome icon asset
+  - menu-bar label wiring
+  - verification notes
+- verification:
+  - 2026-04-15: scratch `xcrun actool` compilation of a macOS `AppIcon.appiconset` with dark appearance children warned that the dark entries were unassigned, confirming the compiled macOS app icon should remain single-variant.
+  - 2026-04-15: `python3 -m json.tool App/Resources/Assets.xcassets/MenuBarIcon.imageset/Contents.json` succeeded after adding light/dark monochrome image variants.
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding the menu-bar image set and SwiftUI label wiring.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded, including asset catalog compilation and app launch.
+- notes:
+  - Xcode `actool` accepted a scratch macOS app-icon catalog with dark appearances but warned those entries were unassigned, so the app icon stays single-variant for macOS.
+  - `MenuBarIcon.imageset` uses the `ClearLight` export for the default appearance and the `ClearDark` export for dark appearance at 18pt and 2x.
+
+### T45: Invert Menu Bar Icon
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T44`
+- goal: invert the monochrome menu-bar icon so it reads correctly against the menu bar background.
+- scope:
+  - regenerate the menu-bar image-set PNGs with inverted RGB channels.
+  - keep the existing `MenuBarExtra` asset wiring intact.
+  - verify the asset catalog builds and the app launches.
+- deliverables:
+  - inverted menu-bar PNGs
+  - verification notes
+- verification:
+  - 2026-04-15: `python3 -m json.tool App/Resources/Assets.xcassets/MenuBarIcon.imageset/Contents.json` succeeded after regenerating the inverted menu-bar PNGs.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded, including asset catalog compilation and app launch.
+- notes:
+  - Requested after visual review of the menu-bar status item on 2026-04-15.
+  - Regenerated all four `MenuBarIcon.imageset` PNGs with RGB inversion while preserving alpha.
+
+### T46: Unified macOS Icon Redesign
+- status: `blocked`
+- owner: `codex-main`
+- depends_on: `T43`, `T44`
+- goal: replace the exported icon crops with a purpose-built macOS icon system that works for Dock, Finder, and menu-bar use.
+- scope:
+  - create original vector source artwork for the full-color app icon.
+  - create original vector source artwork for a transparent monochrome menu-bar glyph.
+  - regenerate the macOS `AppIcon.appiconset` PNG matrix from the new app icon artwork.
+  - regenerate `MenuBarIcon.imageset` from the menu-bar glyph and make it template-rendered.
+  - verify asset catalog compilation and app launch.
+- deliverables:
+  - icon source artwork
+  - regenerated app icon PNGs
+  - regenerated template menu-bar PNGs
+  - verification notes
+- verification:
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after removing the rejected scratch icon assets and restoring the native menu-bar symbol.
+  - 2026-04-15: Image API generation was attempted with `gpt-image-1.5`, but the API returned `billing_hard_limit_reached` before any image was produced.
+- notes:
+  - Requested after visual review showed full-square menu-bar icon crops were not legible at status-item size.
+  - Blocked on 2026-04-15 because `OPENAI_API_KEY` is not set, so the live Image API generator cannot run. The attempted local vector direction was abandoned after visual review and removed from the working tree.
+  - Current fallback keeps the refreshed app icon and restores the menu-bar item to the native `arrow.triangle.branch` SF Symbol until a stronger generated/designed source is available.
+  - Reopened after `OPENAI_API_KEY` was added to `~/.zshrc` and a throwaway image-generation virtualenv was prepared under `/tmp/ghorchestrator-imagegen-venv`.
+  - Blocked again on 2026-04-15 because the OpenAI account has reached its billing hard limit.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1004,3 +1117,4 @@
 - 2026-04-15: local macOS notifications are configured per observed repository, evaluate all open PRs independent of dashboard filters, and use first-load baselines to avoid notifying old events.
 - 2026-04-15: the persisted Dock icon preference is overridden while the Settings window is open so the window remains reachable from the Dock after it loses focus.
 - 2026-04-15: menu-bar popup actions should use one ellipsis/more menu containing Refresh, Settings, and Quit; duplicate Refresh/Quit actions should be removed from Settings > General.
+- 2026-04-15: start-at-login is an app-owned preference backed by `SMAppService.mainApp`, with the desired state persisted in `AppSettings` and system registration status surfaced in Settings.

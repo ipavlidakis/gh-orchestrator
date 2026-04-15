@@ -2,6 +2,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public static let defaultPollingIntervalSeconds = 60
     public static let allowedPollingIntervalRange = 15...900
     public static let defaultHideDockIcon = false
+    public static let defaultStartAtLogin = false
     public static let defaultGraphQLSearchResultLimit = 10
     public static let defaultGraphQLReviewThreadLimit = 10
     public static let defaultGraphQLReviewThreadCommentLimit = 5
@@ -12,6 +13,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var observedRepositories: [ObservedRepository]
     public var pollingIntervalSeconds: Int
     public var hideDockIcon: Bool
+    public var startAtLogin: Bool
     public var graphQLSearchResultLimit: Int
     public var graphQLReviewThreadLimit: Int
     public var graphQLReviewThreadCommentLimit: Int
@@ -22,6 +24,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         observedRepositories: [ObservedRepository] = [],
         pollingIntervalSeconds: Int = AppSettings.defaultPollingIntervalSeconds,
         hideDockIcon: Bool = AppSettings.defaultHideDockIcon,
+        startAtLogin: Bool = AppSettings.defaultStartAtLogin,
         graphQLSearchResultLimit: Int = AppSettings.defaultGraphQLSearchResultLimit,
         graphQLReviewThreadLimit: Int = AppSettings.defaultGraphQLReviewThreadLimit,
         graphQLReviewThreadCommentLimit: Int = AppSettings.defaultGraphQLReviewThreadCommentLimit,
@@ -33,6 +36,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.observedRepositories = deduplicatedRepositories
         self.pollingIntervalSeconds = Self.clampPollingInterval(pollingIntervalSeconds)
         self.hideDockIcon = hideDockIcon
+        self.startAtLogin = startAtLogin
         self.graphQLSearchResultLimit = Self.clampGraphQLConnectionLimit(graphQLSearchResultLimit)
         self.graphQLReviewThreadLimit = Self.clampGraphQLConnectionLimit(graphQLReviewThreadLimit)
         self.graphQLReviewThreadCommentLimit = Self.clampGraphQLReviewThreadCommentLimit(graphQLReviewThreadCommentLimit)
@@ -47,6 +51,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case observedRepositories
         case pollingIntervalSeconds
         case hideDockIcon
+        case startAtLogin
         case graphQLSearchResultLimit
         case graphQLReviewThreadLimit
         case graphQLReviewThreadCommentLimit
@@ -61,6 +66,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
             observedRepositories: try container.decodeIfPresent([ObservedRepository].self, forKey: .observedRepositories) ?? [],
             pollingIntervalSeconds: try container.decodeIfPresent(Int.self, forKey: .pollingIntervalSeconds) ?? Self.defaultPollingIntervalSeconds,
             hideDockIcon: try container.decodeIfPresent(Bool.self, forKey: .hideDockIcon) ?? Self.defaultHideDockIcon,
+            startAtLogin: try container.decodeIfPresent(Bool.self, forKey: .startAtLogin) ?? Self.defaultStartAtLogin,
             graphQLSearchResultLimit: try container.decodeIfPresent(Int.self, forKey: .graphQLSearchResultLimit) ?? Self.defaultGraphQLSearchResultLimit,
             graphQLReviewThreadLimit: try container.decodeIfPresent(Int.self, forKey: .graphQLReviewThreadLimit) ?? Self.defaultGraphQLReviewThreadLimit,
             graphQLReviewThreadCommentLimit: try container.decodeIfPresent(Int.self, forKey: .graphQLReviewThreadCommentLimit) ?? Self.defaultGraphQLReviewThreadCommentLimit,
