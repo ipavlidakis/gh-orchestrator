@@ -69,6 +69,7 @@ public struct ActionJobItem: Codable, Equatable, Hashable, Sendable {
     public let name: String
     public let status: String
     public let conclusion: String?
+    public let createdAt: Date?
     public let startedAt: Date?
     public let completedAt: Date?
     public let detailsURL: URL?
@@ -79,6 +80,7 @@ public struct ActionJobItem: Codable, Equatable, Hashable, Sendable {
         name: String,
         status: String,
         conclusion: String? = nil,
+        createdAt: Date? = nil,
         startedAt: Date? = nil,
         completedAt: Date? = nil,
         detailsURL: URL? = nil,
@@ -88,6 +90,7 @@ public struct ActionJobItem: Codable, Equatable, Hashable, Sendable {
         self.name = name
         self.status = status
         self.conclusion = conclusion
+        self.createdAt = createdAt
         self.startedAt = startedAt
         self.completedAt = completedAt
         self.detailsURL = detailsURL

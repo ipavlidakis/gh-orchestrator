@@ -603,36 +603,39 @@ private struct ExpandedPullRequestDetailsView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
-                    ForEach(pullRequest.workflowRuns, id: \.id) { workflowRun in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Button {
-                                if let url = workflowRun.detailsURL {
-                                    onOpenURL(url)
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        ForEach(pullRequest.workflowRuns, id: \.id) { workflowRun in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Button {
+                                    if let url = workflowRun.detailsURL {
+                                        onOpenURL(url)
+                                    }
+                                } label: {
+                                    Label(workflowRun.name, systemImage: "bolt.fill")
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                            } label: {
-                                Label(workflowRun.name, systemImage: "bolt.fill")
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(workflowRun.detailsURL == nil)
+                                .buttonStyle(.plain)
+                                .disabled(workflowRun.detailsURL == nil)
 
-                            Text("\(workflowRun.status.lowercased())\(workflowRun.conclusion.map { " · \($0.lowercased())" } ?? "")")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                Text(workflowRunMetadataText(for: workflowRun, now: context.date))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
 
-                            ForEach(workflowRun.jobs, id: \.id) { job in
-                                WorkflowJobView(
-                                    job: job,
-                                    isRetrying: isRetryingJob(job.id),
-                                    retryErrorMessage: retryErrorMessage(job.id),
-                                    onRetryWorkflowJob: {
-                                        onRetryWorkflowJob(
-                                            pullRequest.repository,
-                                            job.id
-                                        )
-                                    },
-                                    onOpenURL: onOpenURL
-                                )
+                                ForEach(workflowRun.jobs, id: \.id) { job in
+                                    WorkflowJobView(
+                                        job: job,
+                                        now: context.date,
+                                        isRetrying: isRetryingJob(job.id),
+                                        retryErrorMessage: retryErrorMessage(job.id),
+                                        onRetryWorkflowJob: {
+                                            onRetryWorkflowJob(
+                                                pullRequest.repository,
+                                                job.id
+                                            )
+                                        },
+                                        onOpenURL: onOpenURL
+                                    )
+                                }
                             }
                         }
                     }
@@ -724,10 +727,27 @@ private struct ExpandedPullRequestDetailsView: View {
 
         return .green
     }
+
+    private func workflowRunMetadataText(for workflowRun: WorkflowRunItem, now: Date) -> String {
+        var components = [
+            workflowRun.status.lowercased()
+        ]
+
+        if let conclusion = workflowRun.conclusion?.lowercased() {
+            components.append(conclusion)
+        }
+
+        if let durationText = ActionsDurationLabelFormatter().workflowDurationText(for: workflowRun, now: now) {
+            components.append(durationText)
+        }
+
+        return components.joined(separator: " · ")
+    }
 }
 
 private struct WorkflowJobView: View {
     let job: ActionJobItem
+    let now: Date
     let isRetrying: Bool
     let retryErrorMessage: String?
     let onRetryWorkflowJob: () -> Void
@@ -747,8 +767,17 @@ private struct WorkflowJobView: View {
                         Image(systemName: jobStatusIcon)
                             .foregroundStyle(jobStatusColor)
 
-                        Text(jobSummary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(jobSummary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            if let jobMetadataText {
+                                Text(jobMetadataText)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
                     }
                     .font(.caption)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -847,6 +876,10 @@ private struct WorkflowJobView: View {
         }
 
         return "checkmark.circle.fill"
+    }
+
+    private var jobMetadataText: String? {
+        ActionsDurationLabelFormatter().jobDurationText(for: job, now: now)
     }
 
     private var jobStatusColor: Color {

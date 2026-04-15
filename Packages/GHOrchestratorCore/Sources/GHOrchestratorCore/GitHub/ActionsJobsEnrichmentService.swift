@@ -185,6 +185,7 @@ extension ActionsJobsEnrichmentService {
                     name: job.name,
                     status: job.status,
                     conclusion: job.conclusion,
+                    createdAt: job.createdAt,
                     startedAt: job.startedAt,
                     completedAt: job.completedAt,
                     detailsURL: job.htmlURL,
@@ -194,6 +195,8 @@ extension ActionsJobsEnrichmentService {
                             name: step.name,
                             status: step.status,
                             conclusion: step.conclusion,
+                            startedAt: step.startedAt,
+                            completedAt: step.completedAt,
                             detailsURL: ActionsStepLinkBuilder.stepURL(jobURL: job.htmlURL, stepNumber: step.number)
                         )
                     }

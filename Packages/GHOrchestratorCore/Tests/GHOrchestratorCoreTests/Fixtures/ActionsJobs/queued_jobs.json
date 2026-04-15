@@ -6,6 +6,7 @@
       "html_url": "https://github.com/cli/cli/actions/runs/555/job/777",
       "status": "queued",
       "conclusion": null,
+      "created_at": "2026-04-14T06:20:00Z",
       "started_at": null,
       "completed_at": null,
       "steps": []

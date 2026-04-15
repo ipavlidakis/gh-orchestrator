@@ -54,6 +54,11 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
         XCTAssertEqual(workflowRun.name, "Lint")
         XCTAssertEqual(items.first?.authorLogin, "octocat")
         XCTAssertEqual(job.name, "lint")
+        XCTAssertEqual(job.createdAt, date("2026-04-14T06:09:30Z"))
+        XCTAssertEqual(job.startedAt, date("2026-04-14T06:10:00Z"))
+        XCTAssertEqual(job.completedAt, date("2026-04-14T06:12:00Z"))
+        XCTAssertEqual(step.startedAt, date("2026-04-14T06:10:00Z"))
+        XCTAssertEqual(step.completedAt, date("2026-04-14T06:10:30Z"))
         XCTAssertEqual(step.detailsURL?.absoluteString, "https://github.com/cli/cli/actions/runs/321/job/654#step:1:1")
         XCTAssertEqual(items.first?.externalChecks, [])
     }
@@ -103,6 +108,7 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
 
         let job = try XCTUnwrap(items.first?.workflowRuns.first?.jobs.first)
         XCTAssertEqual(job.status, "queued")
+        XCTAssertEqual(job.createdAt, date("2026-04-14T06:20:00Z"))
         XCTAssertTrue(job.steps.isEmpty)
     }
 
@@ -308,4 +314,8 @@ private func makeActionsService(
     )
 
     return ActionsJobsEnrichmentService(client: client)
+}
+
+private func date(_ iso8601String: String) -> Date {
+    ISO8601DateFormatter().date(from: iso8601String)!
 }

@@ -935,6 +935,28 @@
   - Requested during UI review on 2026-04-15.
   - Refresh, Settings, and Quit now live in the menu-bar popup overflow menu; Settings > General no longer shows a separate Actions section.
 
+### T41: Actions Duration Display
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T09`, `T27`
+- goal: show how long GitHub Actions workflows and jobs have been queued, running, or completed in the menu-bar dashboard.
+- scope:
+  - derive elapsed durations from existing GitHub Actions timestamps without adding extra GitHub requests.
+  - show compact duration metadata for expanded workflow and job rows.
+  - keep timestamp parsing and duration derivation out of SwiftUI views where possible.
+- deliverables:
+  - Actions duration model/formatting support
+  - menu-bar workflow/job duration labels
+  - focused tests and verification notes
+- verification:
+  - 2026-04-15: `swift test --package-path Packages/GHOrchestratorCore` succeeded after mapping Actions job `created_at` and step timestamps.
+  - 2026-04-15: `tuist generate --no-open` succeeded after adding the app-side Actions duration formatter.
+  - 2026-04-15: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T41 -only-testing:GHOrchestratorTests/ActionsDurationLabelFormatterTests -only-testing:GHOrchestratorTests/MenuBarDashboardModelTests` succeeded.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after rebuilding and launching the app.
+- notes:
+  - Requested during UI review on 2026-04-15.
+  - Expanded Actions workflow and job rows now show compact elapsed labels such as `queued for 5m`, `running for 2m`, and `completed in 2m`; labels refresh on a one-minute UI timeline while the menu is visible without issuing additional GitHub requests.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
