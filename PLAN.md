@@ -716,8 +716,8 @@
   - The wrapper keeps `version` and `build` as prompt-time inputs while reusing the existing release pipeline and local JSON configuration.
 
 ### T31: Release target_commitish Fix
-- status: `todo`
-- owner: `unassigned`
+- status: `done`
+- owner: `codex-main`
 - depends_on: `T26`, `T30`
 - goal: make GitHub release creation resilient when the local branch is ahead of origin.
 - scope:
@@ -728,9 +728,11 @@
   - release script fix
   - verification notes
 - verification:
-  - pending
+  - 2026-04-15: confirmed `script/release_dmg.sh` defaults `target_commitish` to the current branch name with a detached-head SHA fallback.
+  - 2026-04-15: `bash -n script/release_dmg.sh` succeeded.
+  - 2026-04-15: `./script/release_dmg.sh --version 0.2.0 --build 20 --release-name '0.2.0 (Build 20)' --release-notes-file CHANGELOG.md --dry-run --allow-dirty` succeeded, confirming the release preflight path uses the branch target and the new changelog file.
 - notes:
-  - Returned to the queue on 2026-04-15 with no repo changes recorded under this task so a separate documentation task could be claimed cleanly.
+  - The current release script already prefers the branch name for release creation and only falls back to a commit SHA when detached, so no script edit was needed for this closeout.
 
 ### T32: Repository Documentation
 - status: `done`
