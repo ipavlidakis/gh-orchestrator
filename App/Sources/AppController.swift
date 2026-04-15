@@ -14,6 +14,7 @@ final class AppController {
     let notificationMonitor: RepositoryNotificationMonitor
     private let dockIconVisibilityController: any DockIconVisibilityControlling
     private let notificationDelivery: any LocalNotificationDelivering
+    private var isSettingsWindowVisible = false
 
     init(
         settingsStore: SettingsStore = SettingsStore(),
@@ -107,6 +108,15 @@ final class AppController {
         notificationMonitor.setMenuVisible(isVisible)
     }
 
+    func setSettingsWindowVisible(_ isVisible: Bool) {
+        guard isSettingsWindowVisible != isVisible else {
+            return
+        }
+
+        isSettingsWindowVisible = isVisible
+        applyDockIconPreference()
+    }
+
     private func observeAuthenticationState() {
         withObservationTracking {
             _ = authController.state
@@ -141,7 +151,8 @@ final class AppController {
     }
 
     private func applyDockIconPreference() {
-        dockIconVisibilityController.apply(hideDockIcon: settingsStore.settings.hideDockIcon)
+        let shouldHideDockIcon = settingsStore.settings.hideDockIcon && !isSettingsWindowVisible
+        dockIconVisibilityController.apply(hideDockIcon: shouldHideDockIcon)
     }
 }
 

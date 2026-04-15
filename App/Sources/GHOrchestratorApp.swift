@@ -22,7 +22,10 @@ struct GHOrchestratorApp: App {
             SettingsWindowView(
                 model: controller.settingsModel,
                 requestLogModel: controller.requestLogModel,
-                menuVisibilityController: settingsWindowMenuVisibilityController
+                menuVisibilityController: settingsWindowMenuVisibilityController,
+                onSettingsWindowVisibilityChange: { isVisible in
+                    controller.setSettingsWindowVisible(isVisible)
+                }
             )
         }
         .defaultSize(width: 780, height: 600)

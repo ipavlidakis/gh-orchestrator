@@ -101,6 +101,31 @@ final class AppControllerTests: XCTestCase {
         }
     }
 
+    func testSettingsWindowVisibilityTemporarilyShowsDockIconWhenPreferenceIsHidden() async {
+        let store = configuredSettingsStore(hideDockIcon: true)
+        let dockIconController = RecordingDockIconVisibilityController()
+        let controller = AppController(
+            settingsStore: store,
+            dataSource: MutableDashboardDataSource(),
+            authController: MutableAuthController(state: .authenticated(username: "octocat")),
+            sleeper: CancellingSleeper(),
+            dockIconVisibilityController: dockIconController,
+            notificationDelivery: AppControllerRecordingNotificationDelivery()
+        )
+
+        await waitUntil("initial hidden Dock icon preference application") {
+            dockIconController.appliedValues == [true]
+        }
+
+        controller.setSettingsWindowVisible(true)
+
+        XCTAssertEqual(dockIconController.appliedValues, [true, false])
+
+        controller.setSettingsWindowVisible(false)
+
+        XCTAssertEqual(dockIconController.appliedValues, [true, false, true])
+    }
+
     private func configuredSettingsStore(hideDockIcon: Bool = false) -> SettingsStore {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings = AppSettings(

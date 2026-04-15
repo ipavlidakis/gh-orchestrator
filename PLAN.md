@@ -959,3 +959,4 @@
 - 2026-04-15: the menu-bar dashboard can switch between the signed-in user's PRs and all open PRs in configured repositories, can focus one configured repository, and should collapse other expanded PR detail bubbles when a new checks/comments bubble opens.
 - 2026-04-15: refresh failures after successful dashboard loads should preserve the last visible content, show a warning banner for stale data, and disable dashboard filter controls until a refresh succeeds.
 - 2026-04-15: local macOS notifications are configured per observed repository, evaluate all open PRs independent of dashboard filters, and use first-load baselines to avoid notifying old events.
+- 2026-04-15: the persisted Dock icon preference is overridden while the Settings window is open so the window remains reachable from the Dock after it loses focus.

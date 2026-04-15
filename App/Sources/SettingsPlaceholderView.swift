@@ -47,6 +47,7 @@ struct SettingsWindowView: View {
     @Bindable var model: SettingsModel
     let requestLogModel: GitHubRequestLogModel
     let menuVisibilityController: any SettingsWindowMenuVisibilityControlling
+    let onSettingsWindowVisibilityChange: @MainActor (Bool) -> Void
 
     @SceneStorage("settings.selected-pane") private var selectedPaneID = SettingsPane.general.rawValue
     @Environment(\.appearsActive) private var appearsActive
@@ -81,6 +82,7 @@ struct SettingsWindowView: View {
         .windowMinimizeBehavior(.disabled)
         .windowResizeBehavior(.disabled)
         .onAppear {
+            onSettingsWindowVisibilityChange(true)
             menuVisibilityController.setSettingsWindowActive(appearsActive)
         }
         .onChange(of: appearsActive) { _, newValue in
@@ -88,6 +90,7 @@ struct SettingsWindowView: View {
         }
         .onDisappear {
             menuVisibilityController.setSettingsWindowActive(false)
+            onSettingsWindowVisibilityChange(false)
         }
     }
 
@@ -335,7 +338,7 @@ private struct GeneralSettingsPane: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("When the Dock icon is hidden, reopen Settings from the menu bar extra.")
+                    Text("When the Dock icon is hidden, it reappears while Settings is open so the window stays reachable.")
                 }
             }
 

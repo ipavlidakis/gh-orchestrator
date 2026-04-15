@@ -11,6 +11,7 @@
 - `Refresh` must appear directly under `About`.
 - The top-level `Edit`, `View`, and `Window` menus should be hidden while this menu set is active.
 - `Help` opens `https://github.com/ipavlidakis/gh-orchestrator`.
+- When the Settings window is open, GHOrchestrator should remain reachable from the Dock even if the user's normal app behavior hides the Dock icon.
 
 ## Dependencies
 - Reuse the existing app-state and refresh wiring from `T09`, `T10`, and `T12` in [PLAN.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN.md).
@@ -46,5 +47,27 @@
   - The Settings window now drives menu pruning from `EnvironmentValues.appearsActive`, with a small AppKit helper hiding `Edit`, `View`, and `Window` only while the Settings scene is active.
   - The Help menu item was automation-clicked successfully, but the launched external browser did not expose a reliable URL readback path in this environment, so the exact destination is covered by the unit seam rather than browser-state automation.
 
+### T14: Settings Window Dock Focus
+- status: `done`
+- owner: `codex-main`
+- depends_on: `PLAN.md:T12`, `PLAN-menu-bar.md:T13`
+- goal: show GHOrchestrator in the Dock while the Settings window is open, even when the persistent Dock icon preference is hidden.
+- scope:
+  - track Settings window presentation from the Settings scene.
+  - temporarily apply a visible Dock activation policy while Settings is open.
+  - restore the user's persisted Dock icon preference after Settings closes.
+  - update Settings copy if needed so the behavior is clear.
+- deliverables:
+  - app-target lifecycle wiring
+  - focused controller tests for Dock icon state transitions
+- verification:
+  - 2026-04-15: `tuist generate --no-open` succeeded after wiring Settings visibility into Dock icon policy.
+  - 2026-04-15: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-settings-dock -only-testing:GHOrchestratorTests/AppControllerTests` succeeded with Settings-window Dock override coverage.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after rebuilding and launching the app.
+- notes:
+  - Keep this in the app target; the core settings model should continue to store only the user's persistent preference.
+  - Settings scene presentation now temporarily applies the visible Dock policy and restores the persisted preference on close.
+
 ## Decision Log
 - 2026-04-14: when the Settings window is active, GHOrchestrator must present its app menu in the macOS menu bar with `About`, `Refresh`, `Settings…`, `Quit`, and `Help`; `Refresh` belongs directly under `About`, the top-level `Edit`, `View`, and `Window` menus must be hidden, and `Help` opens `https://github.com/ipavlidakis/gh-orchestrator`.
+- 2026-04-15: the persisted "Hide Dock icon" preference should be temporarily overridden while the Settings window is open so users can refocus the Settings window from the Dock after it loses focus.
