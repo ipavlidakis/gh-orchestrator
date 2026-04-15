@@ -50,6 +50,36 @@ final class ActionsDurationLabelFormatterTests: XCTestCase {
         )
     }
 
+    func testStepDurationTextFormatsRunningAndCompletedSteps() {
+        XCTAssertEqual(
+            formatter.stepDurationText(
+                for: ActionStepItem(
+                    number: 1,
+                    name: "Checkout",
+                    status: "completed",
+                    conclusion: "success",
+                    startedAt: now.addingTimeInterval(-45),
+                    completedAt: now.addingTimeInterval(-15)
+                ),
+                now: now
+            ),
+            "completed in 30s"
+        )
+
+        XCTAssertEqual(
+            formatter.stepDurationText(
+                for: ActionStepItem(
+                    number: 2,
+                    name: "Test",
+                    status: "in_progress",
+                    startedAt: now.addingTimeInterval(-75)
+                ),
+                now: now
+            ),
+            "running for 1m"
+        )
+    }
+
     func testWorkflowDurationTextAggregatesJobTimestamps() {
         let workflowRun = WorkflowRunItem(
             id: 10,
@@ -133,6 +163,13 @@ final class ActionsDurationLabelFormatterTests: XCTestCase {
         XCTAssertNil(
             formatter.jobDurationText(
                 for: ActionJobItem(id: 1, name: "Queued", status: "queued"),
+                now: now
+            )
+        )
+
+        XCTAssertNil(
+            formatter.stepDurationText(
+                for: ActionStepItem(number: 1, name: "Queued", status: "queued"),
                 now: now
             )
         )

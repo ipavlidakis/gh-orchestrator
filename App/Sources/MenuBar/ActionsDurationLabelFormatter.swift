@@ -74,6 +74,35 @@ struct ActionsDurationLabelFormatter {
         }
     }
 
+    func stepDurationText(
+        for step: ActionStepItem,
+        now: Date = .now
+    ) -> String? {
+        let status = normalizedStatus(step.status)
+
+        switch status {
+        case "completed":
+            guard
+                let start = step.startedAt,
+                let end = step.completedAt
+            else {
+                return nil
+            }
+
+            return "completed in \(compactDuration(from: start, to: end))"
+
+        case "in_progress", "running":
+            guard let start = step.startedAt else {
+                return nil
+            }
+
+            return "running for \(compactDuration(from: start, to: now))"
+
+        default:
+            return nil
+        }
+    }
+
     private func normalizedStatus(_ status: String) -> String {
         status
             .trimmingCharacters(in: .whitespacesAndNewlines)

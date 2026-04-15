@@ -899,11 +899,26 @@ private struct WorkflowJobView: View {
     }
 
     private func stepSummary(for step: ActionStepItem) -> String {
+        var components: [String] = []
+        let durationText = ActionsDurationLabelFormatter().stepDurationText(for: step, now: now)
+
         if let conclusion = step.conclusion?.lowercased() {
-            return "\(step.status.lowercased()) · \(conclusion)"
+            if durationText == nil {
+                components.append(step.status.lowercased())
+            }
+
+            components.append(conclusion)
         }
 
-        return step.status.lowercased()
+        if let durationText {
+            components.append(durationText)
+        }
+
+        if components.isEmpty {
+            components.append(step.status.lowercased())
+        }
+
+        return components.joined(separator: " · ")
     }
 
     @ViewBuilder

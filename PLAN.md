@@ -1115,6 +1115,26 @@
   - Requested on 2026-04-15 to supersede the earlier hidden-window-only dashboard polling behavior.
   - Menu visibility is still tracked for dashboard state, but it no longer cancels, blocks, or restarts polling by itself.
 
+### T49: Actions Step Duration Display
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T41`
+- goal: show compact elapsed duration metadata for each expanded GitHub Actions step row.
+- scope:
+  - derive step durations from the existing `startedAt` and `completedAt` timestamps already mapped from GitHub Actions job steps.
+  - show completed and running step durations in the expanded step metadata text without adding GitHub requests.
+  - keep duration formatting in the existing app-side Actions duration formatter instead of SwiftUI view logic.
+- deliverables:
+  - step-duration formatter support
+  - menu-bar step duration labels
+  - focused tests and verification notes
+- verification:
+  - 2026-04-15: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T49 -only-testing:GHOrchestratorTests/ActionsDurationLabelFormatterTests` succeeded after adding step-duration formatting and menu-bar step labels.
+  - 2026-04-15: `tuist generate --no-open` succeeded.
+  - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after rebuilding and launching the app with step-duration labels.
+- notes:
+  - Requested on 2026-04-15 as a follow-up to `T41`, which already added workflow and job duration labels.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
