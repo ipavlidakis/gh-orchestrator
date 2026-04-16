@@ -1138,6 +1138,27 @@
 - notes:
   - Requested on 2026-04-15 as a follow-up to `T41`, which already added workflow and job duration labels.
 
+### T50: README Feature And Screenshot Refresh
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T32`, `T33`, `T36`, `T42`, `T47`, `T49`
+- goal: refresh the top-level README so it better explains the shipped product surface and defines the screenshot set needed for a polished repo page.
+- scope:
+  - replace the minimal highlights section with a fuller feature list that reflects the current menu-bar dashboard, auth, settings, notifications, request-quota, updates, and insights surfaces.
+  - add a screenshot planning section with recommended filenames and the exact UI states to capture.
+  - keep source-build and release guidance linked out to the existing docs instead of duplicating them in the README.
+- deliverables:
+  - updated `README.md`
+  - verification notes
+- verification:
+  - 2026-04-16: `tuist generate --no-open` succeeded after the README feature/screenshot refresh.
+  - 2026-04-16: `swift test --package-path Packages/GHOrchestratorCore` succeeded after the README feature/screenshot refresh.
+  - 2026-04-16: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-T50` succeeded after the README feature/screenshot refresh.
+  - 2026-04-16: `./script/build_and_run.sh --verify` succeeded after the README feature/screenshot refresh.
+- notes:
+  - Prefer stable, non-sensitive screenshot states; use demo repositories/accounts or redact private names before committing images.
+  - `README.md` now includes a product-facing feature list plus an embedded screenshot gallery sourced from `docs/screenshots/`.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
