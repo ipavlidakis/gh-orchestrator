@@ -1159,6 +1159,24 @@
   - Prefer stable, non-sensitive screenshot states; use demo repositories/accounts or redact private names before committing images.
   - `README.md` now includes a product-facing feature list plus an embedded screenshot gallery sourced from `docs/screenshots/`.
 
+### T51: Release 0.3.0 Build 30
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `T50`
+- goal: publish GHOrchestrator `0.3.0` as build `30` using the notarized DMG release workflow.
+- scope:
+  - update the changelog for `0.3.0`.
+  - commit and push the release-preparation docs changes needed for the release notes.
+  - run the release DMG workflow to create or update the GitHub Release and upload assets.
+- deliverables:
+  - updated `CHANGELOG.md`
+  - pushed release-preparation commit
+  - GitHub Release `0.3.0` assets
+- verification:
+  - pending
+- notes:
+  - `0.2.0..HEAD` currently contains only the README/gallery refresh commit, so this release is documentation-focused unless additional changes are introduced before the release cut.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
