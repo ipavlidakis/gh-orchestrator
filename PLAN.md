@@ -1183,6 +1183,24 @@
     - `GHOrchestrator-0.3.0.dmg`
     - `GHOrchestrator-0.3.0.dmg.sha256.txt`
 
+### T52: Release 0.3.1 Build 31
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `T51`, `PLAN-notifications.md:N07`
+- goal: publish GHOrchestrator `0.3.1` as build `31` using the notarized DMG release workflow.
+- scope:
+  - update the changelog for `0.3.1`.
+  - commit and push the release-preparation changes needed for the release notes.
+  - run the release DMG workflow to create or update the GitHub Release and upload assets.
+- deliverables:
+  - updated `CHANGELOG.md`
+  - pushed release-preparation commit
+  - GitHub Release `0.3.1` assets
+- verification:
+  - pending
+- notes:
+  - `0.3.0..HEAD` currently contains the workflow-job notification body update that adds the PR title to local notifications.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`

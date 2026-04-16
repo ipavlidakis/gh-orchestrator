@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (Build 31) - 2026-04-17
+
+- Added the pull request title to workflow job completion notification descriptions so alerts are easier to identify from Notification Center.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.3.0...0.3.1
+
 ## 0.3.0 (Build 30) - 2026-04-16
 
 - Refreshed the README with a fuller product overview for the current GHOrchestrator surface area.
