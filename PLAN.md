@@ -1184,7 +1184,7 @@
     - `GHOrchestrator-0.3.0.dmg.sha256.txt`
 
 ### T52: Release 0.3.1 Build 31
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T51`, `PLAN-notifications.md:N07`
 - goal: publish GHOrchestrator `0.3.1` as build `31` using the notarized DMG release workflow.
@@ -1197,9 +1197,16 @@
   - pushed release-preparation commit
   - GitHub Release `0.3.1` assets
 - verification:
-  - pending
+  - 2026-04-17: `git push origin main` pushed release-preparation commit `d664d3f` (`Prepare 0.3.1 release`) before cutting the release.
+  - 2026-04-17: `./script/release_dmg.sh --version 0.3.1 --build 31 --release-name '0.3.1 (Build 31)' --release-notes-file /tmp/GHOrchestrator-0.3.1-release-notes.md` succeeded, including archive, DMG signing, notarization acceptance (`73349625-b296-42d9-86e2-9dfff8036043`), stapling, checksum generation, and GitHub asset upload.
+  - 2026-04-17: `curl -X PATCH https://api.github.com/repos/ipavlidakis/gh-orchestrator/releases/310088884 -d '{"draft":false}'` published the draft release, resulting in GitHub Release `0.3.1` at `https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.3.1`.
+  - 2026-04-17: `git ls-remote --tags origin 0.3.1` confirmed remote tag `0.3.1` points to `d664d3fcd4281eed723e507b5443df70f1b7523a`.
 - notes:
   - `0.3.0..HEAD` currently contains the workflow-job notification body update that adds the PR title to local notifications.
+  - Published assets:
+    - `GHOrchestrator-0.3.1.dmg`
+    - `GHOrchestrator-0.3.1.dmg.sha256.txt`
+  - The local release config still defaults new releases to `draft`, so this release required a follow-up publish call after the asset upload completed.
 
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
