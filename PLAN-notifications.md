@@ -141,3 +141,22 @@
   - 2026-04-15: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-notification-copy -only-testing:GHOrchestratorTests/LocalNotificationContentFormatterTests` succeeded after updating workflow job notification copy.
 - notes:
   - Requested format is title `Repo name`, body `✅/❌ {job name} succeed/fail`.
+
+### N07: Workflow Job Notification PR Title Copy
+- status: `done`
+- owner: `codex-main`
+- depends_on: `N06`
+- goal: include the pull request title in the workflow job completion notification description.
+- scope:
+  - update app-owned local notification body formatting for workflow job completion events to append the PR title.
+  - keep notification title, routing, and core event evaluation unchanged.
+  - add focused app coverage for success and failure notification copy with the PR title present.
+- deliverables:
+  - workflow job notification body copy that includes the PR title
+  - focused notification formatting tests
+- verification:
+  - 2026-04-17: `tuist generate --no-open` succeeded after updating workflow job notification body copy.
+  - 2026-04-17: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-notification-pr-title -only-testing:GHOrchestratorTests/LocalNotificationContentFormatterTests` succeeded with the PR-title formatter assertions.
+  - 2026-04-17: `./script/build_and_run.sh --verify` succeeded after rebuilding and launching the app with the updated notification body.
+- notes:
+  - Requested format keeps title `Repo name` and updates the body to `✅/❌ {job name} succeed/fail - {PR title}`.

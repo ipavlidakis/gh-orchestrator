@@ -11,7 +11,10 @@ final class LocalNotificationContentFormatterTests: XCTestCase {
         )
 
         XCTAssertEqual(LocalNotificationContentFormatter.title(for: notificationEvent), "codex")
-        XCTAssertEqual(LocalNotificationContentFormatter.body(for: notificationEvent), "✅ unit-tests succeed")
+        XCTAssertEqual(
+            LocalNotificationContentFormatter.body(for: notificationEvent),
+            "✅ unit-tests succeed - Add notifications"
+        )
     }
 
     func testWorkflowJobFailureNotificationUsesRepositoryTitleAndFailureBody() {
@@ -21,7 +24,10 @@ final class LocalNotificationContentFormatterTests: XCTestCase {
         )
 
         XCTAssertEqual(LocalNotificationContentFormatter.title(for: notificationEvent), "codex")
-        XCTAssertEqual(LocalNotificationContentFormatter.body(for: notificationEvent), "❌ lint fail")
+        XCTAssertEqual(
+            LocalNotificationContentFormatter.body(for: notificationEvent),
+            "❌ lint fail - Add notifications"
+        )
     }
 
     private func workflowJobEvent(

@@ -197,7 +197,9 @@ enum LocalNotificationContentFormatter {
         let jobName = rawJobName.flatMap { $0.isEmpty ? nil : $0 } ?? "Workflow job"
         let conclusion = event.workflowJobConclusion?.trimmingCharacters(in: .whitespacesAndNewlines)
         let isSuccess = conclusion?.caseInsensitiveCompare("success") == .orderedSame
+        let rawPullRequestTitle = event.pullRequestTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pullRequestSuffix = rawPullRequestTitle.isEmpty ? "" : " - \(rawPullRequestTitle)"
 
-        return "\(isSuccess ? "✅" : "❌") \(jobName) \(isSuccess ? "succeed" : "fail")"
+        return "\(isSuccess ? "✅" : "❌") \(jobName) \(isSuccess ? "succeed" : "fail")\(pullRequestSuffix)"
     }
 }
