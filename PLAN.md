@@ -1160,7 +1160,7 @@
   - `README.md` now includes a product-facing feature list plus an embedded screenshot gallery sourced from `docs/screenshots/`.
 
 ### T51: Release 0.3.0 Build 30
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T50`
 - goal: publish GHOrchestrator `0.3.0` as build `30` using the notarized DMG release workflow.
@@ -1173,9 +1173,15 @@
   - pushed release-preparation commit
   - GitHub Release `0.3.0` assets
 - verification:
-  - pending
+  - 2026-04-16: `git push origin main` pushed release-preparation commit `46ff5d9` (`Prepare 0.3.0 release`) before cutting the release.
+  - 2026-04-16: `./script/release_dmg.sh --version 0.3.0 --build 30 --release-name '0.3.0 (Build 30)' --release-notes-file /tmp/GHOrchestrator-0.3.0-release-notes.md` succeeded, including archive, DMG signing, notarization acceptance (`ea77ec08-b697-4ea0-9906-7ae8713172df`), stapling, checksum generation, and GitHub asset upload.
+  - 2026-04-16: the created draft release was published through the GitHub API, resulting in GitHub Release `0.3.0` at `https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.3.0`.
+  - 2026-04-16: `git ls-remote --tags origin 0.3.0` confirmed remote tag `0.3.0` points to `46ff5d9dcddd9e1b36137f950a742522be67943a`.
 - notes:
   - `0.2.0..HEAD` currently contains only the README/gallery refresh commit, so this release is documentation-focused unless additional changes are introduced before the release cut.
+  - Published assets:
+    - `GHOrchestrator-0.3.0.dmg`
+    - `GHOrchestrator-0.3.0.dmg.sha256.txt`
 
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
