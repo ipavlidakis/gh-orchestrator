@@ -21,6 +21,7 @@ struct GHOrchestratorApp: App {
         MenuBarExtra {
             MenuBarPlaceholderView(
                 model: controller.dashboardModel,
+                softwareUpdateModel: controller.softwareUpdateModel,
                 onMenuVisibilityChange: { isVisible in
                     controller.setMenuVisible(isVisible)
                 }

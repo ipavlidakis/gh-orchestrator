@@ -12,6 +12,7 @@
 - The top-level `Edit`, `View`, and `Window` menus should be hidden while this menu set is active.
 - `Help` opens `https://github.com/ipavlidakis/gh-orchestrator`.
 - When the Settings window is open, GHOrchestrator should remain reachable from the Dock even if the user's normal app behavior hides the Dock icon.
+- The menu-bar window’s trailing `More` menu should surface an `Update` action when a newer app release is already available.
 
 ## Dependencies
 - Reuse the existing app-state and refresh wiring from `T09`, `T10`, and `T12` in [PLAN.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN.md).
@@ -68,6 +69,27 @@
   - Keep this in the app target; the core settings model should continue to store only the user's persistent preference.
   - Settings scene presentation now temporarily applies the visible Dock policy and restores the persisted preference on close.
 
+### T15: Menu-Bar More Menu Update Action
+- status: `done`
+- owner: `codex-main`
+- depends_on: `PLAN.md:T47`
+- goal: surface a direct update/install action in the menu-bar window’s trailing `More` menu whenever GHOrchestrator has already detected a newer release.
+- scope:
+  - keep the action in the app target menu-bar view layer.
+  - reuse the existing `SoftwareUpdateModel` install path instead of adding new updater logic.
+  - show the menu item only when an update is available or already installing.
+  - keep the action disabled while no install can start.
+- deliverables:
+  - updated menu-bar `More` menu wiring
+  - focused tests for the new menu action seam
+- verification:
+  - 2026-04-17: `tuist generate --no-open` succeeded.
+  - 2026-04-17: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-menu-update -only-testing:GHOrchestratorTests/MenuBarMoreMenuTests -only-testing:GHOrchestratorTests/SoftwareUpdateModelTests -only-testing:GHOrchestratorTests/SettingsWindowCommandsTests` succeeded.
+  - 2026-04-17: `./script/build_and_run.sh --verify` succeeded.
+- notes:
+  - The menu continues to show `Refresh`, `Settings`, and `Quit`; `Update` is inserted between `Refresh` and `Settings` only while `SoftwareUpdateModel` reports `.updateAvailable` or `.installing`, and it reuses the existing install request path.
+
 ## Decision Log
 - 2026-04-14: when the Settings window is active, GHOrchestrator must present its app menu in the macOS menu bar with `About`, `Refresh`, `Settings…`, `Quit`, and `Help`; `Refresh` belongs directly under `About`, the top-level `Edit`, `View`, and `Window` menus must be hidden, and `Help` opens `https://github.com/ipavlidakis/gh-orchestrator`.
 - 2026-04-15: the persisted "Hide Dock icon" preference should be temporarily overridden while the Settings window is open so users can refocus the Settings window from the Dock after it loses focus.
+- 2026-04-17: the menu-bar window’s trailing `More` menu should show an `Update` action only when the updater has already detected a newer release; selecting it should reuse the existing direct-DMG install flow.
