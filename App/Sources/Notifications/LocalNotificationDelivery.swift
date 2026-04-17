@@ -59,6 +59,7 @@ protocol LocalNotificationDelivering: AnyObject {
     func authorizationStatus() async -> LocalNotificationAuthorizationStatus
     func requestAuthorization() async throws -> LocalNotificationAuthorizationStatus
     func deliver(_ event: RepositoryNotificationEvent) async throws
+    func deliverPreview(_ event: RepositoryNotificationEvent) async throws
 }
 
 enum LocalNotificationUserInfo {
@@ -118,21 +119,17 @@ final class UserNotificationCenterDelivery: NSObject, LocalNotificationDeliverin
     }
 
     func deliver(_ event: RepositoryNotificationEvent) async throws {
-        let content = UNMutableNotificationContent()
-        content.title = LocalNotificationContentFormatter.title(for: event)
-        content.body = LocalNotificationContentFormatter.body(for: event)
-        content.sound = .default
-        content.userInfo = [
-            LocalNotificationUserInfo.targetURLKey: event.targetURL.absoluteString
-        ]
-
-        let request = UNNotificationRequest(
-            identifier: "gh-orchestrator.\(event.id)",
-            content: content,
-            trigger: nil
+        try await addNotificationRequest(
+            for: event,
+            identifier: "gh-orchestrator.\(event.id)"
         )
+    }
 
-        try await center.add(request)
+    func deliverPreview(_ event: RepositoryNotificationEvent) async throws {
+        try await addNotificationRequest(
+            for: event,
+            identifier: "gh-orchestrator.preview.\(UUID().uuidString)"
+        )
     }
 
     nonisolated func userNotificationCenter(
@@ -148,21 +145,42 @@ final class UserNotificationCenterDelivery: NSObject, LocalNotificationDeliverin
     ) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }
+
+    private func addNotificationRequest(
+        for event: RepositoryNotificationEvent,
+        identifier: String
+    ) async throws {
+        let content = UNMutableNotificationContent()
+        content.title = LocalNotificationContentFormatter.title(for: event)
+        content.body = LocalNotificationContentFormatter.body(for: event)
+        content.sound = .default
+        content.userInfo = [
+            LocalNotificationUserInfo.targetURLKey: event.targetURL.absoluteString
+        ]
+
+        let request = UNNotificationRequest(
+            identifier: identifier,
+            content: content,
+            trigger: nil
+        )
+
+        try await center.add(request)
+    }
 }
 
 enum LocalNotificationContentFormatter {
     static func title(for event: RepositoryNotificationEvent) -> String {
         switch event.trigger {
         case .pullRequestCreated:
-            return "New PR in \(event.repository.fullName)"
+            return event.repository.fullName
         case .approval:
-            return "\(event.repository.fullName) #\(event.pullRequestNumber) approved"
+            return event.repository.fullName
         case .changesRequested:
-            return "Changes requested on \(event.repository.fullName) #\(event.pullRequestNumber)"
+            return event.repository.fullName
         case .newUnresolvedReviewComment:
-            return "New review comment on \(event.repository.fullName) #\(event.pullRequestNumber)"
+            return event.repository.fullName
         case .workflowRunCompleted:
-            return "\(event.workflowName ?? "Workflow") completed"
+            return event.repository.fullName
         case .workflowJobCompleted:
             return event.repository.name
         }
@@ -171,15 +189,34 @@ enum LocalNotificationContentFormatter {
     static func body(for event: RepositoryNotificationEvent) -> String {
         switch event.trigger {
         case .pullRequestCreated:
-            let author = event.authorLogin.map { "\($0) opened " } ?? ""
-            return "\(author)#\(event.pullRequestNumber): \(event.pullRequestTitle)"
+            let lineA = "New PR #\(event.pullRequestNumber): \(event.pullRequestTitle)"
+            if let author = event.authorLogin?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !author.isEmpty {
+                return "\(lineA)\nOpened by \(author)"
+            }
+            return lineA
+
         case .approval:
-            return event.pullRequestTitle
+            let lineA = "PR #\(event.pullRequestNumber) approved 👍"
+            let lineB = event.pullRequestTitle
+            return "\(lineA)\n\(lineB)"
+
         case .changesRequested:
-            return event.pullRequestTitle
+            let lineA = "PR #\(event.pullRequestNumber) changes requested 🔄"
+            let lineB = event.pullRequestTitle
+            return "\(lineA)\n\(lineB)"
+
         case .newUnresolvedReviewComment:
-            let author = event.commentAuthorLogin.map { "\($0): " } ?? ""
-            return "\(author)\(event.commentBodyText ?? event.pullRequestTitle)"
+            var lineA = "PR #\(event.pullRequestNumber) new comment"
+            if let author = event.commentAuthorLogin {
+                lineA += " by \(author)"
+            }
+            let lineB = event.pullRequestTitle
+            if let commentBodyText = event.commentBodyText, !commentBodyText.isEmpty {
+                return "\(lineA)\n\(lineB)\n→ \(commentBodyText)"
+            } else {
+                return "\(lineA)\n\(lineB)"
+            }
         case .workflowRunCompleted:
             let conclusion = event.workflowConclusion?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let conclusion, !conclusion.isEmpty {

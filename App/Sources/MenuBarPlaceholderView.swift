@@ -362,18 +362,17 @@ private struct RepositorySectionView: View {
             Button(action: onToggleCollapsed) {
                 HStack(spacing: 6) {
                     Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
                     Text(section.repository.fullName)
-                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
 
                     Spacer()
 
                     Text("\(section.pullRequests.count)")
-                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                .font(.headline.weight(.semibold))
             }
             .buttonStyle(.plain)
 
@@ -421,7 +420,8 @@ private struct PullRequestRowView: View {
                     onOpenURL(pullRequest.url)
                 } label: {
                     Text(pullRequest.title)
-                        .font(.subheadline.weight(.medium))
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1080,10 +1080,10 @@ private struct MetadataBadge: View {
 
             if let systemImage {
                 Image(systemName: systemImage)
-                    .font(.caption2.weight(.semibold))
+                    .font(.caption.weight(.semibold))
             }
         }
-        .font(.caption2.weight(.medium))
+        .font(.caption.weight(.medium))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(backgroundColor.opacity(0.12), in: Capsule())

@@ -15,6 +15,7 @@ final class SettingsModel {
     private let workflowListService: (any ActionsWorkflowListing)?
     private let workflowJobListService: (any ActionsWorkflowJobListing)?
     private let actionsInsightsService: (any ActionsInsightsLoading)?
+    private let sendNotificationPreviewAction: (@MainActor (RepositoryNotificationEvent) async throws -> Void)?
 
     @ObservationIgnored
     private var workflowListTasksByRepositoryID: [String: Task<Void, Never>] = [:]
@@ -47,6 +48,9 @@ final class SettingsModel {
     var workflowJobListStatesByKey: [String: SettingsWorkflowListState] = [:]
     var workflowItemsByRepositoryID: [String: [ActionsWorkflowItem]] = [:]
     var actionsInsightsState: SettingsActionsInsightsState = .idle
+#if DEBUG
+    let notificationDebugPreview = NotificationDebugPreviewModel()
+#endif
     var hideDockIcon: Bool {
         didSet {
             syncHideDockIcon()
@@ -72,7 +76,8 @@ final class SettingsModel {
         openLoginItemsSettingsAction: (() -> Void)? = nil,
         workflowListService: (any ActionsWorkflowListing)? = nil,
         workflowJobListService: (any ActionsWorkflowJobListing)? = nil,
-        actionsInsightsService: (any ActionsInsightsLoading)? = nil
+        actionsInsightsService: (any ActionsInsightsLoading)? = nil,
+        sendNotificationPreviewAction: (@MainActor (RepositoryNotificationEvent) async throws -> Void)? = nil
     ) {
         self.store = store
         self.authenticationState = authenticationState
@@ -85,6 +90,7 @@ final class SettingsModel {
         self.workflowListService = workflowListService
         self.workflowJobListService = workflowJobListService
         self.actionsInsightsService = actionsInsightsService
+        self.sendNotificationPreviewAction = sendNotificationPreviewAction
         self.repositoryText = Self.repositoryText(from: store.settings.observedRepositories)
         self.repositoryValidationMessages = []
         self.pollingIntervalText = String(store.settings.pollingIntervalSeconds)
@@ -361,6 +367,37 @@ final class SettingsModel {
     func requestOpenLoginItemsSettings() {
         openLoginItemsSettingsAction?()
     }
+
+#if DEBUG
+    var canSendNotificationDebugPreview: Bool {
+        sendNotificationPreviewAction != nil
+    }
+
+    func requestNotificationDebugPreview() {
+        guard let sendNotificationPreviewAction else {
+            return
+        }
+
+        let event: RepositoryNotificationEvent
+        do {
+            event = try notificationDebugPreview.makeEvent()
+        } catch {
+            notificationDebugPreview.deliveryState = .failed(error.localizedDescription)
+            return
+        }
+
+        notificationDebugPreview.deliveryState = .sending
+
+        Task { @MainActor in
+            do {
+                try await sendNotificationPreviewAction(event)
+                notificationDebugPreview.deliveryState = .delivered("Preview delivered.")
+            } catch {
+                notificationDebugPreview.deliveryState = .failed("Could not deliver preview: \(error.localizedDescription)")
+            }
+        }
+    }
+#endif
 
     func setActionsInsightsRepositoryID(_ repositoryID: String?) {
         let normalizedRepositoryID = repositoryID.map(RepositoryNotificationSettings.normalizedRepositoryID)

@@ -825,6 +825,13 @@ private struct NotificationSettingsPane: View {
             } footer: {
                 Text("Notification polling checks all open PRs in enabled repositories, independent of the dashboard filter.")
             }
+
+#if DEBUG
+            NotificationDebugPreviewGroup(
+                model: model,
+                preview: model.notificationDebugPreview
+            )
+#endif
         }
     }
 

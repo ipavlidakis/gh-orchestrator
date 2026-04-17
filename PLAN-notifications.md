@@ -5,7 +5,40 @@
 - Keep notification event detection in the core package and system notification delivery in the app target.
 - Follow the repo-wide rules in `PLAN.md` and `AGENTS.md`.
 
+## Decision Log
+- 2026-04-17: Notification preview tooling lives in the Notifications settings pane as a Debug-only section and sends synthetic events through the app-owned local notification delivery seam instead of mutating live repository state.
+
 ## Task Board
+
+### N08: Debug Notification Preview Panel
+- status: `done`
+- owner: `codex-main`
+- depends_on: `N01`, `N03`, `N05`, `N07`
+- goal: add a settings-hosted debug panel that can send synthetic local notifications for every supported trigger with custom input.
+- scope:
+  - add app and settings-model seams for synthetic notification preview delivery.
+  - add a Debug-only notifications section in Settings with editable sample fields per trigger.
+  - reuse the real app notification formatter and delivery path for previews.
+  - add focused app/model tests for preview request routing and sample-event construction.
+- deliverables:
+  - debug notification preview state and actions
+  - Debug-only notifications preview UI
+  - focused app and settings tests
+- verification:
+  - 2026-04-17: `tuist generate --no-open` succeeded after wiring the Debug-only notification preview section and preview-delivery seam.
+  - 2026-04-17: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-debug-notification-previews -only-testing:GHOrchestratorTests/AppControllerTests -only-testing:GHOrchestratorTests/Settings/SettingsModelTests -only-testing:GHOrchestratorTests/Notifications/LocalNotificationContentFormatterTests` succeeded with the preview routing, preview validation, and notification-copy assertions.
+  - 2026-04-17: `./script/build_and_run.sh --verify` succeeded after rebuilding and launching the app with the debug preview panel.
+  - 2026-04-17: `tuist generate --no-open` succeeded again before the default-value follow-up test after regenerating the workspace to include current app sources.
+  - 2026-04-17: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-debug-notification-defaults -only-testing:GHOrchestratorTests/Settings/SettingsModelTests` succeeded after updating the preview defaults to `ipavlidakis/gh-orchestrator` and `ipavlidakis`.
+  - 2026-04-17: `swift test --package-path Packages/GHOrchestratorCore` succeeded during staged-change verification.
+  - 2026-04-17: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-full-staged-check` succeeded after reconciling `LocalNotificationContentFormatter` with the workflow-job copy contract and the PR-created preview assertion.
+  - 2026-04-17: `./script/build_and_run.sh --verify` succeeded again after the notification formatter fix.
+  - 2026-04-17: exported the staged index to `/tmp/gh-orchestrator-staged-check.oEoVtx` with `git checkout-index` and reran `tuist generate --no-open`, `swift test --package-path Packages/GHOrchestratorCore`, `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-staged-index-check`, and `./script/build_and_run.sh --verify`; all passed against the staged snapshot.
+- notes:
+  - Preview delivery should stay out of Release builds and should not depend on live GitHub polling state.
+  - The preview panel exposes one trigger picker with shared PR fields plus trigger-specific inputs, then sends the synthetic event through the real local notification formatter and delivery adapter.
+  - 2026-04-17 follow-up: align the default preview repository and author values with `ipavlidakis/gh-orchestrator` and `ipavlidakis`.
+  - 2026-04-17 follow-up: the full app test suite caught stale notification-copy expectations after the preview wiring landed; `LocalNotificationContentFormatter` now preserves the existing workflow-job copy contract while matching the new PR-created preview assertion.
 
 ### N01: Per-Repository Notification Triggers
 - status: `done`

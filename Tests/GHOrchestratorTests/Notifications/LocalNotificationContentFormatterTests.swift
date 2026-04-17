@@ -4,6 +4,24 @@ import XCTest
 import GHOrchestratorCore
 
 final class LocalNotificationContentFormatterTests: XCTestCase {
+    func testPullRequestCreatedNotificationIncludesRepositoryTitleAndAuthorBody() {
+        let notificationEvent = RepositoryNotificationEvent(
+            trigger: .pullRequestCreated,
+            repository: ObservedRepository(owner: "openai", name: "codex"),
+            pullRequestNumber: 7,
+            pullRequestTitle: "Add debug previews",
+            pullRequestURL: URL(string: "https://github.com/openai/codex/pull/7")!,
+            targetURL: URL(string: "https://github.com/openai/codex/pull/7")!,
+            authorLogin: "octocat"
+        )
+
+        XCTAssertEqual(LocalNotificationContentFormatter.title(for: notificationEvent), "openai/codex")
+        XCTAssertEqual(
+            LocalNotificationContentFormatter.body(for: notificationEvent),
+            "New PR #7: Add debug previews\nOpened by octocat"
+        )
+    }
+
     func testWorkflowJobSuccessNotificationUsesRepositoryTitleAndSuccessBody() {
         let notificationEvent = workflowJobEvent(
             jobName: "unit-tests",

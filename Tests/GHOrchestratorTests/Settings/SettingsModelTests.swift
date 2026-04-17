@@ -44,6 +44,74 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(signOutCount, 1)
     }
 
+#if DEBUG
+    func testNotificationDebugPreviewUsesRepoLocalDefaultRepositoryAndAuthor() {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        let model = SettingsModel(store: store)
+
+        XCTAssertEqual(model.notificationDebugPreview.repositoryOwner, "ipavlidakis")
+        XCTAssertEqual(model.notificationDebugPreview.repositoryName, "gh-orchestrator")
+        XCTAssertEqual(model.notificationDebugPreview.authorLogin, "ipavlidakis")
+    }
+
+    func testNotificationDebugPreviewBuildsEventAndInvokesAssignedAction() async {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        var receivedEvent: RepositoryNotificationEvent?
+        let model = SettingsModel(
+            store: store,
+            sendNotificationPreviewAction: { event in
+                receivedEvent = event
+            }
+        )
+
+        model.notificationDebugPreview.selectedTrigger = .workflowJobCompleted
+        model.notificationDebugPreview.repositoryOwner = "swiftlang"
+        model.notificationDebugPreview.repositoryName = "swift"
+        model.notificationDebugPreview.pullRequestNumberText = "42"
+        model.notificationDebugPreview.pullRequestTitle = "Stabilize CI"
+        model.notificationDebugPreview.workflowName = "PR"
+        model.notificationDebugPreview.workflowJobName = "Linux"
+        model.notificationDebugPreview.workflowJobConclusion = "failure"
+        model.notificationDebugPreview.targetURLText = "https://github.com/swiftlang/swift/actions/runs/42/job/7"
+
+        model.requestNotificationDebugPreview()
+
+        await waitUntil("notification debug preview send") {
+            receivedEvent != nil
+        }
+
+        XCTAssertEqual(model.notificationDebugPreview.deliveryState, .delivered("Preview delivered."))
+        XCTAssertEqual(receivedEvent?.trigger, .workflowJobCompleted)
+        XCTAssertEqual(receivedEvent?.repository.fullName, "swiftlang/swift")
+        XCTAssertEqual(receivedEvent?.pullRequestNumber, 42)
+        XCTAssertEqual(receivedEvent?.pullRequestTitle, "Stabilize CI")
+        XCTAssertEqual(receivedEvent?.workflowName, "PR")
+        XCTAssertEqual(receivedEvent?.workflowJobName, "Linux")
+        XCTAssertEqual(receivedEvent?.workflowJobConclusion, "failure")
+        XCTAssertEqual(receivedEvent?.targetURL.absoluteString, "https://github.com/swiftlang/swift/actions/runs/42/job/7")
+    }
+
+    func testNotificationDebugPreviewValidationFailurePreventsSend() {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        var sendCount = 0
+        let model = SettingsModel(
+            store: store,
+            sendNotificationPreviewAction: { _ in
+                sendCount += 1
+            }
+        )
+
+        model.notificationDebugPreview.repositoryOwner = ""
+        model.requestNotificationDebugPreview()
+
+        XCTAssertEqual(sendCount, 0)
+        XCTAssertEqual(
+            model.notificationDebugPreview.deliveryState,
+            .failed("Enter a valid repository owner and name.")
+        )
+    }
+#endif
+
     func testInvalidRepositoryInputSurfacesValidationMessagesAndPersistsValidEntries() {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         let model = SettingsModel(store: store)

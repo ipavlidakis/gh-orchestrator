@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import Synchronization
+import SwiftUI
 import XCTest
 @testable import GHOrchestrator
 import GHOrchestratorCore
@@ -89,15 +90,45 @@ final class AppControllerTests: XCTestCase {
         XCTAssertEqual(authController.signOutCount, 1)
     }
 
+#if DEBUG
+    func testNotificationDebugPreviewUsesPreviewDeliveryPath() async {
+        let notificationDelivery = AppControllerRecordingNotificationDelivery()
+        let controller = AppController(
+            settingsStore: configuredSettingsStore(),
+            dataSource: MutableDashboardDataSource(),
+            authController: MutableAuthController(state: .authenticated(username: "octocat")),
+            sleeper: CancellingSleeper(),
+            startAtLoginController: RecordingStartAtLoginController(),
+            notificationDelivery: notificationDelivery,
+            softwareUpdateChecker: StubSoftwareUpdateChecker(),
+            softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false
+        )
+
+        XCTAssertTrue(controller.settingsModel.canSendNotificationDebugPreview)
+
+        controller.settingsModel.requestNotificationDebugPreview()
+
+        await waitUntil("notification debug preview delivery") {
+            notificationDelivery.previewedEvents.count == 1
+        }
+
+        XCTAssertTrue(notificationDelivery.deliveredEvents.isEmpty)
+        XCTAssertEqual(notificationDelivery.previewedEvents[0].trigger, .pullRequestCreated)
+    }
+#endif
+
     func testAppControllerAppliesDockIconPreferenceAtLaunchAndWhenSettingsChange() async {
         let store = configuredSettingsStore(hideDockIcon: true)
         let dockIconController = RecordingDockIconVisibilityController()
+        let applicationIconController = RecordingApplicationIconController()
         let controller = AppController(
             settingsStore: store,
             dataSource: MutableDashboardDataSource(),
             authController: MutableAuthController(state: .authenticated(username: "octocat")),
             sleeper: CancellingSleeper(),
             dockIconVisibilityController: dockIconController,
+            applicationIconController: applicationIconController,
             startAtLoginController: RecordingStartAtLoginController(),
             notificationDelivery: AppControllerRecordingNotificationDelivery(),
             softwareUpdateChecker: StubSoftwareUpdateChecker(),
@@ -115,17 +146,20 @@ final class AppControllerTests: XCTestCase {
         await waitUntil("dock icon preference update") {
             dockIconController.appliedValues == [true, false]
         }
+        XCTAssertEqual(applicationIconController.applyCurrentSystemAppearanceCallCount, 1)
     }
 
     func testSettingsWindowVisibilityTemporarilyShowsDockIconWhenPreferenceIsHidden() async {
         let store = configuredSettingsStore(hideDockIcon: true)
         let dockIconController = RecordingDockIconVisibilityController()
+        let applicationIconController = RecordingApplicationIconController()
         let controller = AppController(
             settingsStore: store,
             dataSource: MutableDashboardDataSource(),
             authController: MutableAuthController(state: .authenticated(username: "octocat")),
             sleeper: CancellingSleeper(),
             dockIconVisibilityController: dockIconController,
+            applicationIconController: applicationIconController,
             startAtLoginController: RecordingStartAtLoginController(),
             notificationDelivery: AppControllerRecordingNotificationDelivery(),
             softwareUpdateChecker: StubSoftwareUpdateChecker(),
@@ -140,10 +174,37 @@ final class AppControllerTests: XCTestCase {
         controller.setSettingsWindowVisible(true)
 
         XCTAssertEqual(dockIconController.appliedValues, [true, false])
+        XCTAssertEqual(applicationIconController.applyCurrentSystemAppearanceCallCount, 1)
 
         controller.setSettingsWindowVisible(false)
 
         XCTAssertEqual(dockIconController.appliedValues, [true, false, true])
+        XCTAssertEqual(applicationIconController.applyCurrentSystemAppearanceCallCount, 1)
+    }
+
+    func testVisibleDockIconPreferenceReappliesCustomDockIconAtLaunch() async {
+        let dockIconController = RecordingDockIconVisibilityController()
+        let applicationIconController = RecordingApplicationIconController()
+        let controller = AppController(
+            settingsStore: configuredSettingsStore(hideDockIcon: false),
+            dataSource: MutableDashboardDataSource(),
+            authController: MutableAuthController(state: .authenticated(username: "octocat")),
+            sleeper: CancellingSleeper(),
+            dockIconVisibilityController: dockIconController,
+            applicationIconController: applicationIconController,
+            startAtLoginController: RecordingStartAtLoginController(),
+            notificationDelivery: AppControllerRecordingNotificationDelivery(),
+            softwareUpdateChecker: StubSoftwareUpdateChecker(),
+            softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false
+        )
+
+        await waitUntil("initial visible Dock icon preference application") {
+            dockIconController.appliedValues == [false]
+        }
+
+        XCTAssertFalse(controller.settingsModel.hideDockIcon)
+        XCTAssertEqual(applicationIconController.applyCurrentSystemAppearanceCallCount, 1)
     }
 
     func testAppControllerAppliesStartAtLoginPreferenceAtLaunchAndWhenSettingsChange() async {
@@ -305,6 +366,9 @@ private struct CancellingSleeper: DashboardSleepProviding {
 
 @MainActor
 private final class AppControllerRecordingNotificationDelivery: LocalNotificationDelivering {
+    private(set) var deliveredEvents: [RepositoryNotificationEvent] = []
+    private(set) var previewedEvents: [RepositoryNotificationEvent] = []
+
     func authorizationStatus() async -> LocalNotificationAuthorizationStatus {
         .authorized
     }
@@ -313,7 +377,13 @@ private final class AppControllerRecordingNotificationDelivery: LocalNotificatio
         .authorized
     }
 
-    func deliver(_: RepositoryNotificationEvent) async throws {}
+    func deliver(_ event: RepositoryNotificationEvent) async throws {
+        deliveredEvents.append(event)
+    }
+
+    func deliverPreview(_ event: RepositoryNotificationEvent) async throws {
+        previewedEvents.append(event)
+    }
 }
 
 @MainActor
@@ -322,6 +392,20 @@ private final class RecordingDockIconVisibilityController: DockIconVisibilityCon
 
     func apply(hideDockIcon: Bool) {
         appliedValues.append(hideDockIcon)
+    }
+}
+
+@MainActor
+private final class RecordingApplicationIconController: ApplicationIconControlling {
+    private(set) var applyColorSchemeCallCount = 0
+    private(set) var applyCurrentSystemAppearanceCallCount = 0
+
+    func apply(colorScheme _: ColorScheme) {
+        applyColorSchemeCallCount += 1
+    }
+
+    func applyCurrentSystemAppearance() {
+        applyCurrentSystemAppearanceCallCount += 1
     }
 }
 

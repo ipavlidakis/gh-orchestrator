@@ -14,6 +14,7 @@ final class AppController {
     let notificationMonitor: RepositoryNotificationMonitor
     let softwareUpdateModel: SoftwareUpdateModel
     private let dockIconVisibilityController: any DockIconVisibilityControlling
+    private let applicationIconController: any ApplicationIconControlling
     private let startAtLoginController: any StartAtLoginControlling
     private let notificationDelivery: any LocalNotificationDelivering
     private var isSettingsWindowVisible = false
@@ -25,6 +26,7 @@ final class AppController {
         sleeper: any DashboardSleepProviding = TaskSleepProvider(),
         requestLogModel: GitHubRequestLogModel? = nil,
         dockIconVisibilityController: any DockIconVisibilityControlling = DockIconVisibilityController(),
+        applicationIconController: (any ApplicationIconControlling)? = nil,
         startAtLoginController: any StartAtLoginControlling = StartAtLoginController(),
         notificationDelivery: (any LocalNotificationDelivering)? = nil,
         softwareUpdateChecker: (any SoftwareUpdateChecking)? = nil,
@@ -42,6 +44,7 @@ final class AppController {
         self.settingsStore = settingsStore
         self.requestLogModel = resolvedRequestLogModel
         self.dockIconVisibilityController = dockIconVisibilityController
+        self.applicationIconController = applicationIconController ?? ApplicationIconController()
         self.startAtLoginController = startAtLoginController
         self.notificationDelivery = resolvedNotificationDelivery
 
@@ -75,6 +78,13 @@ final class AppController {
         )
 
         let settingsModelBox = WeakSettingsModelBox<SettingsModel>()
+#if DEBUG
+        let notificationPreviewAction: (@MainActor (RepositoryNotificationEvent) async throws -> Void)? = { [resolvedNotificationDelivery] event in
+            try await resolvedNotificationDelivery.deliverPreview(event)
+        }
+#else
+        let notificationPreviewAction: (@MainActor (RepositoryNotificationEvent) async throws -> Void)? = nil
+#endif
         var resolvedSettingsModel: SettingsModel!
         resolvedSettingsModel = SettingsModel(
             store: settingsStore,
@@ -103,7 +113,8 @@ final class AppController {
             },
             workflowListService: ActionsWorkflowListService(client: apiClient),
             workflowJobListService: ActionsWorkflowJobListService(client: apiClient),
-            actionsInsightsService: ActionsInsightsService(client: apiClient)
+            actionsInsightsService: ActionsInsightsService(client: apiClient),
+            sendNotificationPreviewAction: notificationPreviewAction
         )
         settingsModelBox.value = resolvedSettingsModel
         self.settingsModel = resolvedSettingsModel
@@ -200,6 +211,12 @@ final class AppController {
     private func applyDockIconPreference() {
         let shouldHideDockIcon = settingsStore.settings.hideDockIcon && !isSettingsWindowVisible
         dockIconVisibilityController.apply(hideDockIcon: shouldHideDockIcon)
+
+        guard !shouldHideDockIcon else {
+            return
+        }
+
+        applicationIconController.applyCurrentSystemAppearance()
     }
 
     private func applyStartAtLoginPreference() {

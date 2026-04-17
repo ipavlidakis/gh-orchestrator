@@ -1048,7 +1048,7 @@
   - Regenerated all four `MenuBarIcon.imageset` PNGs with RGB inversion while preserving alpha.
 
 ### T46: Unified macOS Icon Redesign
-- status: `blocked`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T43`, `T44`
 - goal: replace the exported icon crops with a purpose-built macOS icon system that works for Dock, Finder, and menu-bar use.
@@ -1066,12 +1066,23 @@
 - verification:
   - 2026-04-15: `./script/build_and_run.sh --verify` succeeded after removing the rejected scratch icon assets and restoring the native menu-bar symbol.
   - 2026-04-15: Image API generation was attempted with `gpt-image-1.5`, but the API returned `billing_hard_limit_reached` before any image was produced.
+  - 2026-04-17: `swift script/generate_icon_assets.swift` succeeded, regenerating the full-color `AppIcon.appiconset` PNG matrix plus `DockIconLight.imageset`, `DockIconDark.imageset`, and `MenuBarIcon.imageset`.
+  - 2026-04-17: `python3 -m json.tool` succeeded for `AppIcon.appiconset/Contents.json`, `DockIconLight.imageset/Contents.json`, `DockIconDark.imageset/Contents.json`, and `MenuBarIcon.imageset/Contents.json`.
+  - 2026-04-17: `tuist generate --no-open` succeeded after wiring the new icon assets and appearance-aware menu-bar label.
+  - 2026-04-17: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -only-testing:GHOrchestratorTests/ApplicationIconControllerTests` succeeded.
+  - 2026-04-17: `./script/build_and_run.sh --verify` succeeded, including asset catalog compilation to `AppIcon.icns` and app launch.
+  - 2026-04-17: `xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS' -only-testing:GHOrchestratorTests/AppControllerTests -only-testing:GHOrchestratorTests/ApplicationIconControllerTests` succeeded after reapplying the custom Dock icon when the Settings window forces the app back to `.regular`.
+  - 2026-04-17: `./script/build_and_run.sh --verify` succeeded again after the Settings-window Dock-icon reapply fix.
 - notes:
   - Requested after visual review showed full-square menu-bar icon crops were not legible at status-item size.
   - Blocked on 2026-04-15 because `OPENAI_API_KEY` is not set, so the live Image API generator cannot run. The attempted local vector direction was abandoned after visual review and removed from the working tree.
   - Current fallback keeps the refreshed app icon and restores the menu-bar item to the native `arrow.triangle.branch` SF Symbol until a stronger generated/designed source is available.
   - Reopened after `OPENAI_API_KEY` was added to `~/.zshrc` and a throwaway image-generation virtualenv was prepared under `/tmp/ghorchestrator-imagegen-venv`.
   - Blocked again on 2026-04-15 because the OpenAI account has reached its billing hard limit.
+  - Resumed on 2026-04-17 for a purpose-built macOS icon pass: the Dock icon must be full-bleed instead of a centered badge on gray, and the menu-bar icon must be monochrome and appearance-adaptive like Codex.
+  - `script/generate_icon_assets.swift` is now the source of truth for the icon system; it writes the dock/menu-bar vector assets and the derived macOS app-icon PNG matrix.
+  - The compiled bundle `AppIcon.appiconset` stays on the dark base artwork, while the running Dock icon swaps light/dark variants through `ApplicationIconController` and the menu-bar item uses a template `NSImage`.
+  - Follow-up fix on 2026-04-17: opening Settings temporarily restores `.regular` activation policy, so `AppController` now reapplies the custom Dock icon after Dock-visibility transitions to avoid falling back to the bundle/default tile.
 
 ### T47: Direct DMG Software Updates
 - status: `done`
@@ -1259,3 +1270,4 @@
 - 2026-04-15: software updates will use the existing GitHub Release DMG artifacts directly: core code checks release metadata and checksum assets, while the app target owns automatic checks, downloads, DMG mounting, replacement, and relaunch.
 - 2026-04-15: dashboard polling should continue at the configured interval while the menu-bar window is visible; opening or closing the menu should not itself force a refresh.
 - 2026-04-15: the Actions insights Settings dashboard will fetch selected-period GitHub Actions data live, aggregate it in memory, persist only selection preferences in the existing Application Support settings file, and avoid adding a metrics database or disk cache for the first implementation.
+- 2026-04-17: the menu-bar icon will be a template-rendered monochrome glyph, while the running Dock icon will swap between light and dark artwork to match system appearance because the bundled macOS `AppIcon.appiconset` itself does not support appearance-specific variants.

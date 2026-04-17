@@ -197,6 +197,8 @@ private final class RecordingNotificationDelivery: LocalNotificationDelivering {
     func deliver(_ event: RepositoryNotificationEvent) async throws {
         deliveredEvents.append(event)
     }
+
+    func deliverPreview(_: RepositoryNotificationEvent) async throws {}
 }
 
 private actor SequencedNotificationDataSource: DashboardDataSource {
