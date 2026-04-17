@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 (Build 40) - 2026-04-17
+
+- Added a Debug-only notification preview panel in Settings so every supported local notification trigger can be tested with synthetic sample data before enabling it for live repositories.
+- Refreshed the macOS icon system with new Dock and menu-bar artwork, including appearance-aware Dock icons and a template-rendered monochrome status item glyph.
+- Routed preview notifications through the same formatter and delivery path as live alerts so test sends match shipped notification behavior.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.3.1...0.4.0
+
 ## 0.3.1 (Build 31) - 2026-04-17
 
 - Added the pull request title to workflow job completion notification descriptions so alerts are easier to identify from Notification Center.

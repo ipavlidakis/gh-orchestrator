@@ -1219,6 +1219,23 @@
     - `GHOrchestrator-0.3.1.dmg.sha256.txt`
   - The local release config still defaults new releases to `draft`, so this release required a follow-up publish call after the asset upload completed.
 
+### T53: Release 0.4.0 Build 40
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `T52`, `T46`, `PLAN-notifications.md:N08`
+- goal: publish GHOrchestrator `0.4.0` as build `40` using the notarized DMG release workflow.
+- scope:
+  - update the changelog for `0.4.0`.
+  - commit and push the release-preparation changes needed for the release notes.
+  - run the release DMG workflow to create or update the GitHub Release and upload assets.
+- deliverables:
+  - updated `CHANGELOG.md`
+  - pushed release-preparation commit
+  - GitHub Release `0.4.0` assets
+- verification:
+- notes:
+  - `0.3.1..HEAD` currently contains the debug notification preview tooling plus the macOS icon-system refresh; the post-release bookkeeping commit from `0.3.1` should not be reflected as a user-facing changelog item.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
