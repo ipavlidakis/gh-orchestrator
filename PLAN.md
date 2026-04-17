@@ -1220,7 +1220,7 @@
   - The local release config still defaults new releases to `draft`, so this release required a follow-up publish call after the asset upload completed.
 
 ### T53: Release 0.4.0 Build 40
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T52`, `T46`, `PLAN-notifications.md:N08`
 - goal: publish GHOrchestrator `0.4.0` as build `40` using the notarized DMG release workflow.
@@ -1233,8 +1233,16 @@
   - pushed release-preparation commit
   - GitHub Release `0.4.0` assets
 - verification:
+  - 2026-04-17: `git push origin main` pushed release-preparation commit `df0f1e4` (`Prepare 0.4.0 release`) before cutting the release.
+  - 2026-04-17: `./script/release_dmg.sh --version 0.4.0 --build 40 --release-name '0.4.0 (Build 40)' --release-notes-file /tmp/GHOrchestrator-0.4.0-release-notes.md` succeeded, including archive, DMG signing, notarization acceptance (`d5910798-bc69-4603-bc39-db3356f4f14e`), stapling, checksum generation, and GitHub asset upload.
+  - 2026-04-17: `PATCH /repos/ipavlidakis/gh-orchestrator/releases/310312960` published the draft release, resulting in GitHub Release `0.4.0` at `https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.4.0`.
+  - 2026-04-17: `git ls-remote --tags origin 0.4.0` confirmed remote tag `0.4.0` points to `df0f1e4cc7baf762ed98c067af417b7a52a026b3`.
 - notes:
   - `0.3.1..HEAD` currently contains the debug notification preview tooling plus the macOS icon-system refresh; the post-release bookkeeping commit from `0.3.1` should not be reflected as a user-facing changelog item.
+  - Published assets:
+    - `GHOrchestrator-0.4.0.dmg`
+    - `GHOrchestrator-0.4.0.dmg.sha256.txt`
+  - The local release config still defaults new releases to `draft`, so this release required a follow-up publish call after the asset upload completed.
 
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
