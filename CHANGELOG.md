@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 (Build 41) - 2026-04-17
+
+- Added an `Update` action to the menu-bar window’s trailing More menu so a detected app update can be installed directly from the dashboard window.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.4.0...0.4.1
+
 ## 0.4.0 (Build 40) - 2026-04-17
 
 - Added a Debug-only notification preview panel in Settings so every supported local notification trigger can be tested with synthetic sample data before enabling it for live repositories.

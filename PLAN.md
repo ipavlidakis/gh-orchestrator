@@ -1244,6 +1244,23 @@
     - `GHOrchestrator-0.4.0.dmg.sha256.txt`
   - The local release config still defaults new releases to `draft`, so this release required a follow-up publish call after the asset upload completed.
 
+### T54: Release 0.4.1 Build 41
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `T53`, `PLAN-menu-bar.md:T15`
+- goal: publish GHOrchestrator `0.4.1` as build `41` using the notarized DMG release workflow.
+- scope:
+  - update the changelog for `0.4.1`.
+  - commit and push the release-preparation changes needed for the release notes.
+  - run the release DMG workflow to create or update the GitHub Release and upload assets.
+- deliverables:
+  - updated `CHANGELOG.md`
+  - pushed release-preparation commit
+  - GitHub Release `0.4.1` assets
+- verification:
+- notes:
+  - `0.4.0..HEAD` currently contains the menu-bar More-menu update action plus the `0.4.0` release-bookkeeping commit; the bookkeeping commit should not be reflected as a user-facing changelog item.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
