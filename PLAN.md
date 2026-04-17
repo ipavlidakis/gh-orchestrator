@@ -1245,7 +1245,7 @@
   - The local release config still defaults new releases to `draft`, so this release required a follow-up publish call after the asset upload completed.
 
 ### T54: Release 0.4.1 Build 41
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T53`, `PLAN-menu-bar.md:T15`
 - goal: publish GHOrchestrator `0.4.1` as build `41` using the notarized DMG release workflow.
@@ -1258,8 +1258,16 @@
   - pushed release-preparation commit
   - GitHub Release `0.4.1` assets
 - verification:
+  - 2026-04-17: `git push origin main` pushed release-preparation commit `8d325c4` (`Prepare 0.4.1 release`) before cutting the release.
+  - 2026-04-17: `./script/release_dmg.sh --version 0.4.1 --build 41 --release-name '0.4.1 (Build 41)' --release-notes-file /tmp/GHOrchestrator-0.4.1-release-notes.md` succeeded, including archive, DMG signing, notarization acceptance (`3d02291d-35d3-4dfd-8a4c-363882c97644`), stapling, checksum generation, and GitHub asset upload.
+  - 2026-04-17: `PATCH /repos/ipavlidakis/gh-orchestrator/releases/310317501` published the draft release, resulting in GitHub Release `0.4.1` at `https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.4.1`.
+  - 2026-04-17: `git ls-remote --tags origin 0.4.1` confirmed remote tag `0.4.1` points to `8d325c434cabc623b1560ab290435013da7c518b`.
 - notes:
   - `0.4.0..HEAD` currently contains the menu-bar More-menu update action plus the `0.4.0` release-bookkeeping commit; the bookkeeping commit should not be reflected as a user-facing changelog item.
+  - Published assets:
+    - `GHOrchestrator-0.4.1.dmg`
+    - `GHOrchestrator-0.4.1.dmg.sha256.txt`
+  - The local release config still defaults new releases to `draft`, so this release required a follow-up publish call after the asset upload completed.
 
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
