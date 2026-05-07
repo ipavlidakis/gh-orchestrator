@@ -222,7 +222,7 @@ final class PullRequestSnapshotServiceTests: XCTestCase {
         } catch let error as PullRequestSnapshotServiceError {
             XCTAssertEqual(
                 error.localizedDescription,
-                "Failed to load pull requests for openai/codex: rate limit exceeded"
+                "Failed to load pull requests for openai/codex: GitHub transport failed: rate limit exceeded"
             )
         } catch {
             XCTFail("Unexpected error: \(error)")
