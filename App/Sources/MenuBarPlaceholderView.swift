@@ -72,6 +72,11 @@ struct MenuBarPlaceholderView: View {
             HStack(spacing: 8) {
                 Text(AppMetadata.menuBarTitle)
                     .font(.headline)
+                if model.isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.9)
+                }
                 Spacer()
                 
                 Menu {
@@ -291,7 +296,7 @@ struct MenuBarPlaceholderView: View {
             
         case .loaded(let sections):
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 14) {
                     ForEach(sections) { section in
                         RepositorySectionView(
                             section: section,

@@ -177,6 +177,58 @@ final class PullRequestSnapshotServiceTests: XCTestCase {
         XCTAssertEqual(payload.variables.searchQuery, "repo:openai/codex is:pr is:open archived:false")
     }
 
+    func testFetchRepositorySnapshotsReturnsSuccessfulResultsWhenSomeRepositoriesFail() async throws {
+        let repositories = [
+            ObservedRepository(owner: "openai", name: "codex"),
+            ObservedRepository(owner: "cli", name: "cli")
+        ]
+        let service = makeService(
+            results: [
+                .success(
+                    data: fixtureData(named: "no_prs", subdirectory: "PullRequestSearch"),
+                    response: makeHTTPResponse(url: "https://api.github.com/graphql", statusCode: 200)
+                ),
+                .failure(
+                    GitHubAPIClientError.transportFailed(message: "rate limit exceeded")
+                )
+            ]
+        )
+
+        let snapshots = try await service.fetchRepositorySnapshots(for: repositories)
+
+        XCTAssertEqual(snapshots.count, 1)
+        XCTAssertEqual(snapshots.first?.repository, repositories[0])
+    }
+
+    func testFetchRepositorySnapshotsThrowsWhenAllRepositoriesFail() async throws {
+        let repositories = [
+            ObservedRepository(owner: "openai", name: "codex"),
+            ObservedRepository(owner: "cli", name: "cli")
+        ]
+        let service = makeService(
+            results: [
+                .failure(
+                    GitHubAPIClientError.transportFailed(message: "rate limit exceeded")
+                ),
+                .failure(
+                    GitHubAPIClientError.transportFailed(message: "network unavailable")
+                )
+            ]
+        )
+
+        do {
+            _ = try await service.fetchRepositorySnapshots(for: repositories)
+            XCTFail("Expected fetchRepositorySnapshots to throw")
+        } catch let error as PullRequestSnapshotServiceError {
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Failed to load pull requests for openai/codex: rate limit exceeded"
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testFetchRepositorySnapshotsFormatsGitHubAPIErrorsForDisplay() async {
         let repository = ObservedRepository(owner: "ipavlidakis", name: "gh-orchestrator")
         let service = makeService(
