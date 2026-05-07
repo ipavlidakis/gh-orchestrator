@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2 (Build 42) - 2026-05-07
+
+- Fixed the menu-bar dashboard loading state so refresh progress appears in the header without collapsing the window content.
+- Made all-repository dashboard refreshes resilient to single-repository API failures by preserving successful repository results when at least one fetch succeeds.
+- Added regression coverage for partial and all-failed repository snapshot refreshes.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.4.1...0.4.2
+
 ## 0.4.1 (Build 41) - 2026-04-17
 
 - Added an `Update` action to the menu-bar window’s trailing More menu so a detected app update can be installed directly from the dashboard window.
