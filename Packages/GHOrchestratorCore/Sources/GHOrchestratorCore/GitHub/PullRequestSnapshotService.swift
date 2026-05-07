@@ -89,21 +89,43 @@ public struct GHPullRequestSnapshotService: PullRequestSnapshotFetching {
             return []
         }
 
-        return try await withThrowingTaskGroup(of: (Int, RepositoryPullRequestSnapshot).self) { group in
+        return try await withThrowingTaskGroup(of: (Int, Result<RepositoryPullRequestSnapshot, Error>).self) { group in
             for (index, repository) in repositories.enumerated() {
                 group.addTask {
-                    let snapshot = try await self.fetchRepositorySnapshot(
-                        for: repository,
-                        scope: scope,
-                        queryLimits: queryLimits
-                    )
+                    let snapshot: Result<RepositoryPullRequestSnapshot, Error>
+                    do {
+                        let repoSnapshot = try await self.fetchRepositorySnapshot(
+                            for: repository,
+                            scope: scope,
+                            queryLimits: queryLimits
+                        )
+                        snapshot = .success(repoSnapshot)
+                    } catch {
+                        snapshot = .failure(error)
+                    }
+
                     return (index, snapshot)
                 }
             }
 
             var orderedResults: [(Int, RepositoryPullRequestSnapshot)] = []
+            var errors: [(Int, Error)] = []
+
             for try await result in group {
-                orderedResults.append(result)
+                switch result.1 {
+                case .success(let snapshot):
+                    orderedResults.append((result.0, snapshot))
+                case .failure(let error):
+                    errors.append((result.0, error))
+                }
+            }
+
+            guard !orderedResults.isEmpty else {
+                guard let (_, firstError) = errors.min(by: { $0.0 < $1.0 }) else {
+                    return []
+                }
+
+                throw firstError
             }
 
             return orderedResults
