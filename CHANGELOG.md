@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.3 (Build 43) - 2026-05-07
+
+- Replaced the SwiftUI `MenuBarExtra` dashboard host with an AppKit-owned status item and popover so menu-bar window sizing is stable.
+- Added explicit dashboard popover sizing and preserved the existing dashboard actions, filters, Settings routing, and update install path.
+- Added trailing spacing and overlay autohiding scrollbar behavior for the loaded dashboard list.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.4.2...0.4.3
+
 ## 0.4.2 (Build 42) - 2026-05-07
 
 - Fixed the menu-bar dashboard loading state so refresh progress appears in the header without collapsing the window content.

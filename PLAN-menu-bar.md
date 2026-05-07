@@ -89,7 +89,48 @@
 - notes:
   - The menu continues to show `Refresh`, `Settings`, and `Quit`; `Update` is inserted between `Refresh` and `Settings` only while `SoftwareUpdateModel` reports `.updateAvailable` or `.installing`, and it reuses the existing install request path.
 
+### T16: AppKit-Owned Menu-Bar Window
+- status: `done`
+- owner: `codex-main`
+- depends_on: `PLAN.md:T10`, `PLAN-menu-bar.md:T15`
+- goal: replace the SwiftUI `MenuBarExtra(.window)` dashboard host with an AppKit-owned status item and popover so menu-bar window sizing is explicit and stable.
+- scope:
+  - keep dashboard content in the existing SwiftUI view.
+  - own menu-bar presentation from the app target with `NSStatusItem` and `NSPopover`.
+  - pin the popover content size from a testable app-target configuration.
+  - preserve Refresh, Update, Settings, Quit, filtering, and dashboard visibility lifecycle behavior.
+- deliverables:
+  - app-target menu-bar popover presenter
+  - updated app scene wiring
+  - focused tests for popover sizing configuration
+- verification:
+  - 2026-05-07: `tuist generate --no-open` succeeded.
+  - 2026-05-07: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-popover -only-testing:GHOrchestratorTests/MenuBarPopoverPresenterTests -only-testing:GHOrchestratorTests/MenuBarMoreMenuTests` succeeded.
+  - 2026-05-07: `./script/build_and_run.sh --verify` succeeded.
+  - 2026-05-07: `git diff --check` succeeded.
+- notes:
+  - Settings opening must use app-target AppKit routing because the dashboard view is no longer hosted inside a SwiftUI scene with `openSettings` in the environment.
+  - User-provided logs showed the old implementation creating `com.apple.controlcenter.statusitems` scenes, which matches the SwiftUI `MenuBarExtra` host path and supports moving sizing ownership into AppKit.
+
+### T17: Dashboard Scrollbar Spacing
+- status: `done`
+- owner: `codex-main`
+- depends_on: `PLAN-menu-bar.md:T16`
+- goal: keep loaded dashboard rows clear of the trailing scrollbar and flash the scrollbar instead of showing it continuously.
+- scope:
+  - add loaded-list trailing inset inside the menu-bar dashboard.
+  - configure the menu-bar dashboard scroll view to use overlay autohiding scrollers and flash once on presentation.
+- deliverables:
+  - loaded-list trailing padding
+  - app-target scroll-view configuration helper
+- verification:
+  - 2026-05-07: `tuist generate --no-open` succeeded.
+  - 2026-05-07: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-popover -only-testing:GHOrchestratorTests/MenuBarPopoverPresenterTests -only-testing:GHOrchestratorTests/MenuBarMoreMenuTests` succeeded.
+  - 2026-05-07: `./script/build_and_run.sh --verify` succeeded.
+  - 2026-05-07: `git diff --check` succeeded.
+
 ## Decision Log
 - 2026-04-14: when the Settings window is active, GHOrchestrator must present its app menu in the macOS menu bar with `About`, `Refresh`, `Settings…`, `Quit`, and `Help`; `Refresh` belongs directly under `About`, the top-level `Edit`, `View`, and `Window` menus must be hidden, and `Help` opens `https://github.com/ipavlidakis/gh-orchestrator`.
 - 2026-04-15: the persisted "Hide Dock icon" preference should be temporarily overridden while the Settings window is open so users can refocus the Settings window from the Dock after it loses focus.
 - 2026-04-17: the menu-bar window’s trailing `More` menu should show an `Update` action only when the updater has already detected a newer release; selecting it should reuse the existing direct-DMG install flow.
+- 2026-05-07: the menu-bar dashboard window should be AppKit-owned rather than hosted by `MenuBarExtra(.window)` so sizing is explicit instead of relying on SwiftUI scene intrinsic sizing.

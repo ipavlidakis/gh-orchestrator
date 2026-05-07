@@ -48,8 +48,8 @@ struct MenuBarMoreMenuUpdateAction: Equatable {
 struct MenuBarPlaceholderView: View {
     let model: MenuBarDashboardModel
     @Bindable var softwareUpdateModel: SoftwareUpdateModel
+    let openSettingsAction: @MainActor () -> Void
     let onMenuVisibilityChange: (Bool) -> Void
-    @Environment(\.openSettings) private var openSettings
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -331,8 +331,10 @@ struct MenuBarPlaceholderView: View {
                         )
                     }
                 }
+                .padding(.trailing, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .background(MenuBarScrollViewConfigurator())
             .frame(maxHeight: 520)
         }
     }
@@ -342,11 +344,44 @@ struct MenuBarPlaceholderView: View {
     }
     
     private func openSettingsWindow() {
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        openSettings()
-        
-        Task { @MainActor in
-            NSApplication.shared.activate(ignoringOtherApps: true)
+        openSettingsAction()
+    }
+}
+
+private struct MenuBarScrollViewConfigurator: NSViewRepresentable {
+    func makeNSView(context _: Context) -> NSView {
+        NSView(frame: .zero)
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async {
+            context.coordinator.configureScrollView(containing: view)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    @MainActor
+    final class Coordinator {
+        private var didFlash = false
+
+        func configureScrollView(containing view: NSView) {
+            guard let scrollView = view.enclosingScrollView else {
+                return
+            }
+
+            scrollView.hasVerticalScroller = true
+            scrollView.autohidesScrollers = true
+            scrollView.scrollerStyle = .overlay
+
+            guard !didFlash else {
+                return
+            }
+
+            didFlash = true
+            scrollView.flashScrollers()
         }
     }
 }

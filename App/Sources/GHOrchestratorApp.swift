@@ -6,31 +6,22 @@ import SwiftUI
 struct GHOrchestratorApp: App {
     @State private var controller: AppController
     private let settingsWindowMenuVisibilityController: SettingsWindowMenuVisibilityController
-    private let applicationIconController: ApplicationIconController
+    private let menuBarPopoverPresenter: MenuBarPopoverPresenter
 
     init() {
         let applicationIconController = ApplicationIconController()
+        let controller = AppController(applicationIconController: applicationIconController)
 
-        _controller = State(initialValue: AppController())
+        _controller = State(initialValue: controller)
         self.settingsWindowMenuVisibilityController = SettingsWindowMenuVisibilityController()
-        self.applicationIconController = applicationIconController
-        applicationIconController.applyCurrentSystemAppearance()
+        self.menuBarPopoverPresenter = MenuBarPopoverPresenter(
+            controller: controller,
+            softwareUpdateModel: controller.softwareUpdateModel,
+            applicationIconController: applicationIconController
+        )
     }
 
     var body: some Scene {
-        MenuBarExtra {
-            MenuBarPlaceholderView(
-                model: controller.dashboardModel,
-                softwareUpdateModel: controller.softwareUpdateModel,
-                onMenuVisibilityChange: { isVisible in
-                    controller.setMenuVisible(isVisible)
-                }
-            )
-        } label: {
-            MenuBarStatusIconLabel(applicationIconController: applicationIconController)
-        }
-        .menuBarExtraStyle(.window)
-
         Settings {
             SettingsWindowView(
                 model: controller.settingsModel,
