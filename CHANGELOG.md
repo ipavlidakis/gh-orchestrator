@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.4 (Build 44) - 2026-05-12
+
+- Fixed the menu-bar dashboard More menu so selecting Settings opens the Settings window through the active app-menu command.
+- Preserved the existing AppKit selector fallbacks for Settings routing and added presenter coverage for the app-menu path.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.4.3...0.4.4
+
 ## 0.4.3 (Build 43) - 2026-05-07
 
 - Replaced the SwiftUI `MenuBarExtra` dashboard host with an AppKit-owned status item and popover so menu-bar window sizing is stable.

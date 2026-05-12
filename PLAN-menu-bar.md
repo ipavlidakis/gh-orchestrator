@@ -129,6 +129,23 @@
   - 2026-05-07: `./script/build_and_run.sh --verify` succeeded.
   - 2026-05-07: `git diff --check` succeeded.
 
+### T18: Menu-Bar More Menu Settings Routing
+- status: `done`
+- owner: `codex-main`
+- depends_on: `PLAN-menu-bar.md:T16`
+- goal: make the menu-bar dashboard More menu open Settings through the active SwiftUI app-menu command instead of relying only on responder-chain selectors.
+- scope:
+  - keep routing in the app-target menu-bar presenter.
+  - preserve the existing `showSettingsWindow:` and `showPreferencesWindow:` fallback selectors.
+  - add focused coverage for the app-menu Settings command route.
+- deliverables:
+  - updated menu-bar popover Settings routing
+  - focused presenter tests
+- verification:
+  - 2026-05-12: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-settings-more-menu -only-testing:GHOrchestratorTests/MenuBarPopoverPresenterTests -only-testing:GHOrchestratorTests/MenuBarMoreMenuTests` succeeded.
+  - 2026-05-12: `./script/build_and_run.sh --verify` succeeded.
+  - 2026-05-12: `git diff --check` succeeded.
+
 ## Decision Log
 - 2026-04-14: when the Settings window is active, GHOrchestrator must present its app menu in the macOS menu bar with `About`, `Refresh`, `Settings…`, `Quit`, and `Help`; `Refresh` belongs directly under `About`, the top-level `Edit`, `View`, and `Window` menus must be hidden, and `Help` opens `https://github.com/ipavlidakis/gh-orchestrator`.
 - 2026-04-15: the persisted "Hide Dock icon" preference should be temporarily overridden while the Settings window is open so users can refocus the Settings window from the Dock after it loses focus.

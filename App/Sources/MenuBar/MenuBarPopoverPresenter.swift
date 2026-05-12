@@ -33,8 +33,8 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
         self.controller = controller
         self.softwareUpdateModel = softwareUpdateModel
         self.configuration = configuration
-        self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        self.popover = NSPopover()
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        popover = NSPopover()
         super.init()
 
         configureStatusItem(applicationIconController: applicationIconController)
@@ -108,22 +108,25 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
 
     private func openSettingsWindow() {
         closePopover()
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        let application = NSApplication.shared
+        application.activate(ignoringOtherApps: true)
 
-        if !NSApplication.shared.sendAction(
-            Selector(("showSettingsWindow:")),
-            to: nil,
-            from: nil
-        ) {
-            NSApplication.shared.sendAction(
+        if !Self.performSettingsMenuItemAction(in: application.mainMenu),
+           !application.sendAction(
+               Selector(("showSettingsWindow:")),
+               to: nil,
+               from: nil
+           )
+        {
+            application.sendAction(
                 Selector(("showPreferencesWindow:")),
                 to: nil,
                 from: nil
             )
         }
 
-        Task { @MainActor in
-            NSApplication.shared.activate(ignoringOtherApps: true)
+        Task { @MainActor [application] in
+            application.activate(ignoringOtherApps: true)
         }
     }
 
@@ -131,5 +134,28 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
         let image = (NSImage(named: NSImage.Name("MenuBarIcon"))?.copy() as? NSImage) ?? NSImage()
         image.isTemplate = true
         return image
+    }
+
+    static func performSettingsMenuItemAction(in mainMenu: NSMenu?) -> Bool {
+        guard
+            let settingsItem = settingsMenuItem(in: mainMenu),
+            let menu = settingsItem.menu,
+            let itemIndex = menu.items.firstIndex(of: settingsItem),
+            settingsItem.isEnabled
+        else {
+            return false
+        }
+
+        menu.performActionForItem(at: itemIndex)
+        return true
+    }
+
+    private static func settingsMenuItem(in mainMenu: NSMenu?) -> NSMenuItem? {
+        let settingsTitles = Set(["Settings…", "Settings...", "Preferences…", "Preferences..."])
+
+        return mainMenu?.items
+            .compactMap(\.submenu)
+            .flatMap(\.items)
+            .first { settingsTitles.contains($0.title) }
     }
 }
