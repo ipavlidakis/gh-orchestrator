@@ -1270,7 +1270,7 @@
   - The local release config still defaults new releases to `draft`, so this release required a follow-up publish call after the asset upload completed.
 
 ### T55: Release 0.4.5 Build 45
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `PLAN-menu-bar.md:T19`
 - goal: publish GHOrchestrator `0.4.5` as build `45` using the notarized DMG release workflow.
@@ -1284,9 +1284,19 @@
   - pushed release commit
   - GitHub Release `0.4.5` assets
 - verification:
-  - pending
+  - 2026-07-16: focused app tests and the Debug build succeeded before release preparation, including regression coverage for restoring the hidden Dock policy after dashboard browser links.
+  - 2026-07-16: `git push origin main` pushed release commit `f069921` (`[Fix] Restore Dock policy after browser links`) before cutting the release.
+  - 2026-07-16: `./script/release_dmg.sh --version 0.4.5 --build 45 --release-name '0.4.5 (Build 45)' --release-notes-file /tmp/GHOrchestrator-0.4.5-release-notes.md --allow-dirty` succeeded, including the universal Release archive, Developer ID signing, notarization acceptance (`c610eeb8-8ad5-4190-b065-833170a37d68`), stapling, checksum generation, and GitHub asset upload.
+  - 2026-07-16: `gh release edit 0.4.5 --draft=false` published GitHub Release `0.4.5` at `https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.4.5`.
+  - 2026-07-16: `git ls-remote --tags origin 0.4.5` confirmed remote tag `0.4.5` points to `f06992109a3d3d94dec9e673c00b17c73c7a7599`.
+  - 2026-07-16: the archived app reports version `0.4.5`, build `45`, bundle identifier `com.ipavlidakis.GHOrchestrator`, and Developer Team `UBW6JB7T2F`.
+  - 2026-07-16: local and GitHub-reported DMG SHA-256 values match: `817d5f2b21396a96d7368dd443a03351f56f1b57573eb495a1d0abb7117ff9a2`.
 - notes:
   - The user-facing change is the dashboard-link Dock-policy restoration tracked by `PLAN-menu-bar.md:T19`.
+  - Published assets:
+    - `GHOrchestrator-0.4.5.dmg`
+    - `GHOrchestrator-0.4.5.dmg.sha256.txt`
+  - Local Gatekeeper assessment of the DMG path returned `Insufficient Context`; the release script continued because Apple notarization was accepted and stapler validation succeeded.
 
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
