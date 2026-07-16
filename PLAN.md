@@ -1269,6 +1269,25 @@
     - `GHOrchestrator-0.4.1.dmg.sha256.txt`
   - The local release config still defaults new releases to `draft`, so this release required a follow-up publish call after the asset upload completed.
 
+### T55: Release 0.4.5 Build 45
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `PLAN-menu-bar.md:T19`
+- goal: publish GHOrchestrator `0.4.5` as build `45` using the notarized DMG release workflow.
+- scope:
+  - update the changelog for `0.4.5`.
+  - commit and push the Dock-policy fix and release notes.
+  - run the release DMG workflow to create the GitHub Release and upload assets.
+  - publish and verify the release and remote tag.
+- deliverables:
+  - updated `CHANGELOG.md`
+  - pushed release commit
+  - GitHub Release `0.4.5` assets
+- verification:
+  - pending
+- notes:
+  - The user-facing change is the dashboard-link Dock-policy restoration tracked by `PLAN-menu-bar.md:T19`.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`

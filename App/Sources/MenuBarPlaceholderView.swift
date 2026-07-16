@@ -49,6 +49,7 @@ struct MenuBarPlaceholderView: View {
     let model: MenuBarDashboardModel
     @Bindable var softwareUpdateModel: SoftwareUpdateModel
     let openSettingsAction: @MainActor () -> Void
+    let openURLAction: @MainActor (URL) -> Void
     let onMenuVisibilityChange: (Bool) -> Void
     
     var body: some View {
@@ -327,7 +328,7 @@ struct MenuBarPlaceholderView: View {
                                     jobID: jobID
                                 )
                             },
-                            onOpenURL: openURL
+                            onOpenURL: openURLAction
                         )
                     }
                 }
@@ -337,10 +338,6 @@ struct MenuBarPlaceholderView: View {
             .background(MenuBarScrollViewConfigurator())
             .frame(maxHeight: 520)
         }
-    }
-    
-    private func openURL(_ url: URL) {
-        NSWorkspace.shared.open(url)
     }
     
     private func openSettingsWindow() {

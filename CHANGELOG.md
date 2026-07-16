@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.5 (Build 45) - 2026-07-16
+
+- Fixed dashboard browser links so opening a pull request, workflow, job, step, check, or review comment no longer leaves GHOrchestrator visible in the Dock when the hidden-Dock preference is enabled.
+- Routed dashboard URL opening through the app controller and added regression coverage for restoring the effective Dock policy after browser handoff.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.4.4...0.4.5
+
 ## 0.4.4 (Build 44) - 2026-05-12
 
 - Fixed the menu-bar dashboard More menu so selecting Settings opens the Settings window through the active app-menu command.

@@ -94,6 +94,9 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
                 openSettingsAction: { [weak self] in
                     self?.openSettingsWindow()
                 },
+                openURLAction: { [weak controller] url in
+                    controller?.openURL(url)
+                },
                 onMenuVisibilityChange: { [weak controller] isVisible in
                     controller?.setMenuVisible(isVisible)
                 }

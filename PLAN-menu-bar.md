@@ -146,6 +146,28 @@
   - 2026-05-12: `./script/build_and_run.sh --verify` succeeded.
   - 2026-05-12: `git diff --check` succeeded.
 
+### T19: Browser Link Dock Policy Restoration
+- status: `done`
+- owner: `codex-main`
+- depends_on: `PLAN-menu-bar.md:T14`, `PLAN-menu-bar.md:T16`
+- goal: keep GHOrchestrator out of the Dock after a dashboard link opens in the browser when the persisted Dock icon preference is hidden.
+- scope:
+  - route dashboard browser links through the app controller that owns Dock visibility.
+  - reapply the effective Dock icon preference after handing the URL to the browser.
+  - add focused controller coverage for the browser-open path.
+- deliverables:
+  - app-target browser link routing
+  - focused controller regression test
+- verification:
+  - 2026-07-16: `tuist generate --no-open` succeeded.
+  - 2026-07-16: `xcodebuild test -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/GHOrchestrator-DerivedData-dock-link -only-testing:GHOrchestratorTests/AppControllerTests -only-testing:GHOrchestratorTests/MenuBarPopoverPresenterTests` succeeded.
+  - 2026-07-16: `xcodebuild build -quiet -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -configuration Debug -destination 'platform=macOS,arch=arm64' -derivedDataPath DerivedData` succeeded.
+  - 2026-07-16: the rebuilt app was launched in the background with the persisted hidden-Dock preference, and `lsappinfo` reported `type="UIElement"`.
+  - 2026-07-16: `git diff --check` succeeded.
+- notes:
+  - Keep Settings-window Dock visibility behavior unchanged.
+  - Dashboard links now route through `AppController`, which reapplies the effective Dock policy on the next main-actor turn after sending the URL to the browser.
+
 ## Decision Log
 - 2026-04-14: when the Settings window is active, GHOrchestrator must present its app menu in the macOS menu bar with `About`, `Refresh`, `Settings…`, `Quit`, and `Help`; `Refresh` belongs directly under `About`, the top-level `Edit`, `View`, and `Window` menus must be hidden, and `Help` opens `https://github.com/ipavlidakis/gh-orchestrator`.
 - 2026-04-15: the persisted "Hide Dock icon" preference should be temporarily overridden while the Settings window is open so users can refocus the Settings window from the Dock after it loses focus.

@@ -182,6 +182,38 @@ final class AppControllerTests: XCTestCase {
         XCTAssertEqual(applicationIconController.applyCurrentSystemAppearanceCallCount, 1)
     }
 
+    func testOpeningDashboardURLReappliesHiddenDockIconPreference() async {
+        let store = configuredSettingsStore(hideDockIcon: true)
+        let dockIconController = RecordingDockIconVisibilityController()
+        var openedURLs: [URL] = []
+        let controller = AppController(
+            settingsStore: store,
+            dataSource: MutableDashboardDataSource(),
+            authController: MutableAuthController(state: .authenticated(username: "octocat")),
+            sleeper: CancellingSleeper(),
+            dockIconVisibilityController: dockIconController,
+            applicationIconController: RecordingApplicationIconController(),
+            startAtLoginController: RecordingStartAtLoginController(),
+            notificationDelivery: AppControllerRecordingNotificationDelivery(),
+            softwareUpdateChecker: StubSoftwareUpdateChecker(),
+            softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false,
+            openURL: { openedURLs.append($0) }
+        )
+
+        await waitUntil("initial hidden Dock icon preference application") {
+            dockIconController.appliedValues == [true]
+        }
+
+        let url = URL(string: "https://github.com/openai/codex/actions/runs/1/job/2")!
+        controller.openURL(url)
+
+        XCTAssertEqual(openedURLs, [url])
+        await waitUntil("hidden Dock icon preference reapplication") {
+            dockIconController.appliedValues == [true, true]
+        }
+    }
+
     func testVisibleDockIconPreferenceReappliesCustomDockIconAtLaunch() async {
         let dockIconController = RecordingDockIconVisibilityController()
         let applicationIconController = RecordingApplicationIconController()

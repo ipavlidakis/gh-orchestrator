@@ -17,6 +17,7 @@ final class AppController {
     private let applicationIconController: any ApplicationIconControlling
     private let startAtLoginController: any StartAtLoginControlling
     private let notificationDelivery: any LocalNotificationDelivering
+    private let openURLAction: @MainActor (URL) -> Void
     private var isSettingsWindowVisible = false
 
     init(
@@ -47,6 +48,7 @@ final class AppController {
         self.applicationIconController = applicationIconController ?? ApplicationIconController()
         self.startAtLoginController = startAtLoginController
         self.notificationDelivery = resolvedNotificationDelivery
+        self.openURLAction = openURL
 
         let credentialStore = KeychainGitHubCredentialStore()
         let apiClient = URLSessionGitHubAPIClient(
@@ -157,6 +159,13 @@ final class AppController {
         applyDockIconPreference()
         if isVisible {
             refreshStartAtLoginStatus()
+        }
+    }
+
+    func openURL(_ url: URL) {
+        openURLAction(url)
+        Task { @MainActor [weak self] in
+            self?.applyDockIconPreference()
         }
     }
 
