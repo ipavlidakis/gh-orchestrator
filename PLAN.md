@@ -1321,6 +1321,20 @@
   - The release script created the release as a draft; it was published with `gh release edit 0.5.0 --draft=false --latest`.
   - The script's local Gatekeeper check returned `Insufficient Context` and continued, as in earlier releases.
 
+### T58: Release 0.5.1 Build 48
+- status: `done`
+- owner: `claude-main`
+- depends_on: `PLAN-actions-insights.md:A03`
+- goal: publish the faster refresh/Insights loading and progressive Insights filters.
+- verification:
+  - 2026-10-01: published https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.5.1 (not draft, not prerelease). Tag source is `main` at `d067fefc53a3c3c9f21c4b6202b6c39c5ccb67fe`; `git` and the GitHub tag ref agree.
+  - 2026-10-01: Release archive reports 0.5.1/build 48. Developer ID signing, Apple notarization (`40ec0a22-5638-4e9c-aca0-110971b8defc`, Accepted), and stapler validation passed for the DMG.
+  - 2026-10-01: DMG and checksum assets uploaded; local and GitHub-downloaded DMG SHA-256 agree: `bb86a35e9a4a8da7079c02c6de696b706289187e90958b04a4b20c1ac1e743ea`.
+- notes:
+  - Published directly with a temporary config copy (draft=false) because `Config/Release.local.json` defaults to draft; the copy was deleted afterwards.
+  - The worktree was made clean by ignoring `.DS_Store` and `.codex/config.toml` instead of passing `--allow-dirty`.
+  - The script's local Gatekeeper check returned `Insufficient Context` and continued, as in earlier releases.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`

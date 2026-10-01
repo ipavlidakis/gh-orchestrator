@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1 (Build 48) - 2026-10-01
+
+- Load Actions insights much faster: job lookups are batched through GraphQL, run pages load concurrently, and completed runs are cached in memory.
+- Speed up popover refresh by fetching workflow-run jobs concurrently and caching completed runs.
+- Show Insights filters step by step (repository, workflow, job, period) with the first option preselected.
+- Load Insights automatically whenever a filter changes; the Refresh button is gone.
+- Fix Insights summary and trend card padding.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.5.0...0.5.1
+
 ## 0.5.0 (Build 47) - 2026-10-01
 
 - Redesign the menu bar popover with a single-row header, status-chip PR cards, a checks progress bar, expandable workflow and job details, and a footer showing the update time and remaining API calls.
