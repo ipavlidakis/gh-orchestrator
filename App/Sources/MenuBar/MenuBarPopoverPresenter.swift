@@ -62,7 +62,12 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
 
     private func applyPreferredHeight() {
         guard let preferredHeight, popover.contentSize.height != preferredHeight else { return }
+        // AppKit animates content-size changes and re-lays out the SwiftUI tree on every frame, which
+        // stutters on long job lists. Resize in one step instead.
+        let animates = popover.animates
+        popover.animates = false
         popover.contentSize = CGSize(width: configuration.contentSize.width, height: preferredHeight)
+        popover.animates = animates
     }
 
     func closePopover() {
