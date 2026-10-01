@@ -830,16 +830,18 @@ struct RepositorySettingsPane: View {
                             presentAddRepositoryAlert()
                         } label: {
                             Label("Add Repository", systemImage: "plus")
+                                .labelStyle(.iconOnly)
+                                .frame(width: 22, height: 16)
                         }
-                        .labelStyle(.iconOnly)
 
                         Button {
                             model.removeObservedRepositories(withIDs: selectedRepositoryIDs)
                             selectedRepositoryIDs.removeAll()
                         } label: {
                             Label("Remove Repositories", systemImage: "minus")
+                                .labelStyle(.iconOnly)
+                                .frame(width: 22, height: 16)
                         }
-                        .labelStyle(.iconOnly)
                         .disabled(selectedRepositoryIDs.isEmpty)
 
                         Spacer()
