@@ -870,6 +870,7 @@ private struct ExpandedPullRequestDetailsView: View {
                                             job: job,
                                             now: context.date,
                                             isRetrying: isRetryingJob(job.id),
+                                            canRetry: workflowRun.status.lowercased() == "completed",
                                             retryErrorMessage: retryErrorMessage(job.id),
                                             onRetryWorkflowJob: {
                                                 onRetryWorkflowJob(
@@ -980,6 +981,8 @@ private struct WorkflowJobView: View {
     let job: ActionJobItem
     let now: Date
     let isRetrying: Bool
+    /// GitHub only re-runs a job once its whole workflow run has finished.
+    let canRetry: Bool
     let retryErrorMessage: String?
     let onRetryWorkflowJob: () -> Void
     let onOpenURL: (URL) -> Void
@@ -1028,7 +1031,10 @@ private struct WorkflowJobView: View {
                                         Button("Retry job", action: onRetryWorkflowJob)
                                             .controlSize(.small)
                                             .font(.caption2.weight(.medium))
-                                            .help("Re-run this job in GitHub Actions")
+                                            .disabled(!canRetry)
+                                            .help(canRetry
+                                                ? "Re-run this job in GitHub Actions"
+                                                : "GitHub can re-run a job only after the whole workflow run finishes.")
                                     }
                                 }
                             }

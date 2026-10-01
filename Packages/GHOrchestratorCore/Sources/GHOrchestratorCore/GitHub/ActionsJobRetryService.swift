@@ -58,8 +58,10 @@ private func retryFailureMessage(for error: GitHubAPIClientError) -> String {
         return "No GitHub session is available. Sign in again and retry."
     case .requestFailed(statusCode: 401, _):
         return "GitHub rejected the retry request. Sign in again and retry."
-    case .requestFailed(statusCode: 403, _):
-        return "GitHub denied the retry request. Confirm the signed-in account can write to this repository."
+    case .requestFailed(statusCode: 403, let message):
+        let detail = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reason = detail.isEmpty ? "" : " GitHub said: \(detail)"
+        return "GitHub denied the retry request.\(reason) Jobs can only be re-run after the whole workflow run finishes, and the signed-in account needs write access (and organization approval for this app)."
     default:
         return error.displayMessage
     }
