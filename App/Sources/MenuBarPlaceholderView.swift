@@ -49,6 +49,9 @@ struct MenuBarPlaceholderView: View {
     let model: MenuBarDashboardModel
     @Bindable var softwareUpdateModel: SoftwareUpdateModel
     var requestLogModel: GitHubRequestLogModel?
+    /// Tallest the popover may grow; the dashboard reports its natural height up to this limit.
+    var maximumHeight: CGFloat = 620
+    var onPreferredHeightChange: (CGFloat) -> Void = { _ in }
     let openSettingsAction: @MainActor () -> Void
     let openURLAction: @MainActor (URL) -> Void
     let onMenuVisibilityChange: (Bool) -> Void
@@ -61,17 +64,30 @@ struct MenuBarPlaceholderView: View {
         }
     }
 
+    @State private var headerHeight: CGFloat = 100
+    @State private var scrollContentHeight: CGFloat = 0
+
+    private static let footerHeight: CGFloat = 39
+    private static let contentTopPadding: CGFloat = 12
+
+    /// The list shrinks to its content, and scrolls only once the popover reaches its maximum height.
+    private var scrollViewHeight: CGFloat {
+        let available = maximumHeight - headerHeight - 1 - Self.contentTopPadding - Self.footerHeight
+        return min(max(scrollContentHeight, 1), max(available, 120))
+    }
+
     private var dashboardContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerActions
                 .padding(.horizontal, 14)
                 .padding(.top, 14)
                 .padding(.bottom, 10)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             Divider()
             content
                 .padding(.horizontal, 12)
-                .padding(.top, 12)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.top, Self.contentTopPadding)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             if case .loaded(let sections) = model.contentState {
                 DashboardFooterBar(
                     sections: sections,
@@ -82,7 +98,8 @@ struct MenuBarPlaceholderView: View {
             }
         }
         .frame(width: 440, alignment: .leading)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { onPreferredHeightChange($0) }
+        .frame(maxHeight: .infinity, alignment: .top)
         .task {
             onMenuVisibilityChange(true)
         }
@@ -418,7 +435,10 @@ struct MenuBarPlaceholderView: View {
                         )
                     }
                 }
+                .padding(.bottom, 12)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { scrollContentHeight = $0 }
             }
+            .frame(height: scrollViewHeight)
         }
     }
     

@@ -24,6 +24,8 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
     private let configuration: MenuBarPopoverConfiguration
     private let statusItem: NSStatusItem
     private let popover: NSPopover
+    /// Height the dashboard asked for, so the popover fits its content instead of a fixed size.
+    private var preferredHeight: CGFloat?
 
     init(
         controller: AppController,
@@ -48,7 +50,19 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
         }
 
         configuration.apply(to: popover)
+        applyPreferredHeight()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    }
+
+    private func updatePreferredHeight(_ height: CGFloat) {
+        guard height > 1 else { return }
+        preferredHeight = min(height.rounded(.up), configuration.contentSize.height)
+        applyPreferredHeight()
+    }
+
+    private func applyPreferredHeight() {
+        guard let preferredHeight, popover.contentSize.height != preferredHeight else { return }
+        popover.contentSize = CGSize(width: configuration.contentSize.width, height: preferredHeight)
     }
 
     func closePopover() {
@@ -145,6 +159,10 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
                 model: controller.dashboardModel,
                 softwareUpdateModel: softwareUpdateModel,
                 requestLogModel: controller.requestLogModel,
+                maximumHeight: configuration.contentSize.height,
+                onPreferredHeightChange: { [weak self] height in
+                    self?.updatePreferredHeight(height)
+                },
                 openSettingsAction: { [weak self] in
                     self?.openSettingsWindow()
                 },
@@ -157,7 +175,6 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
             )
             .frame(
                 width: configuration.contentSize.width,
-                height: configuration.contentSize.height,
                 alignment: .topLeading
             )
         )

@@ -56,6 +56,38 @@ final class DesignParityRenderingTests: XCTestCase {
         try await render(page(GitHubRequestUsagePane(requestLogModel: log)), size: CGSize(width: 624, height: 420), name: "pane-requests")
     }
 
+    func testPopoverReportsHeightThatFitsItsContent() async throws {
+        let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: storageURL) }
+        let store = SettingsStore(storageURL: storageURL)
+        let repository = ObservedRepository(owner: "GetStream", name: "stream-video-swift")
+        store.settings.observedRepositories = [repository]
+        let updates = SoftwareUpdateModel(store: store, checker: GitHubReleaseUpdateChecker(), installer: DMGSoftwareUpdateInstaller())
+        let model = MenuBarDashboardModel(settingsStore: store)
+        model.authenticationState = .authenticated(username: "ipavlidakis")
+        let pulls = fixturePullRequests(repository: repository)
+        var reported: [CGFloat] = []
+
+        func render(collapsed: Bool) async throws -> CGFloat {
+            model.state = .loaded([RepositorySection(repository: repository, pullRequests: pulls)])
+            model.collapsedRepositoryIDs = collapsed ? [repository.normalizedLookupKey] : []
+            reported = []
+            let wired = MenuBarPlaceholderView(
+                model: model, softwareUpdateModel: updates, maximumHeight: 620,
+                onPreferredHeightChange: { reported.append($0) },
+                openSettingsAction: {}, openURLAction: { _ in }, onMenuVisibilityChange: { _ in }
+            )
+            try await self.render(wired.frame(width: 440, height: 620, alignment: .topLeading), size: CGSize(width: 440, height: 620), name: collapsed ? "popover-collapsed" : "popover-full")
+            return try XCTUnwrap(reported.last)
+        }
+
+        let collapsedHeight = try await render(collapsed: true)
+        let fullHeight = try await render(collapsed: false)
+        XCTAssertLessThan(collapsedHeight, 300, "A collapsed dashboard must not keep the fixed popover height")
+        XCTAssertLessThanOrEqual(fullHeight, 620)
+        XCTAssertGreaterThan(fullHeight, collapsedHeight)
+    }
+
     private func fixturePullRequests(repository: ObservedRepository) -> [PullRequestItem] {
         let now = Date()
         func url(_ n: Int) -> URL { URL(string: "https://github.com/x/y/pull/\(n)")! }
