@@ -153,6 +153,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
     public let url: URL
     public let authorLogin: String?
     public let isDraft: Bool
+    public let createdAt: Date?
     public let updatedAt: Date
     public let reviewStatus: ReviewStatus
     public let unresolvedReviewThreadCount: Int
@@ -172,6 +173,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
         url: URL,
         authorLogin: String? = nil,
         isDraft: Bool,
+        createdAt: Date? = nil,
         updatedAt: Date,
         reviewStatus: ReviewStatus,
         unresolvedReviewThreadCount: Int,
@@ -186,6 +188,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
         self.url = url
         self.authorLogin = authorLogin
         self.isDraft = isDraft
+        self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.reviewStatus = reviewStatus
         self.unresolvedReviewThreadCount = unresolvedReviewThreadCount

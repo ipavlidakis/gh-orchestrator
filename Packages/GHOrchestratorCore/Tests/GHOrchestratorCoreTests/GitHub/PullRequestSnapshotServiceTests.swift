@@ -36,6 +36,7 @@ final class PullRequestSnapshotServiceTests: XCTestCase {
         let pullRequest = try XCTUnwrap(snapshots.first?.pullRequests.first)
 
         XCTAssertEqual(pullRequest.reviewStatus, .approved)
+        XCTAssertEqual(pullRequest.createdAt, ISO8601DateFormatter().date(from: "2026-04-01T06:01:33Z"))
         XCTAssertEqual(pullRequest.authorLogin, "dependabot")
         XCTAssertEqual(pullRequest.checkRollupState, .passing)
         XCTAssertEqual(pullRequest.unresolvedReviewThreadCount, 0)

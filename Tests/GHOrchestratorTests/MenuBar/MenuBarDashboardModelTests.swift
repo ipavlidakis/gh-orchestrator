@@ -5,6 +5,23 @@ import GHOrchestratorCore
 
 @MainActor
 final class MenuBarDashboardModelTests: XCTestCase {
+    func testSortPreferenceImmediatelyReordersLoadedContentWithoutRefresh() {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        let model = MenuBarDashboardModel(settingsStore: store, dataSource: MockDashboardDataSource(sections: []), sleeper: RecordingSleeper())
+        let repository = ObservedRepository(owner: "example", name: "repo")
+        let items = [(90, "Alpha", 100.0), (2, "Zebra", 200.0)].map { number, title, created in
+            PullRequestItem(repository: repository, number: number, title: title, url: URL(string: "https://github.com/example/repo/pull/\(number)")!, isDraft: false, createdAt: Date(timeIntervalSince1970: created), updatedAt: .now, reviewStatus: .none, unresolvedReviewThreadCount: 0, checkRollupState: .none)
+        }
+        let loadedState = MenuBarDashboardModel.State.loaded([RepositorySection(repository: repository, pullRequests: items)])
+        model.state = loadedState
+        for (order, expected) in [(PullRequestSortOrder.createdNewestFirst, [2, 90]), (.title, [90, 2]), (.createdOldestFirst, [90, 2])] {
+            store.settings.pullRequestSortOrder = order
+            guard case .loaded(let sections) = model.contentState else { return XCTFail("Sorting must retain loaded content") }
+            XCTAssertEqual(sections.first?.pullRequests.map(\.number), expected)
+            XCTAssertEqual(model.state, loadedState, "Sorting must not start a network refresh")
+        }
+    }
+
     func testHiddenDashboardLoadsSectionsWhenRepositoriesAreConfigured() async throws {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings = AppSettings(
@@ -506,11 +523,12 @@ final class MenuBarDashboardModelTests: XCTestCase {
     }
 
     private func waitForCommandFailure(on model: MenuBarDashboardModel) async {
-        for _ in 0..<50 {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while ContinuousClock.now < deadline {
             if case .commandFailure = model.state {
                 return
             }
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(5))
         }
 
         XCTFail("Timed out waiting for command failure state")

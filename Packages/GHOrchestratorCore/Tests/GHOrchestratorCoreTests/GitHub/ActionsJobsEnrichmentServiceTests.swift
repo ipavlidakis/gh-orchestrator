@@ -12,6 +12,7 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             url: URL(string: "https://github.com/cli/cli/pull/100")!,
             authorLogin: "octocat",
             isDraft: false,
+            createdAt: Date(timeIntervalSince1970: 1_600_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_700_000_000),
             reviewStatus: .approved,
             unresolvedReviewThreadCount: 0,
@@ -53,6 +54,7 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
 
         XCTAssertEqual(workflowRun.name, "Lint")
         XCTAssertEqual(items.first?.authorLogin, "octocat")
+        XCTAssertEqual(items.first?.createdAt, snapshot.createdAt)
         XCTAssertEqual(job.name, "lint")
         XCTAssertEqual(job.createdAt, date("2026-04-14T06:09:30Z"))
         XCTAssertEqual(job.startedAt, date("2026-04-14T06:10:00Z"))

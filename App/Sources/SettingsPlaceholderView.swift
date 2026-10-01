@@ -68,7 +68,7 @@ struct SettingsWindowView: View {
             .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 230)
             .toolbar(removing: .sidebarToggle)
         } detail: {
-            SettingsDetailScrollView(title: selectedPane.title) {
+            SettingsDetailForm(title: selectedPane.title) {
                 switch selectedPane {
                 case .general:
                     GeneralSettingsPane(
@@ -117,18 +117,21 @@ struct SettingsWindowView: View {
     }
 }
 
-private struct SettingsDetailScrollView<Content: View>: View {
+private struct SettingsDetailForm<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                content
-            }
-            .padding(28)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        if #available(macOS 26, *) {
+            settingsForm.buttonStyle(.glass)
+        } else {
+            settingsForm
         }
+    }
+
+    private var settingsForm: some View {
+        Form { content }
+        .formStyle(.grouped)
         .navigationTitle(title)
     }
 }
@@ -137,7 +140,7 @@ private struct GitHubRequestUsagePane: View {
     let requestLogModel: GitHubRequestLogModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        Group {
             SettingsGroup(title: "Quota by resource") {
                 if requestLogModel.latestRateLimitsByResource.isEmpty {
                     SettingsTextBlock(
@@ -146,11 +149,7 @@ private struct GitHubRequestUsagePane: View {
                     )
                 } else {
                     VStack(alignment: .leading, spacing: 12) {
-                        ForEach(Array(requestLogModel.latestRateLimitsByResource.enumerated()), id: \.element.resource) { index, rateLimit in
-                            if index > 0 {
-                                Divider()
-                            }
-
+                        ForEach(requestLogModel.latestRateLimitsByResource, id: \.resource) { rateLimit in
                             GitHubRateLimitResourceRow(rateLimit: rateLimit)
                         }
                     }
@@ -167,12 +166,8 @@ private struct GitHubRequestUsagePane: View {
                         bodyText: "GitHub requests will appear here after sign-in or dashboard refreshes."
                     )
                 } else {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(requestLogModel.records.prefix(30).enumerated()), id: \.element.id) { index, record in
-                            if index > 0 {
-                                Divider()
-                            }
-
+                    Group {
+                        ForEach(Array(requestLogModel.records.prefix(30))) { record in
                             GitHubRequestRecordRow(record: record)
                         }
                     }
@@ -302,17 +297,23 @@ private struct GeneralSettingsPane: View {
     @Bindable var softwareUpdateModel: SoftwareUpdateModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        Group {
             SettingsGroup(title: "App behavior") {
+                SettingsRow(title: "Pull request order") {
+                    Picker("Pull request order", selection: $model.pullRequestSortOrder) {
+                        ForEach(PullRequestSortOrder.allCases, id: \.self) { order in
+                            Text(order.title).tag(order)
+                        }
+                    }
+                }
+
                 SettingsRow(
                     title: "Hide Dock icon",
                     subtitle: "Keep GHOrchestrator in the menu bar while removing it from the Dock."
                 ) {
-                    Toggle("", isOn: $model.hideDockIcon)
+                    Toggle("Hide Dock icon", isOn: $model.hideDockIcon)
                         .labelsHidden()
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Start at login",
@@ -325,24 +326,23 @@ private struct GeneralSettingsPane: View {
                             }
                         }
 
-                        Toggle("", isOn: $model.startAtLogin)
+                        Toggle("Start at login", isOn: $model.startAtLogin)
                             .labelsHidden()
                     }
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Polling interval",
                     subtitle: "Refresh on this interval whether the menu is hidden or visible."
                 ) {
                     HStack(spacing: 10) {
-                        Text("Seconds")
-                            .foregroundStyle(.secondary)
-
                         TextField("Seconds", text: $model.pollingIntervalText)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 56)
+
+                        Text("seconds")
+                            .fixedSize()
+                            .foregroundStyle(.secondary)
 
                         Stepper(
                             value: Binding(
@@ -352,10 +352,11 @@ private struct GeneralSettingsPane: View {
                             in: AppSettings.allowedPollingIntervalRange,
                             step: 15
                         ) {
-                            Text("\(model.pollingIntervalStepperValue) seconds")
-                                .monospacedDigit()
+                            EmptyView()
                         }
+                        .accessibilityLabel("Adjust polling interval in seconds")
                         .labelsHidden()
+                        .fixedSize()
                     }
                 }
             } footer: {
@@ -382,17 +383,13 @@ private struct GeneralSettingsPane: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Divider()
-
                 SettingsRow(
                     title: "Automatic checks",
                     subtitle: "Look for new GitHub Release builds periodically."
                 ) {
-                    Toggle("", isOn: $softwareUpdateModel.automaticallyCheckForUpdates)
+                    Toggle("Automatic checks", isOn: $softwareUpdateModel.automaticallyCheckForUpdates)
                         .labelsHidden()
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Actions",
@@ -418,7 +415,6 @@ private struct GeneralSettingsPane: View {
                 }
 
                 if let releaseNotes = softwareUpdateModel.availableUpdate?.releaseNotes {
-                    Divider()
 
                     SettingsTextBlock(
                         title: "Release notes",
@@ -434,69 +430,75 @@ private struct GeneralSettingsPane: View {
                     title: "Pull requests",
                     subtitle: "Maximum PRs loaded per configured repository."
                 ) {
-                    Stepper(
-                        value: Binding(
-                            get: { model.graphQLSearchResultLimit },
-                            set: { model.graphQLSearchResultLimit = $0 }
-                        ),
-                        in: AppSettings.allowedGraphQLConnectionLimitRange
-                    ) {
+                    HStack(spacing: 8) {
                         Text("\(model.graphQLSearchResultLimit)")
                             .monospacedDigit()
+                        Stepper(
+                            "Pull requests",
+                            value: Binding(
+                                get: { model.graphQLSearchResultLimit },
+                                set: { model.graphQLSearchResultLimit = $0 }
+                            ),
+                            in: AppSettings.allowedGraphQLConnectionLimitRange
+                        )
+                        .fixedSize()
                     }
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Review threads",
                     subtitle: "Maximum review threads loaded per PR."
                 ) {
-                    Stepper(
-                        value: Binding(
-                            get: { model.graphQLReviewThreadLimit },
-                            set: { model.graphQLReviewThreadLimit = $0 }
-                        ),
-                        in: AppSettings.allowedGraphQLConnectionLimitRange
-                    ) {
+                    HStack(spacing: 8) {
                         Text("\(model.graphQLReviewThreadLimit)")
                             .monospacedDigit()
+                        Stepper(
+                            "Review threads",
+                            value: Binding(
+                                get: { model.graphQLReviewThreadLimit },
+                                set: { model.graphQLReviewThreadLimit = $0 }
+                            ),
+                            in: AppSettings.allowedGraphQLConnectionLimitRange
+                        )
+                        .fixedSize()
                     }
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Comments per thread",
                     subtitle: "Latest comments loaded for each review thread."
                 ) {
-                    Stepper(
-                        value: Binding(
-                            get: { model.graphQLReviewThreadCommentLimit },
-                            set: { model.graphQLReviewThreadCommentLimit = $0 }
-                        ),
-                        in: AppSettings.allowedGraphQLReviewThreadCommentLimitRange
-                    ) {
+                    HStack(spacing: 8) {
                         Text("\(model.graphQLReviewThreadCommentLimit)")
                             .monospacedDigit()
+                        Stepper(
+                            "Comments per thread",
+                            value: Binding(
+                                get: { model.graphQLReviewThreadCommentLimit },
+                                set: { model.graphQLReviewThreadCommentLimit = $0 }
+                            ),
+                            in: AppSettings.allowedGraphQLReviewThreadCommentLimitRange
+                        )
+                        .fixedSize()
                     }
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Check contexts",
                     subtitle: "Maximum check runs/status contexts loaded per PR."
                 ) {
-                    Stepper(
-                        value: Binding(
-                            get: { model.graphQLCheckContextLimit },
-                            set: { model.graphQLCheckContextLimit = $0 }
-                        ),
-                        in: AppSettings.allowedGraphQLConnectionLimitRange
-                    ) {
+                    HStack(spacing: 8) {
                         Text("\(model.graphQLCheckContextLimit)")
                             .monospacedDigit()
+                        Stepper(
+                            "Check contexts",
+                            value: Binding(
+                                get: { model.graphQLCheckContextLimit },
+                                set: { model.graphQLCheckContextLimit = $0 }
+                            ),
+                            in: AppSettings.allowedGraphQLConnectionLimitRange
+                        )
+                        .fixedSize()
                     }
                 }
             } footer: {
@@ -531,7 +533,7 @@ private struct GitHubSettingsPane: View {
     @Bindable var model: SettingsModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        Group {
             SettingsGroup(title: "Connection") {
                 SettingsRow(title: "Status") {
                     Text(model.authenticationDescription)
@@ -541,14 +543,11 @@ private struct GitHubSettingsPane: View {
 
                 switch model.authenticationState {
                 case .authenticated(let username):
-                    Divider()
 
                     SettingsTextBlock(
                         title: "Account",
                         bodyText: "Signed in as \(username).\nThe dashboard can fetch GitHub data with this account."
                     )
-
-                    Divider()
 
                     SettingsRow(
                         title: "Actions",
@@ -560,14 +559,11 @@ private struct GitHubSettingsPane: View {
                         .disabled(!model.canSignOut)
                     }
                 case .notConfigured:
-                    Divider()
 
                     SettingsTextBlock(
                         title: "OAuth not configured",
                         bodyText: "This build does not include a GitHub OAuth client ID. Add `clientID` to `Config/GitHubOAuth.local.json` before generating/building the app, or use the build-time env var fallback. The GitHub OAuth app must also have device flow enabled."
                     )
-
-                    Divider()
 
                     SettingsRow(
                         title: "Create OAuth App",
@@ -576,8 +572,6 @@ private struct GitHubSettingsPane: View {
                         Link("Open Registration Page", destination: AppMetadata.gitHubOAuthAppRegistrationURL)
                     }
 
-                    Divider()
-
                     SettingsRow(
                         title: "Setup Guide",
                         subtitle: "Open the GitHub docs for the exact OAuth app creation steps."
@@ -585,14 +579,11 @@ private struct GitHubSettingsPane: View {
                         Link("Open GitHub Docs", destination: AppMetadata.gitHubOAuthAppDocsURL)
                     }
                 case .signedOut:
-                    Divider()
 
                     SettingsTextBlock(
                         title: "Sign in",
                         bodyText: "Start GitHub sign-in to get a one-time device code, then approve that code in your browser."
                     )
-
-                    Divider()
 
                     SettingsRow(
                         title: "Actions",
@@ -604,15 +595,12 @@ private struct GitHubSettingsPane: View {
                         .disabled(!model.canStartSignIn)
                     }
                 case .authorizing:
-                    Divider()
 
                     if let userCode = model.deviceAuthorizationUserCode {
                         SettingsTextBlock(
                             title: "Approve device code",
                             bodyText: "Enter this one-time code on GitHub to finish sign-in."
                         )
-
-                        Divider()
 
                         SettingsRow(
                             title: "Verification code",
@@ -624,7 +612,6 @@ private struct GitHubSettingsPane: View {
                         }
 
                         if let verificationURI = model.deviceAuthorizationVerificationURI {
-                            Divider()
 
                             SettingsRow(
                                 title: "Verification page",
@@ -639,8 +626,6 @@ private struct GitHubSettingsPane: View {
                             bodyText: "Requesting a GitHub device code for this Mac."
                         )
 
-                        Divider()
-
                         SettingsRow(
                             title: "Progress",
                             subtitle: "Waiting for GitHub to issue the device code."
@@ -650,14 +635,11 @@ private struct GitHubSettingsPane: View {
                         }
                     }
                 case .authFailure(let message):
-                    Divider()
 
                     SettingsTextBlock(
                         title: "Authentication failed",
                         bodyText: message
                     )
-
-                    Divider()
 
                     SettingsRow(
                         title: "Actions",
@@ -690,13 +672,10 @@ private struct RepositorySettingsPane: View {
     @State private var selectedRepositoryIDs = Set<String>()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        Group {
             SettingsGroup(title: "Observed repositories") {
                 VStack(spacing: 0) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color(nsColor: .textBackgroundColor))
-
+                    Group {
                         if model.observedRepositories.isEmpty {
                             Text("No Observed Repositories")
                                 .foregroundStyle(.secondary)
@@ -711,28 +690,25 @@ private struct RepositorySettingsPane: View {
                                 }
                             }
                             .listStyle(.plain)
-                            .scrollContentBackground(.hidden)
                         }
                     }
                     .frame(minHeight: 240)
-
-                    Divider()
 
                     HStack(spacing: 8) {
                         Button {
                             presentAddRepositoryAlert()
                         } label: {
-                            Image(systemName: "plus")
+                            Label("Add Repository", systemImage: "plus")
                         }
-                        .buttonStyle(.borderless)
+                        .labelStyle(.iconOnly)
 
                         Button {
                             model.removeObservedRepositories(withIDs: selectedRepositoryIDs)
                             selectedRepositoryIDs.removeAll()
                         } label: {
-                            Image(systemName: "minus")
+                            Label("Remove Repositories", systemImage: "minus")
                         }
-                        .buttonStyle(.borderless)
+                        .labelStyle(.iconOnly)
                         .disabled(selectedRepositoryIDs.isEmpty)
 
                         Spacer()
@@ -779,7 +755,7 @@ private struct NotificationSettingsPane: View {
     @Bindable var model: SettingsModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        Group {
             SettingsGroup(title: "Permission") {
                 SettingsRow(
                     title: "Status",
@@ -788,8 +764,6 @@ private struct NotificationSettingsPane: View {
                     Text(model.notificationAuthorizationDescription)
                         .foregroundStyle(notificationPermissionColor)
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Enable Notifications",
@@ -809,12 +783,8 @@ private struct NotificationSettingsPane: View {
                         bodyText: "Add repositories before enabling notification triggers."
                     )
                 } else {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(model.observedRepositories.enumerated()), id: \.offset) { index, repository in
-                            if index > 0 {
-                                Divider()
-                            }
-
+                    Group {
+                        ForEach(model.observedRepositories) { repository in
                             RepositoryNotificationSettingsRows(
                                 repository: repository,
                                 model: model
@@ -865,13 +835,13 @@ private struct RepositoryNotificationSettingsRows: View {
     @Bindable var model: SettingsModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        Group {
             SettingsRow(
                 title: repository.fullName,
                 subtitle: "Evaluate all open pull requests in this repository."
             ) {
                 Toggle(
-                    "",
+                    "Repository notifications",
                     isOn: Binding(
                         get: {
                             model.isRepositoryNotificationsEnabled(repositoryID: repository.id)
@@ -960,7 +930,6 @@ private struct WorkflowJobFilterPicker: View {
             Label(jobFilterSummary, systemImage: "checklist")
                 .lineLimit(1)
         }
-        .menuStyle(.borderlessButton)
         .frame(width: 180, alignment: .trailing)
     }
 
@@ -1080,7 +1049,6 @@ private struct WorkflowFilterPicker: View {
             Label(model.workflowNameFilterSummary(repositoryID: repositoryID), systemImage: "list.bullet.rectangle")
                 .lineLimit(1)
         }
-        .menuStyle(.borderlessButton)
         .frame(width: 180, alignment: .trailing)
     }
 
@@ -1136,7 +1104,7 @@ private struct NotificationTriggerToggleRow: View {
             subtitle: trigger.settingsSubtitle
         ) {
             Toggle(
-                "",
+                trigger.settingsTitle,
                 isOn: Binding(
                     get: {
                         model.isNotificationTriggerEnabled(
@@ -1210,20 +1178,12 @@ struct SettingsGroup<Content: View, Footer: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        Section {
+            content
+        } header: {
             Text(title)
-                .font(.headline)
-
-            VStack(alignment: .leading, spacing: 0) {
-                content
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 6)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-
+        } footer: {
             footer
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 }
@@ -1244,7 +1204,10 @@ struct SettingsRow<Accessory: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: subtitle == nil ? .center : .top, spacing: 16) {
+        LabeledContent {
+            accessory
+                .labelsHidden()
+        } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
 
@@ -1255,12 +1218,7 @@ struct SettingsRow<Accessory: View>: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-
-            Spacer(minLength: 24)
-
-            accessory
         }
-        .padding(.vertical, 10)
     }
 }
 
@@ -1292,7 +1250,6 @@ private struct CommandListView: View {
                     .padding(.vertical, 8)
                     .padding(.horizontal, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
         .padding(.vertical, 10)
