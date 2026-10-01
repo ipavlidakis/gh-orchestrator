@@ -81,7 +81,7 @@ Owner: `MenuBarPopoverPresenter.swift` and the `MenuBarIcon` asset.
 ## Settings window
 Owner: `SettingsPlaceholderView.swift` and `Settings/`.
 - **Window.** Fixed 820 x 620 content. The title bar is transparent and folded into the content (`SettingsWindowChromeConfigurator`), so the traffic lights sit on the sidebar. The configurator re-asserts its settings on key, update, and resize because SwiftUI resets them.
-- **Layout.** `SettingsSidebar` (196 wide, 52 top padding to clear the traffic lights, accent-filled selected row, app mark at the bottom) plus `SettingsDetailPage` (centered 15 pt title, scrolling content, 28 horizontal padding, 20 between groups).
+- **Layout.** `SettingsSidebar` (196 wide, 52 top padding to clear the traffic lights, accent-filled selected row, app mark at the bottom). On macOS 26 it floats as a Liquid Glass panel (`glassEffect(.regular, in:)`, 22 pt radius, 8 pt inset) over the system window background; earlier systems get a flat tinted rail. Do not paint opaque fills behind it, and keep the window background at `windowBackgroundColor` plus `SettingsDetailPage` (centered 15 pt title, scrolling content, 28 horizontal padding, 20 between groups).
 - **Building a pane.** Use only the shared primitives, never a raw `Form` or `Section`:
   - `SettingsGroup(title:)`: uppercase label, rounded card, automatic dividers between children, optional footer.
   - `SettingsRow(title:subtitle:subtitleColor:)`: title left, control right. The control is fixed-size and trailing.

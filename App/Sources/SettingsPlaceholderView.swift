@@ -84,7 +84,7 @@ struct SettingsWindowView: View {
         }
         .frame(width: 820)
         .frame(minHeight: 620, idealHeight: 620, maxHeight: .infinity)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(Color(nsColor: .windowBackgroundColor))
         .background(SettingsWindowChromeConfigurator())
         .ignoresSafeArea()
         .windowMinimizeBehavior(.disabled)
@@ -115,10 +115,27 @@ struct SettingsWindowView: View {
 }
 
 /// Left rail: window controls sit on top of it, then the panes, then the app mark.
+/// On macOS 26 it floats as a Liquid Glass panel; earlier systems get a flat tinted rail.
 private struct SettingsSidebar: View {
     @Binding var selection: SettingsPane?
 
     var body: some View {
+        if #available(macOS 26, *) {
+            rail
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .padding(8)
+                .frame(width: 212)
+                .frame(maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            rail
+                .background(Color.primary.opacity(0.05))
+                .overlay(alignment: .trailing) {
+                    Rectangle().fill(.separator).frame(width: 0.5)
+                }
+        }
+    }
+
+    private var rail: some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(SettingsPane.allCases) { pane in
                 SettingsSidebarRow(pane: pane, isSelected: selection == pane) {
@@ -141,10 +158,6 @@ private struct SettingsSidebar: View {
         .padding(.bottom, 14)
         .frame(width: 196)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.primary.opacity(0.05))
-        .overlay(alignment: .trailing) {
-            Rectangle().fill(.separator).frame(width: 0.5)
-        }
     }
 }
 
@@ -251,7 +264,7 @@ private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
             if window.titleVisibility != .hidden { window.titleVisibility = .hidden }
             if window.titlebarSeparatorStyle != .none { window.titlebarSeparatorStyle = .none }
             if !window.isMovableByWindowBackground { window.isMovableByWindowBackground = true }
-            if window.backgroundColor != .textBackgroundColor { window.backgroundColor = .textBackgroundColor }
+            if window.backgroundColor != .windowBackgroundColor { window.backgroundColor = .windowBackgroundColor }
         }
 
         deinit {
