@@ -272,12 +272,9 @@ struct GitHubRequestUsagePane: View {
                         bodyText: "Run a dashboard refresh after signing in to collect GitHub quota headers."
                     )
                 } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(requestLogModel.latestRateLimitsByResource, id: \.resource) { rateLimit in
-                            GitHubRateLimitResourceRow(rateLimit: rateLimit)
-                        }
+                    ForEach(requestLogModel.latestRateLimitsByResource, id: \.resource) { rateLimit in
+                        GitHubRateLimitResourceRow(rateLimit: rateLimit)
                     }
-                    .padding(.vertical, 10)
                 }
             } footer: {
                 Text("GitHub reports separate resources such as REST core and GraphQL. \(requestLogModel.records.count) requests recorded in this app run; \(requestLogModel.requestsWithRateLimitHeaderCount) included quota headers.")
@@ -343,7 +340,8 @@ private struct GitHubRateLimitResourceRow: View {
             .foregroundStyle(.secondary)
             .monospacedDigit()
         }
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 }
 
@@ -388,7 +386,8 @@ private struct GitHubRequestRecordRow: View {
                 .foregroundStyle(statusColor)
                 .monospacedDigit()
         }
-        .padding(.vertical, 9)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     private var statusText: String {
