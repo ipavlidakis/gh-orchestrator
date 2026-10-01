@@ -515,12 +515,12 @@ private struct RepositorySectionView: View {
         } label: {
             HStack(spacing: 8) {
                 Text(section.repository.fullName)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.system(size: 12, weight: .semibold))
                 Text(section.pullRequests.count, format: .number)
-                    .font(.caption.weight(.medium))
+                    .font(.system(size: 12, weight: .medium))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 1)
-                    .background(.quaternary, in: Capsule())
+                    .background(Color.primary.opacity(0.08), in: Capsule())
                 Spacer(minLength: 0)
             }
         }
