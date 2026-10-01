@@ -306,6 +306,7 @@
   - `ghorchestrator-icon.icon` (Icon Composer source, not referenced by the build) now uses an indigo gradient fill and a single `branch-graph.svg` layer; open it in Icon Composer to confirm the Liquid Glass rendering.
 
 ## Decision Log
+- 2026-10-01: add a saved repository order alongside the pull request order: last modified (newest/oldest first, the previous default), name (A–Z/Z–A) on the repository name, and team (A–Z/Z–A) on the owner. It lives in `AppSettings.repositorySortOrder`, is exposed in General Settings and the popover Sort menu, and re-sorts loaded content without a network refresh.
 - 2026-10-01: user approved a branded design refresh that supersedes the "no painted cards or badges" direction for the popover: PR rows use rounded cards with tinted status chips and a checks progress bar; the app uses an indigo mark and icon. Settings keep native grouped Forms and sidebar; native controls and macOS 15 compatibility are unchanged.
 - 2026-10-01: remove fixed-width wrappers from Insights pickers so native Form alignment governs their placement. Show notification preview content in its own native Section with full-width leading-aligned title/body text, outside LabeledContent value styling.
 - 2026-10-01: expose title A-Z, creation newest first, and creation oldest first in the dashboard and General Settings. Save the choice; re-sort loaded content immediately without a network refresh. Fetch the actual GitHub PR creation timestamp. Hide duplicate nested control labels while preserving accessible names and native Form layout.

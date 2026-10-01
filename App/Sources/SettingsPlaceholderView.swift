@@ -431,6 +431,17 @@ struct GeneralSettingsPane: View {
                 }
 
                 SettingsRow(
+                    title: "Repository order",
+                    subtitle: "How repositories are arranged in the popover."
+                ) {
+                    Picker("Repository order", selection: $model.repositorySortOrder) {
+                        ForEach(RepositorySortOrder.allCases, id: \.self) { order in
+                            Text(order.title).tag(order)
+                        }
+                    }
+                }
+
+                SettingsRow(
                     title: "Show Dock icon",
                     subtitle: "Off keeps GHOrchestrator in the menu bar only. It reappears while Settings is open."
                 ) {

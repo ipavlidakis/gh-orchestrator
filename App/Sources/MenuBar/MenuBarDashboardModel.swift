@@ -65,7 +65,8 @@ final class MenuBarDashboardModel {
         return .loaded(RepositorySectionAggregationService().makeSections(
             observedRepositories: sections.map(\.repository),
             pullRequests: sections.flatMap(\.pullRequests),
-            sortOrder: settingsStore.settings.pullRequestSortOrder
+            sortOrder: settingsStore.settings.pullRequestSortOrder,
+            repositorySortOrder: settingsStore.settings.repositorySortOrder
         ))
     }
 

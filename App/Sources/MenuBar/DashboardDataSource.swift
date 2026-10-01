@@ -67,7 +67,8 @@ struct LiveDashboardDataSource: DashboardDataSource {
         return aggregationService.makeSections(
             observedRepositories: repositories,
             pullRequests: items,
-            sortOrder: settings.pullRequestSortOrder
+            sortOrder: settings.pullRequestSortOrder,
+            repositorySortOrder: settings.repositorySortOrder
         )
     }
 

@@ -112,6 +112,11 @@ final class SettingsModel {
         set { store.settings.pullRequestSortOrder = newValue }
     }
 
+    var repositorySortOrder: RepositorySortOrder {
+        get { store.settings.repositorySortOrder }
+        set { store.settings.repositorySortOrder = newValue }
+    }
+
     var settings: AppSettings {
         store.settings
     }

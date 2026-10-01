@@ -116,13 +116,22 @@ struct MenuBarPlaceholderView: View {
                             Text(order.title).tag(order)
                         }
                     }
+
+                    Picker("Repository order", selection: Binding(
+                        get: { model.settingsStore.settings.repositorySortOrder },
+                        set: { model.settingsStore.settings.repositorySortOrder = $0 }
+                    )) {
+                        ForEach(RepositorySortOrder.allCases, id: \.self) { order in
+                            Text(order.title).tag(order)
+                        }
+                    }
                 } label: {
                     HeaderControlLabel {
                         Label("Sort", systemImage: "arrow.up.arrow.down")
                     }
                 }
                 .headerControlMenuStyle()
-                .help("Sort pull requests within each repository")
+                .help("Sort pull requests and repositories")
 
                 Menu {
                     Button {

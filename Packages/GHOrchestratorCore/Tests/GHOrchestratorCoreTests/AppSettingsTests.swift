@@ -5,6 +5,11 @@ final class AppSettingsTests: XCTestCase {
     func testSortPreferenceRoundTripsAndLegacySettingsDefaultToTitle() throws {
         let decoder = JSONDecoder()
         XCTAssertEqual(try decoder.decode(AppSettings.self, from: Data("{}".utf8)).pullRequestSortOrder, .title)
+        XCTAssertEqual(try decoder.decode(AppSettings.self, from: Data("{}".utf8)).repositorySortOrder, .lastModifiedNewestFirst)
+        for order in RepositorySortOrder.allCases {
+            let data = try JSONEncoder().encode(AppSettings(repositorySortOrder: order))
+            XCTAssertEqual(try decoder.decode(AppSettings.self, from: data).repositorySortOrder, order)
+        }
         for order in PullRequestSortOrder.allCases {
             let data = try JSONEncoder().encode(AppSettings(pullRequestSortOrder: order))
             XCTAssertEqual(try decoder.decode(AppSettings.self, from: data).pullRequestSortOrder, order)
