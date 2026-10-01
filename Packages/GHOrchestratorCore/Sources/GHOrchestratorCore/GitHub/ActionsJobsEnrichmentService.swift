@@ -47,6 +47,7 @@ public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
                         url: snapshot.url,
                         authorLogin: snapshot.authorLogin,
                         isDraft: snapshot.isDraft,
+                        createdAt: snapshot.createdAt,
                         updatedAt: snapshot.updatedAt,
                         reviewStatus: snapshot.reviewStatus,
                         unresolvedReviewThreadCount: snapshot.unresolvedReviewThreadCount,

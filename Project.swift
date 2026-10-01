@@ -75,7 +75,14 @@ let project = Project(
                     "MARKETING_VERSION": "1.0.0"
                 ],
                 configurations: [
-                    .debug(name: "Debug"),
+                    .debug(
+                        name: "Debug",
+                        settings: [
+                            "CODE_SIGN_IDENTITY": "Apple Development",
+                            "CODE_SIGN_STYLE": "Automatic",
+                            "DEVELOPMENT_TEAM": "UBW6JB7T2F"
+                        ]
+                    ),
                     .release(
                         name: "Release",
                         settings: [

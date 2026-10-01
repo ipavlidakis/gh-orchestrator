@@ -53,6 +53,14 @@ struct MenuBarPlaceholderView: View {
     let onMenuVisibilityChange: (Bool) -> Void
     
     var body: some View {
+        if #available(macOS 26, *) {
+            dashboardContent.buttonStyle(.glass)
+        } else {
+            dashboardContent
+        }
+    }
+
+    private var dashboardContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             headerActions
             Divider()
@@ -60,6 +68,7 @@ struct MenuBarPlaceholderView: View {
         }
         .padding(14)
         .frame(width: 440, alignment: .leading)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
         .task {
             onMenuVisibilityChange(true)
         }
@@ -80,6 +89,20 @@ struct MenuBarPlaceholderView: View {
                 }
                 Spacer()
                 
+                Menu {
+                    Picker("Pull request order", selection: Binding(
+                        get: { model.settingsStore.settings.pullRequestSortOrder },
+                        set: { model.settingsStore.settings.pullRequestSortOrder = $0 }
+                    )) {
+                        ForEach(PullRequestSortOrder.allCases, id: \.self) { order in
+                            Text(order.title).tag(order)
+                        }
+                    }
+                } label: {
+                    Label("Sort", systemImage: "arrow.up.arrow.down")
+                }
+                .help("Sort pull requests within each repository")
+
                 Menu {
                     Button {
                         moreMenuActionHandler.refresh()
@@ -111,9 +134,10 @@ struct MenuBarPlaceholderView: View {
                         Label("Quit", systemImage: "power")
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Label("More", systemImage: "ellipsis")
+                        .labelStyle(.iconOnly)
                 }
-                .menuStyle(.borderlessButton)
+                .accessibilityLabel("More actions")
                 .help("More")
             }
             
@@ -140,7 +164,7 @@ struct MenuBarPlaceholderView: View {
             }
             .labelsHidden()
             .pickerStyle(.segmented)
-            .frame(width: 112)
+            .frame(width: 144)
             
             Menu {
                 repositoryFocusButton(
@@ -160,10 +184,9 @@ struct MenuBarPlaceholderView: View {
                 Label(repositoryFocusTitle, systemImage: "line.3.horizontal.decrease.circle")
                     .lineLimit(1)
             }
-            .menuStyle(.borderlessButton)
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .controlSize(.small)
+        .controlSize(.regular)
     }
     
     private var showsDashboardFilters: Bool {
@@ -297,7 +320,7 @@ struct MenuBarPlaceholderView: View {
             
         case .loaded(let sections):
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(sections) { section in
                         RepositorySectionView(
                             section: section,
@@ -332,54 +355,13 @@ struct MenuBarPlaceholderView: View {
                         )
                     }
                 }
-                .padding(.trailing, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(MenuBarScrollViewConfigurator())
             .frame(maxHeight: 520)
         }
     }
     
     private func openSettingsWindow() {
         openSettingsAction()
-    }
-}
-
-private struct MenuBarScrollViewConfigurator: NSViewRepresentable {
-    func makeNSView(context _: Context) -> NSView {
-        NSView(frame: .zero)
-    }
-
-    func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async {
-            context.coordinator.configureScrollView(containing: view)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    @MainActor
-    final class Coordinator {
-        private var didFlash = false
-
-        func configureScrollView(containing view: NSView) {
-            guard let scrollView = view.enclosingScrollView else {
-                return
-            }
-
-            scrollView.hasVerticalScroller = true
-            scrollView.autohidesScrollers = true
-            scrollView.scrollerStyle = .overlay
-
-            guard !didFlash else {
-                return
-            }
-
-            didFlash = true
-            scrollView.flashScrollers()
-        }
     }
 }
 
@@ -406,11 +388,6 @@ private struct RefreshWarningBanner: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
-        )
     }
 }
 
@@ -441,11 +418,6 @@ private struct RefreshFailureStateView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
-        )
     }
 }
 
@@ -464,26 +436,15 @@ private struct RepositorySectionView: View {
     let onOpenURL: (URL) -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button(action: onToggleCollapsed) {
-                HStack(spacing: 6) {
-                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                        .foregroundStyle(.secondary)
-                    
-                    Text(section.repository.fullName)
-                        .foregroundStyle(.primary)
-                    
-                    Spacer()
-                    
-                    Text("\(section.pullRequests.count)")
-                        .foregroundStyle(.secondary)
-                }
-                .font(.headline.weight(.semibold))
-            }
-            .buttonStyle(.plain)
-            
-            if !isCollapsed {
+        DisclosureGroup(isExpanded: Binding(get: { !isCollapsed }, set: { expanded in
+            if expanded != !isCollapsed { onToggleCollapsed() }
+        })) {
+            VStack(alignment: .leading, spacing: 10) {
                 ForEach(section.pullRequests) { pullRequest in
+                    if pullRequest.id != section.pullRequests.first?.id {
+                        Divider()
+                    }
+
                     PullRequestRowView(
                         pullRequest: pullRequest,
                         showsAuthor: showsAuthor,
@@ -502,8 +463,12 @@ private struct RepositorySectionView: View {
                     )
                 }
             }
+        } label: {
+            LabeledContent(section.repository.fullName) {
+                Text(section.pullRequests.count, format: .number)
+            }
+            .font(.headline)
         }
-        .padding(.vertical, 2)
     }
 }
 
@@ -526,83 +491,66 @@ private struct PullRequestRowView: View {
                     onOpenURL(pullRequest.url)
                 } label: {
                     Text(pullRequest.title)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .font(.body.weight(.semibold))
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.link)
                 
                 Text(pullRequestMetadataText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        MetadataBadge(text: pullRequest.isDraft ? "Draft" : "Ready", tone: pullRequest.isDraft ? .secondary : .accent)
-                        MetadataBadge(text: reviewLabel(for: pullRequest.reviewStatus), tone: reviewTone(for: pullRequest.reviewStatus))
-                        checksBadge
-                        commentsBadge
-                    }
+                HStack {
+                    Label(pullRequest.isDraft ? "Draft" : "Ready", systemImage: pullRequest.isDraft ? "pencil" : "checkmark")
+                    Label(reviewLabel(for: pullRequest.reviewStatus), systemImage: reviewSymbol(for: pullRequest.reviewStatus))
                 }
-                .scrollDisabled(true)
-                
-                if isCommentsExpanded {
-                    ExpandedUnresolvedCommentsView(
-                        comments: pullRequest.unresolvedReviewComments,
-                        onOpenURL: onOpenURL
-                    )
-                }
-                
-                if isChecksExpanded {
-                    ExpandedPullRequestDetailsView(
-                        pullRequest: pullRequest,
-                        isRetryingJob: isRetryingJob,
-                        retryErrorMessage: retryErrorMessage,
-                        onRetryWorkflowJob: onRetryWorkflowJob,
-                        onOpenURL: onOpenURL
-                    )
-                }
+                .font(.caption)
+
+                checksDisclosure
+                commentsDisclosure
             }
         }
         .padding(.leading, 2)
     }
     
     @ViewBuilder
-    private var checksBadge: some View {
+    private var checksDisclosure: some View {
         if hasExpandableChecks {
-            Button(action: onToggleChecks) {
-                MetadataBadge(
-                    text: checksLabel(for: pullRequest.checkRollupState),
-                    tone: checksTone(for: pullRequest.checkRollupState),
-                    systemImage: disclosureChevronName(isExpanded: isChecksExpanded)
+            DisclosureGroup(isExpanded: Binding(get: { isChecksExpanded }, set: { expanded in
+                if expanded != isChecksExpanded { onToggleChecks() }
+            })) {
+                ExpandedPullRequestDetailsView(
+                    pullRequest: pullRequest,
+                    isRetryingJob: isRetryingJob,
+                    retryErrorMessage: retryErrorMessage,
+                    onRetryWorkflowJob: onRetryWorkflowJob,
+                    onOpenURL: onOpenURL
                 )
+            } label: {
+                Label(checksLabel(for: pullRequest.checkRollupState), systemImage: checksSymbol(for: pullRequest.checkRollupState))
             }
-            .buttonStyle(.plain)
         } else {
-            MetadataBadge(
-                text: checksLabel(for: pullRequest.checkRollupState),
-                tone: checksTone(for: pullRequest.checkRollupState)
-            )
+            Label(checksLabel(for: pullRequest.checkRollupState), systemImage: checksSymbol(for: pullRequest.checkRollupState))
         }
     }
     
     @ViewBuilder
-    private var commentsBadge: some View {
+    private var commentsDisclosure: some View {
         if hasExpandableComments {
-            Button(action: onToggleComments) {
-                MetadataBadge(
-                    text: commentsLabel(),
-                    tone: pullRequest.unresolvedReviewThreadCount == 0 ? .secondary : .warning,
-                    systemImage: disclosureChevronName(isExpanded: isCommentsExpanded)
+            DisclosureGroup(isExpanded: Binding(get: { isCommentsExpanded }, set: { expanded in
+                if expanded != isCommentsExpanded { onToggleComments() }
+            })) {
+                ExpandedUnresolvedCommentsView(
+                    comments: pullRequest.unresolvedReviewComments,
+                    onOpenURL: onOpenURL
                 )
+            } label: {
+                Label(commentsLabel(), systemImage: "text.bubble")
             }
-            .buttonStyle(.plain)
         } else {
-            MetadataBadge(
-                text: commentsLabel(),
-                tone: pullRequest.unresolvedReviewThreadCount == 0 ? .secondary : .warning
-            )
+            Label(commentsLabel(), systemImage: "text.bubble")
+                .foregroundStyle(.secondary)
         }
     }
     
@@ -646,16 +594,16 @@ private struct PullRequestRowView: View {
         }
     }
     
-    private func reviewTone(for status: ReviewStatus) -> MetadataBadge.Tone {
+    private func reviewSymbol(for status: ReviewStatus) -> String {
         switch status {
         case .approved:
-            return .success
+            return "checkmark.circle"
         case .changesRequested:
-            return .danger
+            return "exclamationmark.bubble"
         case .reviewRequired:
-            return .warning
+            return "person.crop.circle.badge.clock"
         case .none:
-            return .secondary
+            return "person.crop.circle"
         }
     }
     
@@ -676,22 +624,19 @@ private struct PullRequestRowView: View {
         "\(pullRequest.unresolvedReviewThreadCount) unresolved"
     }
     
-    private func checksTone(for state: CheckRollupState) -> MetadataBadge.Tone {
+    private func checksSymbol(for state: CheckRollupState) -> String {
         switch state {
         case .passing:
-            return .success
+            return "checkmark.circle"
         case .failing:
-            return .danger
+            return "xmark.circle"
         case .pending:
-            return .warning
+            return "clock"
         case .none:
-            return .secondary
+            return "minus.circle"
         }
     }
     
-    private func disclosureChevronName(isExpanded: Bool) -> String {
-        isExpanded ? "chevron.down" : "chevron.right"
-    }
 }
 
 private struct ExpandedPullRequestDetailsView: View {
@@ -720,7 +665,7 @@ private struct ExpandedPullRequestDetailsView: View {
                                     Label(workflowRun.name, systemImage: "bolt.fill")
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.link)
                                 .disabled(workflowRun.detailsURL == nil)
                                 
                                 Text(workflowRunMetadataText(for: workflowRun, now: context.date))
@@ -775,63 +720,13 @@ private struct ExpandedPullRequestDetailsView: View {
                                 }
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.link)
                         .disabled(check.detailsURL == nil)
                     }
                 }
             }
         }
         .padding(.top, 4)
-    }
-    
-    private func jobSummary(for job: ActionJobItem) -> String {
-        if let failedStep = firstFailedStep(in: job) {
-            return "\(job.name) · Failed on \(failedStep.name)"
-        }
-        
-        if let conclusion = job.conclusion?.lowercased(), conclusion != "success" {
-            return "\(job.name) · \(conclusion)"
-        }
-        
-        if job.status.lowercased() != "completed" {
-            return "\(job.name) · \(job.status.lowercased())"
-        }
-        
-        return job.name
-    }
-    
-    private func firstFailedStep(in job: ActionJobItem) -> ActionStepItem? {
-        job.steps.first { step in
-            guard let conclusion = step.conclusion?.lowercased() else {
-                return false
-            }
-            
-            return conclusion != "success" && conclusion != "skipped"
-        }
-    }
-    
-    private func jobStatusIcon(for job: ActionJobItem) -> String {
-        if firstFailedStep(in: job) != nil || (job.conclusion?.lowercased() != nil && job.conclusion?.lowercased() != "success") {
-            return "xmark.circle.fill"
-        }
-        
-        if job.status.lowercased() != "completed" {
-            return "clock.fill"
-        }
-        
-        return "checkmark.circle.fill"
-    }
-    
-    private func jobStatusColor(for job: ActionJobItem) -> Color {
-        if firstFailedStep(in: job) != nil || (job.conclusion?.lowercased() != nil && job.conclusion?.lowercased() != "success") {
-            return .red
-        }
-        
-        if job.status.lowercased() != "completed" {
-            return .orange
-        }
-        
-        return .green
     }
     
     private func workflowRunMetadataText(for workflowRun: WorkflowRunItem, now: Date) -> String {
@@ -864,68 +759,54 @@ private struct WorkflowJobView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 8) {
+                Image(systemName: jobStatusIcon)
+                    .foregroundStyle(jobStatusColor)
+
                 Button {
                     if let url = job.detailsURL {
                         onOpenURL(url)
                     }
                 } label: {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: jobStatusIcon)
-                            .foregroundStyle(jobStatusColor)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(jobSummary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(jobSummary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if let jobMetadataText {
+                            Text(jobMetadataText)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            
-                            if let jobMetadataText {
-                                Text(jobMetadataText)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
                         }
                     }
                     .font(.caption)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.link)
                 .disabled(job.detailsURL == nil)
-                
-                if hasExpandableSteps {
-                    Button {
-                        isStepsExpanded.toggle()
-                    } label: {
-                        MetadataBadge(
-                            text: stepsToggleLabel,
-                            tone: .secondary,
-                            systemImage: disclosureChevronName
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
             }
             
-            if isStepsExpanded {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(job.steps, id: \.number) { step in
-                        HStack(alignment: .top, spacing: 8) {
-                            stepContent(for: step)
-                            
-                            if stepConclusionIsFailure(step) {
-                                if isRetrying {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                } else {
-                                    Button("Retry job", action: onRetryWorkflowJob)
-                                        .buttonStyle(.borderless)
-                                        .font(.caption2.weight(.medium))
-                                        .help("Re-run this job in GitHub Actions")
+            if !job.steps.isEmpty {
+                DisclosureGroup("\(job.steps.count) steps", isExpanded: $isStepsExpanded) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(job.steps, id: \.number) { step in
+                            HStack(alignment: .top, spacing: 8) {
+                                stepContent(for: step)
+
+                                if stepConclusionIsFailure(step) {
+                                    if isRetrying {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    } else {
+                                        Button("Retry job", action: onRetryWorkflowJob)
+                                            .controlSize(.small)
+                                            .font(.caption2.weight(.medium))
+                                            .help("Re-run this job in GitHub Actions")
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                .padding(.leading, 18)
             }
             
             if let retryErrorMessage, !retryErrorMessage.isEmpty {
@@ -936,14 +817,6 @@ private struct WorkflowJobView: View {
             }
         }
         .padding(.leading, 14)
-    }
-    
-    private var hasExpandableSteps: Bool {
-        !job.steps.isEmpty
-    }
-    
-    private var stepsToggleLabel: String {
-        "\(job.steps.count) steps"
     }
     
     private var jobSummary: String {
@@ -973,6 +846,10 @@ private struct WorkflowJobView: View {
     }
     
     private var jobStatusIcon: String {
+        if job.conclusion?.lowercased() == "skipped" {
+            return "minus.circle.fill"
+        }
+
         if firstFailedStep != nil || (job.conclusion?.lowercased() != nil && job.conclusion?.lowercased() != "success") {
             return "xmark.circle.fill"
         }
@@ -989,6 +866,10 @@ private struct WorkflowJobView: View {
     }
     
     private var jobStatusColor: Color {
+        if job.conclusion?.lowercased() == "skipped" {
+            return .secondary
+        }
+
         if firstFailedStep != nil || (job.conclusion?.lowercased() != nil && job.conclusion?.lowercased() != "success") {
             return .red
         }
@@ -998,10 +879,6 @@ private struct WorkflowJobView: View {
         }
         
         return .green
-    }
-    
-    private var disclosureChevronName: String {
-        isStepsExpanded ? "chevron.down" : "chevron.right"
     }
     
     private func stepSummary(for step: ActionStepItem) -> String {
@@ -1035,7 +912,7 @@ private struct WorkflowJobView: View {
             } label: {
                 stepLabel(for: step)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.link)
         } else {
             stepLabel(for: step)
         }
@@ -1060,6 +937,10 @@ private struct WorkflowJobView: View {
     }
     
     private func stepStatusIcon(for step: ActionStepItem) -> String {
+        if step.conclusion?.lowercased() == "skipped" {
+            return "minus.circle.fill"
+        }
+
         if stepConclusionIsFailure(step) {
             return "xmark.circle.fill"
         }
@@ -1072,6 +953,10 @@ private struct WorkflowJobView: View {
     }
     
     private func stepStatusColor(for step: ActionStepItem) -> Color {
+        if step.conclusion?.lowercased() == "skipped" {
+            return .secondary
+        }
+
         if stepConclusionIsFailure(step) {
             return .red
         }
@@ -1130,12 +1015,9 @@ private struct ExpandedUnresolvedCommentsView: View {
                                 .lineLimit(4)
                         }
                         
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.link)
                 .padding(.leading, 14)
             }
         }
@@ -1158,56 +1040,5 @@ private struct StateMessageView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
-    }
-}
-
-private struct MetadataBadge: View {
-    enum Tone {
-        case accent
-        case success
-        case warning
-        case danger
-        case secondary
-    }
-    
-    let text: String
-    let tone: Tone
-    let systemImage: String?
-    
-    init(text: String, tone: Tone, systemImage: String? = nil) {
-        self.text = text
-        self.tone = tone
-        self.systemImage = systemImage
-    }
-    
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(text)
-            
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
-            }
-        }
-        .font(.caption.weight(.medium))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(backgroundColor.opacity(0.12), in: Capsule())
-        .foregroundStyle(backgroundColor)
-    }
-    
-    private var backgroundColor: Color {
-        switch tone {
-        case .accent:
-            return .accentColor
-        case .success:
-            return .green
-        case .warning:
-            return .orange
-        case .danger:
-            return .red
-        case .secondary:
-            return .secondary
-        }
     }
 }

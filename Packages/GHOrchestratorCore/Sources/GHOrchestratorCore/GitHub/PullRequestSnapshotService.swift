@@ -150,6 +150,7 @@ extension GHPullRequestSnapshotService {
               login
             }
             isDraft
+            createdAt
             updatedAt
             reviewDecision
             reviewThreads(first: \(limits.reviewThreadLimit)) {
@@ -325,6 +326,7 @@ extension GHPullRequestSnapshotService {
             url: url,
             authorLogin: node.author?.login,
             isDraft: isDraft,
+            createdAt: node.createdAt,
             updatedAt: updatedAt,
             reviewStatus: mapReviewStatus(node.reviewDecision),
             unresolvedReviewThreadCount: unresolvedCount,

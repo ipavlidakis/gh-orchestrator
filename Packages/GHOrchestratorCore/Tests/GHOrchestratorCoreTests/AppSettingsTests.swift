@@ -2,6 +2,15 @@ import XCTest
 @testable import GHOrchestratorCore
 
 final class AppSettingsTests: XCTestCase {
+    func testSortPreferenceRoundTripsAndLegacySettingsDefaultToTitle() throws {
+        let decoder = JSONDecoder()
+        XCTAssertEqual(try decoder.decode(AppSettings.self, from: Data("{}".utf8)).pullRequestSortOrder, .title)
+        for order in PullRequestSortOrder.allCases {
+            let data = try JSONEncoder().encode(AppSettings(pullRequestSortOrder: order))
+            XCTAssertEqual(try decoder.decode(AppSettings.self, from: data).pullRequestSortOrder, order)
+        }
+    }
+
     func testPollingIntervalUsesDefaultWhenNotProvided() {
         let settings = AppSettings()
 

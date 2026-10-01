@@ -12,7 +12,7 @@
 - Ship a menu-bar-first app using `MenuBarExtra` plus a dedicated Settings window.
 - Authenticate the user via GitHub OAuth device flow launched from the app.
 - Observe only user-configured repositories, then list either the logged-in user's open PRs or all open PRs in those repositories.
-- Group PRs by repository and sort repositories and PRs by most recent `updatedAt`.
+- Group PRs by repository, sort repository sections by their most recent PR update, and sort PRs within each repository by the saved title or creation-date preference.
 - Show PR review state, checks state, unresolved review-thread count, and expandable Actions jobs plus steps.
 - Keep dashboard polling on the configured interval whether the menu window is hidden or visible; opening or closing the menu must not force an immediate refresh.
 
@@ -1328,6 +1328,9 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-01: the dashboard and General Settings expose persisted PR ordering: title A-Z (default), creation newest first, or creation oldest first. T25 supersedes the fixed-title-only decision.
+- 2026-10-01: Debug builds use stable Apple Development signing with the existing personal team UBW6JB7T2F certificate, preserving the Keychain designated requirement across rebuilds. Dashboard chrome and controls follow native macOS defaults; see `PLAN-menu-bar.md:T22` and `T23`.
+- 2026-10-01: PR rows use stable natural title A-Z ordering rather than update time; repository sections retain latest-activity ordering. Implementation is tracked in `PLAN-menu-bar.md:T21`.
 - 2026-04-14: v1 scope updated from “all open PRs for the user” to “open PRs for a user-configured repository allowlist”.
 - 2026-04-14: polling changed from fixed cadence to a user-configurable interval with a Settings surface.
 - 2026-04-14: dedicated Settings window added to show `gh` CLI health, connected account, and app configuration.

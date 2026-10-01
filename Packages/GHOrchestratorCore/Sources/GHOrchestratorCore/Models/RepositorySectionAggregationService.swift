@@ -3,7 +3,8 @@ import Foundation
 public protocol RepositorySectionAggregating: Sendable {
     func makeSections(
         observedRepositories: [ObservedRepository],
-        pullRequests: [PullRequestItem]
+        pullRequests: [PullRequestItem],
+        sortOrder: PullRequestSortOrder
     ) -> [RepositorySection]
 }
 
@@ -12,7 +13,8 @@ public struct RepositorySectionAggregationService: RepositorySectionAggregating 
 
     public func makeSections(
         observedRepositories: [ObservedRepository],
-        pullRequests: [PullRequestItem]
+        pullRequests: [PullRequestItem],
+        sortOrder: PullRequestSortOrder = .title
     ) -> [RepositorySection] {
         let groupedPullRequests = Dictionary(grouping: pullRequests, by: \.repository.normalizedLookupKey)
         let repositoriesByKey = canonicalRepositories(
@@ -27,7 +29,7 @@ public struct RepositorySectionAggregationService: RepositorySectionAggregating 
 
             return RepositorySection(
                 repository: repository,
-                pullRequests: grouped.sorted(by: Self.isPullRequestOrderedBefore)
+                pullRequests: grouped.sorted { Self.isPullRequestOrderedBefore($0, $1, sortOrder: sortOrder) }
             )
         }
 
@@ -53,17 +55,31 @@ extension RepositorySectionAggregationService {
         return repositoriesByKey
     }
 
-    static func isPullRequestOrderedBefore(_ lhs: PullRequestItem, _ rhs: PullRequestItem) -> Bool {
-        if lhs.updatedAt != rhs.updatedAt {
-            return lhs.updatedAt > rhs.updatedAt
+    static func isPullRequestOrderedBefore(_ lhs: PullRequestItem, _ rhs: PullRequestItem, sortOrder: PullRequestSortOrder) -> Bool {
+        if sortOrder != .title {
+            switch (lhs.createdAt, rhs.createdAt) {
+            case let (left?, right?) where left != right:
+                return sortOrder == .createdOldestFirst ? left < right : left > right
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            default:
+                return sortOrder == .createdOldestFirst ? lhs.number < rhs.number : lhs.number > rhs.number
+            }
+        }
+
+        let titleComparison = lhs.title.localizedStandardCompare(rhs.title)
+        if titleComparison != .orderedSame {
+            return titleComparison == .orderedAscending
         }
 
         return lhs.number > rhs.number
     }
 
     static func isSectionOrderedBefore(_ lhs: RepositorySection, _ rhs: RepositorySection) -> Bool {
-        let lhsMostRecent = lhs.pullRequests.first
-        let rhsMostRecent = rhs.pullRequests.first
+        let lhsMostRecent = lhs.pullRequests.max { $0.updatedAt < $1.updatedAt }
+        let rhsMostRecent = rhs.pullRequests.max { $0.updatedAt < $1.updatedAt }
 
         if lhsMostRecent?.updatedAt != rhsMostRecent?.updatedAt {
             return (lhsMostRecent?.updatedAt ?? .distantPast) > (rhsMostRecent?.updatedAt ?? .distantPast)

@@ -1,3 +1,17 @@
+public enum PullRequestSortOrder: String, Codable, CaseIterable, Sendable {
+    case title
+    case createdNewestFirst
+    case createdOldestFirst
+
+    public var title: String {
+        switch self {
+        case .title: "Title (A–Z)"
+        case .createdNewestFirst: "Created (newest first)"
+        case .createdOldestFirst: "Created (oldest first)"
+        }
+    }
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public static let defaultPollingIntervalSeconds = 60
     public static let allowedPollingIntervalRange = 15...900
@@ -13,6 +27,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public static let allowedGraphQLReviewThreadCommentLimitRange = 1...20
 
     public var observedRepositories: [ObservedRepository]
+    public var pullRequestSortOrder: PullRequestSortOrder
     public var pollingIntervalSeconds: Int
     public var hideDockIcon: Bool
     public var startAtLogin: Bool
@@ -26,6 +41,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public init(
         observedRepositories: [ObservedRepository] = [],
+        pullRequestSortOrder: PullRequestSortOrder = .title,
         pollingIntervalSeconds: Int = AppSettings.defaultPollingIntervalSeconds,
         hideDockIcon: Bool = AppSettings.defaultHideDockIcon,
         startAtLogin: Bool = AppSettings.defaultStartAtLogin,
@@ -40,6 +56,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         let deduplicatedRepositories = Self.deduplicatedRepositories(observedRepositories)
 
         self.observedRepositories = deduplicatedRepositories
+        self.pullRequestSortOrder = pullRequestSortOrder
         self.pollingIntervalSeconds = Self.clampPollingInterval(pollingIntervalSeconds)
         self.hideDockIcon = hideDockIcon
         self.startAtLogin = startAtLogin
@@ -57,6 +74,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case observedRepositories
+        case pullRequestSortOrder
         case pollingIntervalSeconds
         case hideDockIcon
         case startAtLogin
@@ -74,6 +92,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
         self.init(
             observedRepositories: try container.decodeIfPresent([ObservedRepository].self, forKey: .observedRepositories) ?? [],
+            pullRequestSortOrder: try container.decodeIfPresent(PullRequestSortOrder.self, forKey: .pullRequestSortOrder) ?? .title,
             pollingIntervalSeconds: try container.decodeIfPresent(Int.self, forKey: .pollingIntervalSeconds) ?? Self.defaultPollingIntervalSeconds,
             hideDockIcon: try container.decodeIfPresent(Bool.self, forKey: .hideDockIcon) ?? Self.defaultHideDockIcon,
             startAtLogin: try container.decodeIfPresent(Bool.self, forKey: .startAtLogin) ?? Self.defaultStartAtLogin,

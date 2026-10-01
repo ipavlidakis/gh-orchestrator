@@ -59,11 +59,13 @@ final class MenuBarDashboardModel {
     }
 
     var contentState: State {
-        guard case .loading = state else {
-            return state
-        }
-
-        return stateBeforeLoading
+        let visibleState = isRefreshing ? stateBeforeLoading : state
+        guard case .loaded(let sections) = visibleState else { return visibleState }
+        return .loaded(RepositorySectionAggregationService().makeSections(
+            observedRepositories: sections.map(\.repository),
+            pullRequests: sections.flatMap(\.pullRequests),
+            sortOrder: settingsStore.settings.pullRequestSortOrder
+        ))
     }
 
     var areDashboardFiltersDisabled: Bool {

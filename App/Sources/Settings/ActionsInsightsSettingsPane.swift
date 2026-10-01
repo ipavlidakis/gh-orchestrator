@@ -6,7 +6,7 @@ struct ActionsInsightsSettingsPane: View {
     @Bindable var model: SettingsModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        Group {
             SettingsGroup(title: "Filters") {
                 SettingsRow(
                     title: "Repository",
@@ -15,16 +15,12 @@ struct ActionsInsightsSettingsPane: View {
                     repositoryPicker
                 }
 
-                Divider()
-
                 SettingsRow(
                     title: "Workflow",
                     subtitle: "Load workflows for the selected repository."
                 ) {
                     workflowControl
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Job",
@@ -33,14 +29,12 @@ struct ActionsInsightsSettingsPane: View {
                     jobControl
                 }
 
-                Divider()
-
                 SettingsRow(
                     title: "Period",
                     subtitle: "Last month is the previous calendar month."
                 ) {
                     Picker(
-                        "",
+                        "Period",
                         selection: Binding(
                             get: { model.actionsInsightsPeriod },
                             set: { model.actionsInsightsPeriod = $0 }
@@ -52,10 +46,7 @@ struct ActionsInsightsSettingsPane: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 150)
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Actions",
@@ -99,7 +90,7 @@ struct ActionsInsightsSettingsPane: View {
 
     private var repositoryPicker: some View {
         Picker(
-            "",
+            "Repository",
             selection: Binding(
                 get: { model.actionsInsightsSelectedRepositoryID ?? "" },
                 set: { model.setActionsInsightsRepositoryID($0.isEmpty ? nil : $0) }
@@ -116,7 +107,6 @@ struct ActionsInsightsSettingsPane: View {
             }
         }
         .labelsHidden()
-        .frame(width: 220)
         .disabled(model.observedRepositories.isEmpty)
     }
 
@@ -142,7 +132,7 @@ struct ActionsInsightsSettingsPane: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Picker(
-                        "",
+                        "Workflow",
                         selection: Binding<Int?>(
                             get: { model.actionsInsightsSelectedWorkflowID },
                             set: { model.setActionsInsightsWorkflowID($0) }
@@ -154,7 +144,6 @@ struct ActionsInsightsSettingsPane: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 220)
                 }
             }
         } else {
@@ -181,7 +170,7 @@ struct ActionsInsightsSettingsPane: View {
                 }
             case .loaded(let jobNames):
                 Picker(
-                    "",
+                    "Job",
                     selection: Binding(
                         get: { model.actionsInsightsSelectedJobName ?? "" },
                         set: { model.setActionsInsightsJobName($0.isEmpty ? nil : $0) }
@@ -196,7 +185,6 @@ struct ActionsInsightsSettingsPane: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 220)
             }
         } else {
             Text("All jobs")
@@ -232,14 +220,12 @@ struct ActionsInsightsSettingsPane: View {
                     bodyText: "No completed workflow runs or selected jobs matched the filters."
                 )
             } else {
-                VStack(alignment: .leading, spacing: 0) {
+                Group {
                     ActionsInsightsMetricRow(
                         title: "Completed",
                         value: "\(dashboard.summary.totalCount)",
                         systemImage: "checklist"
                     )
-
-                    Divider()
 
                     ActionsInsightsMetricRow(
                         title: "Success rate",
@@ -247,15 +233,11 @@ struct ActionsInsightsSettingsPane: View {
                         systemImage: "checkmark.circle"
                     )
 
-                    Divider()
-
                     ActionsInsightsMetricRow(
                         title: "Failures",
                         value: "\(dashboard.summary.failureCount)",
                         systemImage: "xmark.circle"
                     )
-
-                    Divider()
 
                     ActionsInsightsMetricRow(
                         title: "Average duration",
@@ -304,8 +286,6 @@ struct ActionsInsightsSettingsPane: View {
                         .chartYScale(domain: 0...100)
                         .frame(height: 180)
                     }
-
-                    Divider()
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Average duration")

@@ -66,7 +66,8 @@ struct LiveDashboardDataSource: DashboardDataSource {
         let items = try await actionsService.buildPullRequestItems(from: snapshots)
         return aggregationService.makeSections(
             observedRepositories: repositories,
-            pullRequests: items
+            pullRequests: items,
+            sortOrder: settings.pullRequestSortOrder
         )
     }
 

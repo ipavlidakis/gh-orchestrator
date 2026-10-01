@@ -107,6 +107,11 @@ final class SettingsModel {
         actionsInsightsTask?.cancel()
     }
 
+    var pullRequestSortOrder: PullRequestSortOrder {
+        get { store.settings.pullRequestSortOrder }
+        set { store.settings.pullRequestSortOrder = newValue }
+    }
+
     var settings: AppSettings {
         store.settings
     }

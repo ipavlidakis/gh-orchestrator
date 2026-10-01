@@ -168,7 +168,115 @@
   - Keep Settings-window Dock visibility behavior unchanged.
   - Dashboard links now route through `AppController`, which reapplies the effective Dock policy on the next main-actor turn after sending the URL to the browser.
 
+### T20: Dashboard Status Icons And Contrast
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T16`
+- goal: show skipped jobs and steps neutrally, improve contrast, and adopt native macOS controls and materials that adapt to Liquid Glass environments.
+- scope:
+  - use a gray minus-circle for skipped jobs and steps.
+  - use regular material behind content, an opaque system background with Reduce Transparency, and primary text on tinted badges.
+  - use native bordered menus, a regular-size segmented picker, stronger title hierarchy, and row separators.
+- verification:
+  - 2026-10-01: Tuist generation and build/launch verification succeeded using `/tmp/GHOrchestrator-DashboardFeedback`.
+  - 2026-10-01: nine focused app tests passed, including native dashboard rendering in light/dark appearances and popover/menu behavior. The icon regression failed with the old red icon (64 red pixels in light mode) and passed after restoring the neutral icon.
+  - 2026-10-01: inspected native-hosted light/dark screenshots; UI automation could not see the running app, so live popup interaction remains unverified.
+
+### T21: Stable Alphabetical Pull Request Ordering
+- status: `done`
+- owner: `codex-main`
+- depends_on: `PLAN.md:T06`
+- goal: order PRs by title within each repository so updates do not move rows.
+- scope:
+  - use case-insensitive natural title ordering and PR number for equal-title ties.
+  - preserve repository ordering by its most recently updated PR.
+- verification:
+  - 2026-10-01: the title-order regression failed on the old update-time sorter, then all four aggregation tests passed after the change.
+  - 2026-10-01: final app build succeeded with zero compiler warnings/errors. Earlier UI build/launch verification passed; no further launch followed the sorting edit to avoid repeated Keychain authorization prompts.
+  - 2026-10-01: the full core suite passed 89 tests and failed the unchanged `testFetchRepositorySnapshotsReturnsSuccessfulResultsWhenSomeRepositoriesFail`; its FIFO success/failure mock assumes task-group requests arrive in repository input order.
+- notes:
+  - Development builds are ad-hoc signed with different hash-based designated requirements and read `GHOrchestrator.github.com` at startup, explaining repeated Keychain prompts after rebuilds. Stable development signing is a separate follow-up; no signing or Keychain permissions were changed.
+
+### T22: Native Popover And Dashboard Controls
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T20`, `T21`
+- goal: remove custom dashboard chrome and use native HIG components and system Liquid Glass controls.
+- scope:
+  - remove root material fills, capsule badges, and custom scrollbar/disclosure styling.
+  - use native ScrollView, DisclosureGroup, Label, menu, and button styles with macOS 15 fallbacks.
+- verification:
+  - 2026-10-01: Tuist generation, build/launch verification, and all 26 focused app tests passed, including full dashboard rendering with expanded checks in light/dark appearances. Zero compiler warnings/errors.
+  - 2026-10-01: inspected the signed live popup. Native List swallowed nested disclosure controls; replaced it with standard ScrollView, then the restored full-dashboard rendering regression passed.
+- notes:
+  - Final live pointer interaction could not be repeated because the UI inspector cannot access the hidden status item. Final build launch and native-hosted dashboard rendering were verified.
+
+### T23: Stable Development Signing
+- status: `done`
+- owner: `codex-main`
+- goal: preserve the app's Keychain identity across local rebuilds using the existing personal Apple Development certificate.
+- verification:
+  - 2026-10-01: Tuist generation and Debug build succeeded using the existing Apple Development: ILIAS PAVLIDAKIS (JG8762YVLT) certificate, team UBW6JB7T2F.
+  - 2026-10-01: changed the build version via an Xcode command-line override and rebuilt; both builds had identical certificate-based designated requirements. Deep strict signature verification passed.
+- notes:
+  - Existing ad-hoc Keychain authorization may require one Always Allow approval for the new stable identity. Keychain access controls are unchanged.
+
+### T24: Native Settings Components
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T22`, `T23`
+- goal: adapt every Settings pane to native macOS components and system Liquid Glass styling.
+- verification:
+  - 2026-10-01: Tuist generation, signed build/launch verification, and all 25 focused Settings model/store/window-command tests passed with zero compiler warnings/errors. Strict deep signature verification passed.
+  - 2026-10-01: checked every Settings source for custom backgrounds, overlays, and forced menu styles; none remain.
+- notes:
+  - All six panes use a grouped Form; shared group/row helpers now compose native Section and LabeledContent. Native menus, repository controls, and notification preview content replace painted chrome; macOS 26 uses system glass button styles with native macOS 15 fallbacks.
+  - Live visual interaction remains unverified because native UI automation is not exposed in this turn.
+
+### T25: Settings Layout Regressions And Visible Sorting
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T24`
+- goal: fix the reported wrapped/duplicate control labels and expose persisted PR sorting.
+- verification:
+  - 2026-10-01: Tuist generation, signed build/launch verification, and strict deep signature verification passed with zero build warnings/errors.
+  - 2026-10-01: 24 focused core and 48 focused app tests passed. After the final polling/query-limit controls edit, 21 dashboard/model/Settings-render tests passed; the final dashboard rendering test also passed with a visible Sort control in both appearances.
+  - 2026-10-01: restoring the old nested-label behavior produced four rendering assertion failures (duplicate title/author labels in light/dark); restoring the fix passed. Inspected native-hosted General, Insights, notification-preview, and dashboard renders in light/dark. Polling units, query-limit values, long repository/workflow selections, and Sort remain readable.
+- notes:
+  - Dashboard Sort and Settings > General > Pull request order share the saved title/creation-date preference and update loaded content immediately without fetching. Creation sorting uses the actual GitHub createdAt timestamp; legacy missing dates sort last.
+  - Settings rendering outside the app Scene emits the expected SceneStorage default-value warning. Native-hosted renders do not prove live pointer interaction or full-window glass composition; native UI automation is unavailable in this turn.
+  - A bounded elapsed-time wait replaced a scheduler-turn-count wait in the existing command-failure test helper after rendering load exposed its race; production failure behavior and assertions remain unchanged.
+
+### T26: Insights Control Alignment And Notification Preview Layout
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T25`
+- goal: align native Insights pickers at the form trailing edge and show readable notification preview content.
+- verification:
+  - 2026-10-01: both native rendering regressions failed before the fix (four light/dark alignment failures), then passed after removing picker widths and moving preview text into its own native Section.
+  - 2026-10-01: all 27 focused Settings rendering/model/store/window tests passed. Inspected light/dark Insights and notification-preview renders; CodeQL aligns with the other selected values and preview title/body use the section's leading edge with primary, body-sized text.
+  - 2026-10-01: Tuist generation, signed build/launch verification, strict deep signature verification, and diff whitespace checks passed. Build had zero warnings/errors; the rendering harness retains its known SceneStorage warning outside an app Scene.
+- notes:
+  - Native-hosted renders verify layout but do not prove live pointer interaction/full-window glass composition. Existing fields, preview formatting, and delivery actions remain wired to the same models.
+
+### T27: Dashboard And Settings Feedback Delivery
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T20`, `T21`, `T22`, `T23`, `T24`, `T25`, `T26`
+- goal: review and publish the accumulated feedback fixes as a feature-branch PR.
+- verification:
+  - 2026-10-01: OCR workspace preview and Swift rules resolved: 16 reviewable files, 15 reviewed, one skipped (93.75% preview coverage; 100% of delivered source/config files), with no blocking findings. Manually reviewed the eight test/fixture files and two plan files excluded by OCR defaults. Local `.codex/config.toml` was skipped as unrelated workspace configuration; Finder metadata is excluded.
+  - 2026-10-01: final candidate passed 24 focused core tests and 50 focused app tests. The only warning is the known SceneStorage default-value warning in the native rendering harness; diff whitespace checks passed.
+  - 2026-10-01: committed the reviewed candidate as `982ebc897fa2374c7b0fa008b8b995a6b5db26ff`, pushed `iliaspavlidakis/native-macos-ui-and-pr-sorting`, and opened https://github.com/ipavlidakis/gh-orchestrator/pull/2 against `main`. HTTPS push stalled; a command-scoped SSH URL rewrite succeeded without changing the saved remote.
+
 ## Decision Log
+- 2026-10-01: remove fixed-width wrappers from Insights pickers so native Form alignment governs their placement. Show notification preview content in its own native Section with full-width leading-aligned title/body text, outside LabeledContent value styling.
+- 2026-10-01: expose title A-Z, creation newest first, and creation oldest first in the dashboard and General Settings. Save the choice; re-sort loaded content immediately without a network refresh. Fetch the actual GitHub PR creation timestamp. Hide duplicate nested control labels while preserving accessible names and native Form layout.
+- 2026-10-01: Settings follows the same native-system direction as the dashboard: grouped Forms and Sections, LabeledContent rows, standard controls, and no painted cards or custom panel fills. Keep the native sidebar and macOS 15 compatibility.
+- 2026-10-01: user authorized stable Apple Development signing. Debug builds use personal team UBW6JB7T2F and an existing valid certificate; preserve Release signing and Keychain access controls.
+- 2026-10-01: superseding T20's material/pill treatment after user feedback: let the native popover provide its background, replace painted badges and hand-built disclosures with standard Labels and DisclosureGroup, and use the system glass button style on macOS 26+. Use native ScrollView rather than List because List hides the nested disclosure controls. Remove the custom scrollbar configurator; use platform defaults.
+- 2026-10-01: default PR ordering is title A-Z within each repository, with natural numeric ordering and PR-number ties; repository sections continue to use their latest PR update. This chooses the user's title option without adding a sort preference.
+- 2026-10-01: skipped Actions jobs and steps use a neutral minus-circle. Following the HIG and Liquid Glass follow-up, use native controls for navigation, standard regular material for content, and an opaque system background when Reduce Transparency is enabled. Keep primary badge text over status tints; Ready/Draft use neutral styling.
 - 2026-04-14: when the Settings window is active, GHOrchestrator must present its app menu in the macOS menu bar with `About`, `Refresh`, `Settings…`, `Quit`, and `Help`; `Refresh` belongs directly under `About`, the top-level `Edit`, `View`, and `Window` menus must be hidden, and `Help` opens `https://github.com/ipavlidakis/gh-orchestrator`.
 - 2026-04-15: the persisted "Hide Dock icon" preference should be temporarily overridden while the Settings window is open so users can refocus the Settings window from the Dock after it loses focus.
 - 2026-04-17: the menu-bar window’s trailing `More` menu should show an `Update` action only when the updater has already detected a newer release; selecting it should reuse the existing direct-DMG install flow.

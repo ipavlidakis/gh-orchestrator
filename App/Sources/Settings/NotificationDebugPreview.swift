@@ -252,7 +252,7 @@ struct NotificationDebugPreviewGroup: View {
                 title: "Notification type",
                 subtitle: "Deliver a synthetic notification through the real formatter and local notification adapter."
             ) {
-                Picker("", selection: $preview.selectedTrigger) {
+                Picker("Notification type", selection: $preview.selectedTrigger) {
                     ForEach(RepositoryNotificationTrigger.allCases, id: \.self) { trigger in
                         Text(trigger.debugPreviewTitle)
                             .tag(trigger)
@@ -261,8 +261,6 @@ struct NotificationDebugPreviewGroup: View {
                 .labelsHidden()
                 .frame(width: 220)
             }
-
-            Divider()
 
             SettingsRow(
                 title: "Repository",
@@ -282,8 +280,6 @@ struct NotificationDebugPreviewGroup: View {
                 }
             }
 
-            Divider()
-
             SettingsRow(
                 title: "Pull request",
                 subtitle: "Shared PR fields used by every notification type."
@@ -300,11 +296,7 @@ struct NotificationDebugPreviewGroup: View {
                 }
             }
 
-            Divider()
-
             triggerSpecificFields
-
-            Divider()
 
             SettingsRow(
                 title: "Link target",
@@ -315,16 +307,12 @@ struct NotificationDebugPreviewGroup: View {
                     .frame(width: 320)
             }
 
-            Divider()
+        } footer: {
+            Text("Debug previews are available in Debug builds only.")
+        }
 
-            SettingsRow(
-                title: "Preview copy",
-                subtitle: "Uses the same formatter as production notifications."
-            ) {
-                NotificationDebugPreviewCard(preview: preview)
-            }
-
-            Divider()
+        SettingsGroup(title: "Notification preview") {
+            NotificationDebugPreviewCard(preview: preview)
 
             SettingsRow(
                 title: "Send preview",
@@ -346,7 +334,7 @@ struct NotificationDebugPreviewGroup: View {
                 }
             }
         } footer: {
-            Text("Debug previews are available in Debug builds only.")
+            Text("Uses the same formatter as production notifications.")
         }
     }
 
@@ -368,7 +356,7 @@ struct NotificationDebugPreviewGroup: View {
                 bodyText: "This notification uses the shared repository and pull request fields only."
             )
         case .newUnresolvedReviewComment:
-            VStack(alignment: .leading, spacing: 0) {
+            Group {
                 SettingsRow(
                     title: "Comment author",
                     subtitle: "Optional reviewer login shown before the comment body."
@@ -377,8 +365,6 @@ struct NotificationDebugPreviewGroup: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 220)
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Comment body",
@@ -391,7 +377,7 @@ struct NotificationDebugPreviewGroup: View {
                 }
             }
         case .workflowRunCompleted:
-            VStack(alignment: .leading, spacing: 0) {
+            Group {
                 SettingsRow(
                     title: "Workflow name",
                     subtitle: "Used in the notification title."
@@ -400,8 +386,6 @@ struct NotificationDebugPreviewGroup: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 220)
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Conclusion",
@@ -413,7 +397,7 @@ struct NotificationDebugPreviewGroup: View {
                 }
             }
         case .workflowJobCompleted:
-            VStack(alignment: .leading, spacing: 0) {
+            Group {
                 SettingsRow(
                     title: "Workflow name",
                     subtitle: "Available for the synthetic event even though the current formatter shows the repository name in the title."
@@ -423,8 +407,6 @@ struct NotificationDebugPreviewGroup: View {
                         .frame(width: 220)
                 }
 
-                Divider()
-
                 SettingsRow(
                     title: "Job name",
                     subtitle: "Shown in the workflow job notification body."
@@ -433,8 +415,6 @@ struct NotificationDebugPreviewGroup: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 220)
                 }
-
-                Divider()
 
                 SettingsRow(
                     title: "Job result",
@@ -458,15 +438,16 @@ private struct NotificationDebugPreviewCard: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(previewContent.title)
                 .font(.headline)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text(previewContent.body)
-                .font(.caption)
-                .foregroundStyle(previewContent.isFailure ? .red : .secondary)
+                .font(.body)
+                .foregroundStyle(previewContent.isFailure ? .red : .primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
-        .frame(width: 320, alignment: .leading)
-        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func makePreviewContent() -> (title: String, body: String, isFailure: Bool) {
