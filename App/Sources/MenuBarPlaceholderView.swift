@@ -489,10 +489,32 @@ private struct RepositorySectionView: View {
     let onOpenURL: (URL) -> Void
     
     var body: some View {
-        DisclosureGroup(isExpanded: Binding(get: { !isCollapsed }, set: { expanded in
-            if expanded != !isCollapsed { onToggleCollapsed() }
-        })) {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: onToggleCollapsed) {
+                HStack(spacing: 8) {
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 10)
+                    Text(section.repository.fullName)
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(section.pullRequests.count, format: .number)
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 1)
+                        .background(Color.primary.opacity(0.08), in: Capsule())
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 4)
+                .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(section.repository.fullName)
+            .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
+            .accessibilityHint("Shows or hides this repository's pull requests")
+
+            if !isCollapsed {
                 ForEach(section.pullRequests) { pullRequest in
                     PullRequestRowView(
                         pullRequest: pullRequest,
@@ -511,17 +533,6 @@ private struct RepositorySectionView: View {
                         onOpenURL: onOpenURL
                     )
                 }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Text(section.repository.fullName)
-                    .font(.system(size: 12, weight: .semibold))
-                Text(section.pullRequests.count, format: .number)
-                    .font(.system(size: 12, weight: .medium))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 1)
-                    .background(Color.primary.opacity(0.08), in: Capsule())
-                Spacer(minLength: 0)
             }
         }
     }
