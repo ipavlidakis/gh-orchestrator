@@ -269,6 +269,21 @@
   - 2026-10-01: final candidate passed 24 focused core tests and 50 focused app tests. The only warning is the known SceneStorage default-value warning in the native rendering harness; diff whitespace checks passed.
   - 2026-10-01: committed the reviewed candidate as `982ebc897fa2374c7b0fa008b8b995a6b5db26ff`, pushed `iliaspavlidakis/native-macos-ui-and-pr-sorting`, and opened https://github.com/ipavlidakis/gh-orchestrator/pull/2 against `main`. HTTPS push stalled; a command-scoped SSH URL rewrite succeeded without changing the saved remote.
 
+### T28: Release 0.4.6 (Build 46)
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T27`
+- goal: publish a signed, notarized release of the merged feedback fixes.
+- verification:
+  - 2026-10-01: PR #2 merged at `753f0d93a431c0f4c7c34d66204766a9757a834d`; checkout pinned to that commit for archive and tag provenance. Previous release is 0.4.5 (Build 45).
+  - 2026-10-01: Release archive and Developer ID-signed DMG built at `build/release/0.4.6-46/`. App and DMG strict signature verification passed; app metadata is version 0.4.6, build 46. Release archive emitted the existing unset-app-category warning.
+  - 2026-10-01: notarization stopped with `No Keychain password item found for profile: GHOrchestratorNotary` (exit 69). No alternate notary profiles, notarization credential environment variables, or API keys in the standard local key directories were found. No GitHub 0.4.6 release was created.
+  - 2026-10-01: after the user restored the profile, the existing DMG was accepted by Apple notarization (`069c5f80-119b-4877-af5e-e093a09d1da9`), stapled, and validated. Strict app/DMG signature checks passed; Gatekeeper accepted both as Notarized Developer ID.
+  - 2026-10-01: https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.4.6 is published (not draft) and returned by GitHub's latest-release endpoint. Both DMG and checksum assets are uploaded; local and GitHub DMG SHA-256 agree: `988878944be4afef0d6dfdfa9ecb8d9ccee23912aa29585f8eb1451663ab2ff8`. The tag points to the merged source commit `753f0d93a431c0f4c7c34d66204766a9757a834d`.
+- notes:
+  - 2026-10-01: user confirmed the notary credential profile has been restored; resuming the existing signed DMG without rebuilding.
+  - Published the existing signed DMG after notarization; no rebuild or source change was needed to resolve authentication. Release notes and verification are recorded in CHANGELOG.md and PLAN.md.
+
 ## Decision Log
 - 2026-10-01: remove fixed-width wrappers from Insights pickers so native Form alignment governs their placement. Show notification preview content in its own native Section with full-width leading-aligned title/body text, outside LabeledContent value styling.
 - 2026-10-01: expose title A-Z, creation newest first, and creation oldest first in the dashboard and General Settings. Save the choice; re-sort loaded content immediately without a network refresh. Fetch the actual GitHub PR creation timestamp. Hide duplicate nested control labels while preserving accessible names and native Form layout.

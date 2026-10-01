@@ -1298,6 +1298,16 @@
     - `GHOrchestrator-0.4.5.dmg.sha256.txt`
   - Local Gatekeeper assessment of the DMG path returned `Insufficient Context`; the release script continued because Apple notarization was accepted and stapler validation succeeded.
 
+### T56: Release 0.4.6 Build 46
+- status: `done`
+- owner: `codex-main`
+- depends_on: `PLAN-menu-bar.md:T28`
+- goal: publish the merged dashboard, Settings, sorting, and signing feedback fixes.
+- verification:
+  - 2026-10-01: published https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.4.6 as the latest release. Tag source is PR #2 merge commit `753f0d93a431c0f4c7c34d66204766a9757a834d`.
+  - 2026-10-01: universal Release archive reports 0.4.6/build 46. Developer ID signatures, Apple notarization (`069c5f80-119b-4877-af5e-e093a09d1da9`), stapling, and Gatekeeper app/DMG assessments passed.
+  - 2026-10-01: DMG and checksum assets uploaded; local and GitHub SHA-256 match `988878944be4afef0d6dfdfa9ecb8d9ccee23912aa29585f8eb1451663ab2ff8`. Full verification and the resolved notary-profile blocker are in `PLAN-menu-bar.md:T28`.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`

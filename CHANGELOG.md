@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.6 (Build 46) - 2026-10-01
+
+- Make skipped jobs neutral and status text easier to read.
+- Use native macOS controls throughout the dashboard and Settings.
+- Add saved PR sorting by title or creation date.
+- Fix Settings labels, workflow picker alignment, and notification preview layout.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.4.5...0.4.6
+
 ## 0.4.5 (Build 45) - 2026-07-16
 
 - Fixed dashboard browser links so opening a pull request, workflow, job, step, check, or review comment no longer leaves GHOrchestrator visible in the Dock when the hidden-Dock preference is enabled.
