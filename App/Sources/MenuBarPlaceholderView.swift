@@ -91,6 +91,7 @@ struct MenuBarPlaceholderView: View {
             if case .loaded(let sections) = model.contentState {
                 DashboardFooterBar(
                     sections: sections,
+                    status: { syncSubtitleText(now: $0) },
                     rateLimit: requestLogModel?.latestRateLimitsByResource.first {
                         $0.resource.lowercased() == "graphql"
                     } ?? requestLogModel?.latestRateLimit
@@ -109,112 +110,168 @@ struct MenuBarPlaceholderView: View {
     }
 
     private var headerActions: some View {
-        VStack {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                AppMarkView(size: 28)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(AppMetadata.menuBarTitle)
-                        .font(.system(size: 14, weight: .semibold))
-                    syncSubtitle
+                AppMarkView(size: 26)
+
+                if showsDashboardFilters {
+                    ScopeSegmentedControl(
+                        scope: model.pullRequestScope,
+                        selectedCount: loadedPullRequestCount,
+                        onSelect: { model.setPullRequestScope($0) }
+                    )
+                    .disabled(model.areDashboardFiltersDisabled)
                 }
+
+                Spacer(minLength: 4)
+
                 if model.isRefreshing {
                     ProgressView()
                         .controlSize(.small)
-                        .scaleEffect(0.9)
+                        .scaleEffect(0.8)
                 }
-                Spacer()
-                
-                Menu {
-                    Picker("Pull request order", selection: Binding(
-                        get: { model.settingsStore.settings.pullRequestSortOrder },
-                        set: { model.settingsStore.settings.pullRequestSortOrder = $0 }
-                    )) {
-                        ForEach(PullRequestSortOrder.allCases, id: \.self) { order in
-                            Text(order.title).tag(order)
-                        }
-                    }
 
-                    Picker("Repository order", selection: Binding(
-                        get: { model.settingsStore.settings.repositorySortOrder },
-                        set: { model.settingsStore.settings.repositorySortOrder = $0 }
-                    )) {
-                        ForEach(RepositorySortOrder.allCases, id: \.self) { order in
-                            Text(order.title).tag(order)
-                        }
-                    }
-                } label: {
-                    HeaderControlLabel {
-                        Label("Sort", systemImage: "arrow.up.arrow.down")
-                    }
+                if showsDashboardFilters {
+                    repositoryFilterMenu
+                        .disabled(model.areDashboardFiltersDisabled)
                 }
-                .headerControlMenuStyle()
-                .help("Sort pull requests and repositories")
+                sortMenu
+                moreMenu
+            }
 
-                Menu {
-                    Button {
-                        moreMenuActionHandler.refresh()
-                    } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(model.isRefreshing)
-                    
-                    if let updateAction {
-                        Button {
-                            moreMenuActionHandler.installUpdate()
-                        } label: {
-                            Label(updateAction.title, systemImage: "arrow.down.circle")
-                        }
-                        .disabled(!updateAction.isEnabled)
-                    }
-                    
-                    Button {
-                        moreMenuActionHandler.openSettings()
-                    } label: {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-                    
-                    Divider()
-                    
-                    Button {
-                        moreMenuActionHandler.quit()
-                    } label: {
-                        Label("Quit", systemImage: "power")
-                    }
-                } label: {
-                    HeaderControlLabel {
-                        Image(systemName: "ellipsis")
-                            .frame(width: 14)
-                    }
+            if showsDashboardFilters, let focused = focusedRepositoryName {
+                HStack(spacing: 4) {
+                    Text("Filtered to \(focused) ·")
+                        .foregroundStyle(.secondary)
+                    Button("Clear") { model.setFocusedRepositoryID(nil) }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                    Spacer(minLength: 0)
                 }
-                .headerControlMenuStyle()
-                .accessibilityLabel("More actions")
-                .help("More")
+                .font(.system(size: 11.5))
+                .padding(.horizontal, 2)
             }
-            
-            if showsDashboardFilters {
-                filterControls
-                    .disabled(model.areDashboardFiltersDisabled)
-                    .help(model.areDashboardFiltersDisabled ? "Filters are disabled while the current refresh error is visible." : "")
-            }
-            
         }
     }
-    
-    private var syncSubtitle: some View {
-        TimelineView(.periodic(from: .now, by: 5)) { context in
-            Text(syncSubtitleText(now: context.date))
-                .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
+
+    private var focusedRepositoryName: String? {
+        guard model.focusedRepositoryID != nil else { return nil }
+        return repositoryFocusTitle
+    }
+
+    /// Quiet 28 pt icon button shared by the header menus.
+    private func headerIcon(_ systemImage: String, isActive: Bool = false) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 15))
+            .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
+            .frame(width: 28, height: 28)
+            .background(isActive ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
+    }
+
+    private var repositoryFilterMenu: some View {
+        Menu {
+            repositoryFocusButton(
+                title: "All repositories",
+                repositoryID: nil
+            )
+
+            Divider()
+
+            ForEach(model.settingsStore.settings.observedRepositories) { repository in
+                repositoryFocusButton(
+                    title: repository.fullName,
+                    repositoryID: repository.normalizedLookupKey
+                )
+            }
+        } label: {
+            headerIcon("line.3.horizontal.decrease", isActive: model.focusedRepositoryID != nil)
         }
+        .headerMenuStyle()
+        .accessibilityLabel("Filter repositories")
+        .help("Filter repositories")
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            Section("Pull requests") {
+                Picker("Pull request order", selection: Binding(
+                    get: { model.settingsStore.settings.pullRequestSortOrder },
+                    set: { model.settingsStore.settings.pullRequestSortOrder = $0 }
+                )) {
+                    ForEach(PullRequestSortOrder.allCases, id: \.self) { order in
+                        Text(order.title).tag(order)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
+
+            Section("Repositories") {
+                Picker("Repository order", selection: Binding(
+                    get: { model.settingsStore.settings.repositorySortOrder },
+                    set: { model.settingsStore.settings.repositorySortOrder = $0 }
+                )) {
+                    ForEach(RepositorySortOrder.allCases, id: \.self) { order in
+                        Text(order.title).tag(order)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
+        } label: {
+            headerIcon("arrow.up.arrow.down")
+        }
+        .headerMenuStyle()
+        .accessibilityLabel("Sort")
+        .help("Sort pull requests and repositories")
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Button {
+                moreMenuActionHandler.refresh()
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .disabled(model.isRefreshing)
+
+            if let updateAction {
+                Button {
+                    moreMenuActionHandler.installUpdate()
+                } label: {
+                    Label(updateAction.title, systemImage: "arrow.down.circle")
+                }
+                .disabled(!updateAction.isEnabled)
+            }
+
+            Button {
+                moreMenuActionHandler.openSettings()
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+            }
+
+            Divider()
+
+            Button {
+                moreMenuActionHandler.quit()
+            } label: {
+                Label("Quit", systemImage: "power")
+            }
+        } label: {
+            headerIcon("ellipsis.circle")
+        }
+        .headerMenuStyle()
+        .accessibilityLabel("More actions")
+        .help("More")
     }
 
     private func syncSubtitleText(now: Date) -> String {
-        let interval = model.settingsStore.settings.pollingIntervalSeconds
         if model.isRefreshing {
-            return "Syncing… · every \(interval)s"
+            return "Updating…"
         }
         guard let last = model.lastRefreshedAt else {
-            return "Waiting for first sync · every \(interval)s"
+            return "Waiting for first update"
         }
         let seconds = max(0, Int(now.timeIntervalSince(last)))
         let age: String
@@ -224,7 +281,7 @@ struct MenuBarPlaceholderView: View {
         case ..<3600: age = "\(seconds / 60) min ago"
         default: age = "\(seconds / 3600) h ago"
         }
-        return "Synced \(age) · every \(interval)s"
+        return "Updated \(age)"
     }
 
     private var loadedPullRequestCount: Int? {
@@ -232,43 +289,6 @@ struct MenuBarPlaceholderView: View {
         return sections.reduce(0) { $0 + $1.pullRequests.count }
     }
 
-    private var filterControls: some View {
-        HStack(spacing: 4) {
-            ScopeSegmentedControl(
-                scope: model.pullRequestScope,
-                selectedCount: loadedPullRequestCount,
-                onSelect: { model.setPullRequestScope($0) }
-            )
-            
-            Menu {
-                repositoryFocusButton(
-                    title: "All repositories",
-                    repositoryID: nil
-                )
-                
-                Divider()
-                
-                ForEach(model.settingsStore.settings.observedRepositories) { repository in
-                    repositoryFocusButton(
-                        title: repository.fullName,
-                        repositoryID: repository.normalizedLookupKey
-                    )
-                }
-            } label: {
-                HeaderControlLabel {
-                    Label(repositoryFocusTitle, systemImage: "line.3.horizontal.decrease.circle")
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .headerControlMenuStyle()
-            .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-        .controlSize(.regular)
-    }
-    
     private var showsDashboardFilters: Bool {
         guard case .authenticated = model.authenticationState else {
             return false
@@ -1368,18 +1388,21 @@ struct AppMarkView: View {
 
 private struct DashboardFooterBar: View {
     let sections: [RepositorySection]
+    let status: (Date) -> String
     let rateLimit: GitHubRateLimitStatus?
 
     var body: some View {
         VStack(spacing: 0) {
             Divider()
             HStack(spacing: 8) {
-                Text(summary)
-                    .lineLimit(1)
+                TimelineView(.periodic(from: .now, by: 5)) { context in
+                    Text("\(status(context.date)) · \(summary)")
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 8)
                 if let rateLimit {
                     Label {
-                        Text("\(rateLimit.remaining.formatted()) API calls left")
+                        Text("\(rateLimit.remaining.formatted()) calls left")
                     } icon: {
                         Image(systemName: "arrow.clockwise")
                     }
@@ -1404,7 +1427,7 @@ private struct DashboardFooterBar: View {
         }.count
         var parts = ["\(pullRequests.count) open"]
         if failing > 0 { parts.append("\(failing) failing") }
-        if ready > 0 { parts.append("\(ready) ready to merge") }
+        if ready > 0 { parts.append("\(ready) ready") }
         return parts.joined(separator: " · ")
     }
 }
@@ -1451,32 +1474,10 @@ private struct ScopeSegmentedControl: View {
     }
 }
 
-/// One 28 pt bordered chip shared by the header menus so Sort, More and the repository filter match.
-private struct HeaderControlLabel<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        HStack(spacing: 6) {
-            content
-        }
-        .font(.system(size: 12.5))
-        .foregroundStyle(.primary)
-        .padding(.horizontal, 10)
-        .frame(height: 28)
-        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-}
-
 private extension View {
-    func headerControlMenuStyle() -> some View {
+    func headerMenuStyle() -> some View {
         self
-            .menuStyle(.button)
-            .buttonStyle(.plain)
+            .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .focusEffectDisabled()
             .fixedSize()
