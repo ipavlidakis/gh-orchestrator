@@ -25,6 +25,8 @@ extension ActionsJobsEnrichmentError: LocalizedError {
 public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
     public let client: any GitHubAPIClient
 
+    private let jobsCache = ActionJobsCache()
+
     public init(client: any GitHubAPIClient = URLSessionGitHubAPIClient()) {
         self.client = client
     }
@@ -32,80 +34,85 @@ public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
     public func buildPullRequestItems(
         from snapshots: [RepositoryPullRequestSnapshot]
     ) async throws -> [PullRequestItem] {
-        var items: [PullRequestItem] = []
+        let pullRequests = snapshots.flatMap(\.pullRequests)
+        let referencesByPullRequest = pullRequests.map { deduplicatedWorkflowRunReferences(from: $0.checkRuns) }
 
-        for repositorySnapshot in snapshots {
-            for snapshot in repositorySnapshot.pullRequests {
-                let workflowRuns = try await workflowRuns(for: snapshot)
-                let externalChecks = externalChecks(for: snapshot)
-
-                items.append(
-                    PullRequestItem(
-                        repository: snapshot.repository,
-                        number: snapshot.number,
-                        title: snapshot.title,
-                        url: snapshot.url,
-                        authorLogin: snapshot.authorLogin,
-                        isDraft: snapshot.isDraft,
-                        createdAt: snapshot.createdAt,
-                        updatedAt: snapshot.updatedAt,
-                        reviewStatus: snapshot.reviewStatus,
-                        unresolvedReviewThreadCount: snapshot.unresolvedReviewThreadCount,
-                        unresolvedReviewComments: snapshot.unresolvedReviewComments.map { comment in
-                            UnresolvedReviewCommentItem(
-                                url: comment.url,
-                                authorLogin: comment.authorLogin,
-                                bodyText: comment.bodyText,
-                                filePath: comment.filePath
-                            )
-                        },
-                        checkRollupState: snapshot.checkRollupState,
-                        externalChecks: externalChecks,
-                        workflowRuns: workflowRuns
-                    )
-                )
+        // Fetch every run's jobs once, with bounded fan-out across all pull requests.
+        var fetchTargets: [JobsFetchTarget] = []
+        var seenKeys = Set<ActionJobsCache.Key>()
+        for (snapshot, references) in zip(pullRequests, referencesByPullRequest) {
+            for reference in references {
+                let target = JobsFetchTarget(repository: snapshot.repository, reference: reference)
+                if seenKeys.insert(target.runKey).inserted {
+                    fetchTargets.append(target)
+                }
             }
         }
 
-        return items
+        let fetchedJobs = try await BoundedConcurrency.map(fetchTargets) { target in
+            try await self.jobs(for: target)
+        }
+        var jobsByRunKey: [ActionJobsCache.Key: [ActionJobItem]] = [:]
+        for (target, jobs) in zip(fetchTargets, fetchedJobs) {
+            jobsByRunKey[target.runKey] = jobs
+        }
+
+        return zip(pullRequests, referencesByPullRequest).map { snapshot, references in
+            let workflowRuns = references.map { reference in
+                WorkflowRunItem(
+                    id: reference.id,
+                    name: reference.workflowName ?? reference.checkName,
+                    status: reference.status,
+                    conclusion: reference.conclusion,
+                    detailsURL: reference.url ?? reference.fallbackDetailsURL,
+                    jobs: jobsByRunKey[ActionJobsCache.Key(repository: snapshot.repository, runID: reference.id)] ?? []
+                )
+            }
+
+            return PullRequestItem(
+                repository: snapshot.repository,
+                number: snapshot.number,
+                title: snapshot.title,
+                url: snapshot.url,
+                authorLogin: snapshot.authorLogin,
+                isDraft: snapshot.isDraft,
+                createdAt: snapshot.createdAt,
+                updatedAt: snapshot.updatedAt,
+                reviewStatus: snapshot.reviewStatus,
+                unresolvedReviewThreadCount: snapshot.unresolvedReviewThreadCount,
+                unresolvedReviewComments: snapshot.unresolvedReviewComments.map { comment in
+                    UnresolvedReviewCommentItem(
+                        url: comment.url,
+                        authorLogin: comment.authorLogin,
+                        bodyText: comment.bodyText,
+                        filePath: comment.filePath
+                    )
+                },
+                checkRollupState: snapshot.checkRollupState,
+                externalChecks: externalChecks(for: snapshot),
+                workflowRuns: workflowRuns
+            )
+        }
     }
 }
 
 extension ActionsJobsEnrichmentService {
-    private func workflowRuns(for snapshot: PullRequestSnapshotItem) async throws -> [WorkflowRunItem] {
-        let references = deduplicatedWorkflowRunReferences(from: snapshot.checkRuns)
+    /// Completed runs are immutable until re-run, and a re-run changes the check run's
+    /// `completedAt`, so `(run id, completedAt)` safely identifies a cached job list.
+    private func jobs(for target: JobsFetchTarget) async throws -> [ActionJobItem] {
+        let cacheEntryID = target.isCacheable ? target.reference.completedAt : nil
 
-        return try await withThrowingTaskGroup(of: (Int, WorkflowRunItem).self) { group in
-            for (index, reference) in references.enumerated() {
-                group.addTask {
-                    let jobs = try await fetchJobs(
-                        repository: snapshot.repository,
-                        runID: reference.id
-                    )
-
-                    return (
-                        index,
-                        WorkflowRunItem(
-                            id: reference.id,
-                            name: reference.workflowName ?? reference.checkName,
-                            status: reference.status,
-                            conclusion: reference.conclusion,
-                            detailsURL: reference.url ?? reference.fallbackDetailsURL,
-                            jobs: jobs
-                        )
-                    )
-                }
-            }
-
-            var results: [(Int, WorkflowRunItem)] = []
-            for try await result in group {
-                results.append(result)
-            }
-
-            return results
-                .sorted { $0.0 < $1.0 }
-                .map(\.1)
+        if let cacheEntryID, let cached = await jobsCache.jobs(for: target.runKey, completedAt: cacheEntryID) {
+            return cached
         }
+
+        let jobs = try await fetchJobs(repository: target.repository, runID: target.reference.id)
+
+        if let cacheEntryID {
+            await jobsCache.store(jobs, for: target.runKey, completedAt: cacheEntryID)
+        }
+
+        return jobs
     }
 
     private func externalChecks(for snapshot: PullRequestSnapshotItem) -> [ExternalCheckItem] {
@@ -159,6 +166,7 @@ extension ActionsJobsEnrichmentService {
                     checkName: checkRun.name,
                     status: checkRun.status,
                     conclusion: checkRun.conclusion,
+                    completedAt: checkRun.completedAt,
                     fallbackDetailsURL: checkRun.detailsURL
                 )
             )
@@ -235,5 +243,55 @@ private struct WorkflowRunReference: Equatable, Sendable {
     let checkName: String
     let status: String
     let conclusion: String?
+    let completedAt: Date?
     let fallbackDetailsURL: URL?
+}
+
+private struct JobsFetchTarget: Sendable {
+    let repository: ObservedRepository
+    let reference: WorkflowRunReference
+
+    var runKey: ActionJobsCache.Key {
+        ActionJobsCache.Key(repository: repository, runID: reference.id)
+    }
+
+    var isCacheable: Bool {
+        reference.status.caseInsensitiveCompare("completed") == .orderedSame && reference.completedAt != nil
+    }
+}
+
+private actor ActionJobsCache {
+    struct Key: Hashable, Sendable {
+        let repository: String
+        let runID: Int
+
+        init(repository: ObservedRepository, runID: Int) {
+            self.repository = repository.fullName.lowercased()
+            self.runID = runID
+        }
+    }
+
+    private struct Entry {
+        let completedAt: Date
+        let jobs: [ActionJobItem]
+    }
+
+    private let maximumEntryCount = 500
+    private var entries: [Key: Entry] = [:]
+
+    func jobs(for key: Key, completedAt: Date) -> [ActionJobItem]? {
+        guard let entry = entries[key], entry.completedAt == completedAt else {
+            return nil
+        }
+
+        return entry.jobs
+    }
+
+    func store(_ jobs: [ActionJobItem], for key: Key, completedAt: Date) {
+        if entries.count >= maximumEntryCount, entries[key] == nil {
+            entries.removeAll(keepingCapacity: true)
+        }
+
+        entries[key] = Entry(completedAt: completedAt, jobs: jobs)
+    }
 }

@@ -242,6 +242,58 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
         XCTAssertEqual(requests.map { $0.url?.absoluteString }, ["https://api.github.com/repos/cli/cli/actions/runs/321/jobs"])
     }
 
+    func testCompletedRunJobsAreCachedUntilTheRunIsRerun() async throws {
+        let repository = ObservedRepository(owner: "cli", name: "cli")
+        let transport = RoutingGitHubHTTPTransport { _ in
+            fixtureData(named: "completed_jobs", subdirectory: "ActionsJobs")
+        }
+        let service = ActionsJobsEnrichmentService(
+            client: URLSessionGitHubAPIClient(
+                transport: transport,
+                credentialStore: StubGitHubCredentialStore()
+            )
+        )
+
+        func snapshots(completedAt: TimeInterval) -> [RepositoryPullRequestSnapshot] {
+            let snapshot = PullRequestSnapshotItem(
+                repository: repository,
+                number: 105,
+                title: "Cached checks",
+                url: URL(string: "https://github.com/cli/cli/pull/105")!,
+                isDraft: false,
+                updatedAt: Date(timeIntervalSince1970: 1_700_000_300),
+                reviewStatus: .approved,
+                unresolvedReviewThreadCount: 0,
+                unresolvedReviewComments: [],
+                checkRollupState: .passing,
+                checkRuns: [
+                    CheckRunSnapshot(
+                        name: "lint-linux",
+                        status: "COMPLETED",
+                        conclusion: "SUCCESS",
+                        completedAt: Date(timeIntervalSince1970: completedAt),
+                        appName: "GitHub Actions",
+                        appSlug: "github-actions",
+                        workflowRun: WorkflowRunReferenceSnapshot(id: 321, url: nil, workflowName: "Lint")
+                    )
+                ],
+                statusContexts: []
+            )
+            return [RepositoryPullRequestSnapshot(repository: repository, pullRequests: [snapshot])]
+        }
+
+        let first = try await service.buildPullRequestItems(from: snapshots(completedAt: 1_700_000_000))
+        let second = try await service.buildPullRequestItems(from: snapshots(completedAt: 1_700_000_000))
+        let afterCachedLoads = await transport.recordedRequests().count
+        _ = try await service.buildPullRequestItems(from: snapshots(completedAt: 1_700_000_900))
+        let afterRerun = await transport.recordedRequests().count
+
+        XCTAssertEqual(afterCachedLoads, 1)
+        XCTAssertEqual(afterRerun, 2)
+        XCTAssertEqual(first, second)
+        XCTAssertFalse(first.first?.workflowRuns.first?.jobs.isEmpty ?? true)
+    }
+
     func testActionsStepLinkBuilderFallsBackToJobURLWhenStepNumberIsInvalid() {
         let jobURL = URL(string: "https://github.com/cli/cli/actions/runs/321/job/654")
 

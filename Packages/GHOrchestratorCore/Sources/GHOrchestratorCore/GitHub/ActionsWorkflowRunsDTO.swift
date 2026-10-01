@@ -11,6 +11,7 @@ struct ActionsWorkflowRunsResponseDTO: Decodable {
 
     struct WorkflowRunDTO: Decodable {
         let id: Int
+        let nodeID: String?
         let name: String?
         let status: String?
         let conclusion: String?
@@ -21,6 +22,7 @@ struct ActionsWorkflowRunsResponseDTO: Decodable {
 
         enum CodingKeys: String, CodingKey {
             case id
+            case nodeID = "node_id"
             case name
             case status
             case conclusion

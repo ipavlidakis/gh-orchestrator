@@ -130,6 +130,8 @@ public struct ActionsInsightsService: ActionsInsightsLoading {
     public let maximumJobPageCount: Int
 
     private let perPage = 100
+    private let jobsBatchSize = 50
+    private let jobsCache = InsightJobsCache()
 
     public init(
         client: any GitHubAPIClient = URLSessionGitHubAPIClient(),
@@ -211,30 +213,49 @@ public struct ActionsInsightsService: ActionsInsightsLoading {
         dateInterval: DateInterval
     ) async throws -> (runs: [ActionsWorkflowRunsResponseDTO.WorkflowRunDTO], isCapped: Bool) {
         let maximumPages = max(Int(ceil(Double(maximumWorkflowRunCount) / Double(perPage))), 1)
-        var page = 1
-        var runs: [ActionsWorkflowRunsResponseDTO.WorkflowRunDTO] = []
-        var totalCount: Int?
+        let first = try await fetchWorkflowRunPage(
+            repository: repository,
+            workflow: workflow,
+            dateInterval: dateInterval,
+            page: 1
+        )
+        var runs = first.workflowRuns
+        var totalCount = first.totalCount
 
-        while page <= maximumPages, runs.count < maximumWorkflowRunCount {
-            let response: ActionsWorkflowRunsResponseDTO = try await client.get(
-                pathWithQuery(
-                    path: "/repos/\(repository.fullName)/actions/workflows/\(workflow.id)/runs",
-                    queryItems: [
-                        URLQueryItem(name: "per_page", value: "\(perPage)"),
-                        URLQueryItem(name: "page", value: "\(page)"),
-                        URLQueryItem(name: "created", value: createdFilter(for: dateInterval))
-                    ]
-                )
-            )
+        if first.workflowRuns.count == perPage, maximumPages > 1 {
+            if let total = first.totalCount {
+                // total_count is known after page 1, so the remaining pages can load concurrently.
+                let lastPage = min(maximumPages, Int(ceil(Double(total) / Double(perPage))))
+                if lastPage >= 2 {
+                    let pages = try await BoundedConcurrency.map(Array(2...lastPage)) { page in
+                        try await self.fetchWorkflowRunPage(
+                            repository: repository,
+                            workflow: workflow,
+                            dateInterval: dateInterval,
+                            page: page
+                        )
+                    }
+                    runs.append(contentsOf: pages.flatMap(\.workflowRuns))
+                }
+            } else {
+                var page = 2
+                while page <= maximumPages {
+                    let response = try await fetchWorkflowRunPage(
+                        repository: repository,
+                        workflow: workflow,
+                        dateInterval: dateInterval,
+                        page: page
+                    )
+                    totalCount = response.totalCount ?? totalCount
+                    runs.append(contentsOf: response.workflowRuns)
 
-            totalCount = response.totalCount ?? totalCount
-            runs.append(contentsOf: response.workflowRuns)
+                    guard response.workflowRuns.count == perPage else {
+                        break
+                    }
 
-            guard response.workflowRuns.count == perPage else {
-                break
+                    page += 1
+                }
             }
-
-            page += 1
         }
 
         if runs.count > maximumWorkflowRunCount {
@@ -244,29 +265,160 @@ public struct ActionsInsightsService: ActionsInsightsLoading {
         return (runs, (totalCount ?? runs.count) > runs.count)
     }
 
+    private func fetchWorkflowRunPage(
+        repository: ObservedRepository,
+        workflow: ActionsWorkflowItem,
+        dateInterval: DateInterval,
+        page: Int
+    ) async throws -> ActionsWorkflowRunsResponseDTO {
+        try await client.get(
+            pathWithQuery(
+                path: "/repos/\(repository.fullName)/actions/workflows/\(workflow.id)/runs",
+                queryItems: [
+                    URLQueryItem(name: "per_page", value: "\(perPage)"),
+                    URLQueryItem(name: "page", value: "\(page)"),
+                    URLQueryItem(name: "created", value: createdFilter(for: dateInterval))
+                ]
+            )
+        )
+    }
+
     private func fetchJobRecords(
         repository: ObservedRepository,
         runs: [InsightWorkflowRun],
         matchingJobName jobName: String
     ) async throws -> (records: [InsightRecord], isCapped: Bool) {
-        var records: [InsightRecord] = []
-        var isCapped = false
+        let fetches = try await loadJobs(repository: repository, runs: runs)
 
-        for run in runs {
-            let fetch = try await fetchJobs(repository: repository, runID: run.id)
-            isCapped = isCapped || fetch.isCapped
-
-            records.append(contentsOf: fetch.jobs.compactMap { job in
-                guard job.name.caseInsensitiveCompare(jobName) == .orderedSame else {
-                    return nil
-                }
-
-                return InsightRecord(job: job)
-            })
+        let records = fetches.flatMap { fetch in
+            fetch.jobs.compactMap { job in
+                job.name.caseInsensitiveCompare(jobName) == .orderedSame ? job.record : nil
+            }
         }
 
-        return (records, isCapped)
+        return (records, fetches.contains { $0.isCapped })
     }
+
+    /// Resolves jobs for every run: cache first, then batched GraphQL (many runs per request),
+    /// then per-run REST for runs that carry no GraphQL node ID.
+    private func loadJobs(
+        repository: ObservedRepository,
+        runs: [InsightWorkflowRun]
+    ) async throws -> [InsightJobsFetch] {
+        var results = [InsightJobsFetch?](repeating: nil, count: runs.count)
+        var batchableIndexes: [Int] = []
+        var restIndexes: [Int] = []
+
+        for (index, run) in runs.enumerated() {
+            if let cached = await jobsCache.fetch(for: cacheKey(repository: repository, run: run)) {
+                results[index] = cached
+            } else if run.nodeID != nil {
+                batchableIndexes.append(index)
+            } else {
+                restIndexes.append(index)
+            }
+        }
+
+        let batches = stride(from: 0, to: batchableIndexes.count, by: jobsBatchSize).map {
+            Array(batchableIndexes[$0..<min($0 + jobsBatchSize, batchableIndexes.count)])
+        }
+        let batchResults = try await BoundedConcurrency.map(batches, limit: 4) { indexes in
+            let fetches = try await self.fetchJobsBatch(runs: indexes.map { runs[$0] })
+            for (index, fetch) in zip(indexes, fetches) {
+                await self.jobsCache.store(fetch, for: self.cacheKey(repository: repository, run: runs[index]))
+            }
+            return Array(zip(indexes, fetches))
+        }
+        for (index, fetch) in batchResults.joined() {
+            results[index] = fetch
+        }
+
+        let restResults = try await BoundedConcurrency.map(restIndexes) { index in
+            let fetch = try await self.fetchJobsREST(repository: repository, run: runs[index])
+            return (index, fetch)
+        }
+        for (index, fetch) in restResults {
+            results[index] = fetch
+        }
+
+        return results.compactMap { $0 }
+    }
+
+    /// Completed runs only change when re-run, which bumps `updated_at`, so
+    /// `(run id, completedAt)` identifies an immutable job list.
+    private func cacheKey(repository: ObservedRepository, run: InsightWorkflowRun) -> InsightJobsCache.Key {
+        InsightJobsCache.Key(
+            repository: repository.fullName.lowercased(),
+            runID: run.id,
+            completedAt: run.completedAt
+        )
+    }
+
+    private func fetchJobsREST(
+        repository: ObservedRepository,
+        run: InsightWorkflowRun
+    ) async throws -> InsightJobsFetch {
+        let fetch = try await fetchJobs(repository: repository, runID: run.id)
+        let result = InsightJobsFetch(
+            jobs: fetch.jobs.map { InsightJob(name: $0.name, record: InsightRecord(job: $0)) },
+            isCapped: fetch.isCapped
+        )
+        await jobsCache.store(result, for: cacheKey(repository: repository, run: run))
+        return result
+    }
+
+    /// One GraphQL request returns the check runs (Actions jobs) of up to `jobsBatchSize` runs.
+    private func fetchJobsBatch(runs: [InsightWorkflowRun]) async throws -> [InsightJobsFetch] {
+        let response: InsightJobsBatchResponse = try await client.graphQL(
+            query: Self.jobsBatchQuery,
+            variables: InsightJobsBatchVariables(ids: runs.compactMap(\.nodeID))
+        )
+
+        guard response.nodes.count == runs.count else {
+            throw GitHubAPIClientError.invalidResponse(
+                message: "GitHub returned \(response.nodes.count) workflow runs for \(runs.count) requested."
+            )
+        }
+
+        return response.nodes.map { node in
+            let checkRuns = node?.checkSuite?.checkRuns
+            let nodes = checkRuns?.nodes?.compactMap { $0 } ?? []
+            let jobs = nodes.map { checkRun in
+                InsightJob(
+                    name: checkRun.name,
+                    record: InsightRecord(
+                        status: checkRun.status,
+                        conclusion: checkRun.conclusion,
+                        startedAt: checkRun.startedAt,
+                        completedAt: checkRun.completedAt
+                    )
+                )
+            }
+
+            return InsightJobsFetch(jobs: jobs, isCapped: (checkRuns?.totalCount ?? nodes.count) > nodes.count)
+        }
+    }
+
+    private static let jobsBatchQuery = """
+    query($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on WorkflowRun {
+          checkSuite {
+            checkRuns(first: 100) {
+              totalCount
+              nodes {
+                name
+                status
+                conclusion
+                startedAt
+                completedAt
+              }
+            }
+          }
+        }
+      }
+    }
+    """
 
     private func fetchJobs(
         repository: ObservedRepository,
@@ -377,6 +529,7 @@ public struct ActionsInsightsService: ActionsInsightsLoading {
 
 private struct InsightWorkflowRun {
     let id: Int
+    let nodeID: String?
     let conclusion: String
     let completedAt: Date
     let durationSeconds: TimeInterval?
@@ -392,6 +545,7 @@ private struct InsightWorkflowRun {
         }
 
         self.id = dto.id
+        self.nodeID = dto.nodeID
         self.conclusion = conclusion
         self.completedAt = completedAt
 
@@ -415,11 +569,20 @@ private struct InsightRecord {
     }
 
     init?(job: ActionsJobsResponseDTO.JobDTO) {
+        self.init(
+            status: job.status,
+            conclusion: job.conclusion,
+            startedAt: job.startedAt,
+            completedAt: job.completedAt
+        )
+    }
+
+    init?(status: String, conclusion: String?, startedAt: Date?, completedAt: Date?) {
         guard
-            job.status == "completed",
-            let conclusion = job.conclusion?.trimmingCharacters(in: .whitespacesAndNewlines),
+            status.caseInsensitiveCompare("completed") == .orderedSame,
+            let conclusion = conclusion?.trimmingCharacters(in: .whitespacesAndNewlines),
             !conclusion.isEmpty,
-            let completedAt = job.completedAt
+            let completedAt
         else {
             return nil
         }
@@ -427,7 +590,7 @@ private struct InsightRecord {
         self.conclusion = conclusion
         self.completedAt = completedAt
 
-        if let startedAt = job.startedAt, completedAt >= startedAt {
+        if let startedAt, completedAt >= startedAt {
             self.durationSeconds = completedAt.timeIntervalSince(startedAt)
         } else {
             self.durationSeconds = nil
@@ -464,5 +627,69 @@ private struct InsightBucket {
         }
 
         return totalDurationSeconds / Double(durationCount)
+    }
+}
+
+
+private struct InsightJob: Sendable {
+    let name: String
+    let record: InsightRecord?
+}
+
+private struct InsightJobsFetch: Sendable {
+    let jobs: [InsightJob]
+    let isCapped: Bool
+}
+
+private actor InsightJobsCache {
+    struct Key: Hashable, Sendable {
+        let repository: String
+        let runID: Int
+        let completedAt: Date
+    }
+
+    private let maximumEntryCount = 5_000
+    private var entries: [Key: InsightJobsFetch] = [:]
+
+    func fetch(for key: Key) -> InsightJobsFetch? {
+        entries[key]
+    }
+
+    func store(_ fetch: InsightJobsFetch, for key: Key) {
+        if entries.count >= maximumEntryCount {
+            entries.removeAll(keepingCapacity: true)
+        }
+
+        entries[key] = fetch
+    }
+}
+
+
+private struct InsightJobsBatchVariables: Encodable, Sendable {
+    let ids: [String]
+}
+
+private struct InsightJobsBatchResponse: Decodable, Sendable {
+    let nodes: [Node?]
+
+    struct Node: Decodable, Sendable {
+        let checkSuite: CheckSuite?
+    }
+
+    struct CheckSuite: Decodable, Sendable {
+        let checkRuns: CheckRuns?
+    }
+
+    struct CheckRuns: Decodable, Sendable {
+        let totalCount: Int?
+        let nodes: [CheckRun?]?
+    }
+
+    struct CheckRun: Decodable, Sendable {
+        let name: String
+        let status: String
+        let conclusion: String?
+        let startedAt: Date?
+        let completedAt: Date?
     }
 }

@@ -15,57 +15,46 @@ struct ActionsInsightsSettingsPane: View {
                     repositoryPicker
                 }
 
-                SettingsRow(
-                    title: "Workflow",
-                    subtitle: "Load workflows for the selected repository."
-                ) {
-                    workflowControl
-                }
-
-                SettingsRow(
-                    title: "Job",
-                    subtitle: "Use all jobs for workflow-level duration, or pick one job for job-level duration."
-                ) {
-                    jobControl
-                }
-
-                SettingsRow(
-                    title: "Period",
-                    subtitle: "Last month is the previous calendar month."
-                ) {
-                    Picker(
-                        "Period",
-                        selection: Binding(
-                            get: { model.actionsInsightsPeriod },
-                            set: { model.actionsInsightsPeriod = $0 }
-                        )
+                if model.actionsInsightsSelectedRepository != nil {
+                    SettingsRow(
+                        title: "Workflow",
+                        subtitle: "Workflows of the selected repository."
                     ) {
-                        ForEach(ActionsInsightsPeriod.allCases) { period in
-                            Text(period.title)
-                                .tag(period)
-                        }
+                        workflowControl
                     }
-                    .labelsHidden()
                 }
 
-                SettingsRow(
-                    title: "Actions",
-                    subtitle: refreshSubtitle
-                ) {
-                    HStack(spacing: 10) {
-                        if case .loading = model.actionsInsightsState {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
+                if model.actionsInsightsSelectedWorkflow != nil {
+                    SettingsRow(
+                        title: "Job",
+                        subtitle: "Use all jobs for workflow-level duration, or pick one job for job-level duration."
+                    ) {
+                        jobControl
+                    }
+                }
 
-                        Button("Refresh") {
-                            model.refreshActionsInsights()
+                if model.actionsInsightsResolvedJobChoice != nil {
+                    SettingsRow(
+                        title: "Period",
+                        subtitle: "Last month is the previous calendar month."
+                    ) {
+                        Picker(
+                            "Period",
+                            selection: Binding(
+                                get: { model.actionsInsightsPeriod },
+                                set: { model.actionsInsightsPeriod = $0 }
+                            )
+                        ) {
+                            ForEach(ActionsInsightsPeriod.allCases) { period in
+                                Text(period.title)
+                                    .tag(period)
+                            }
                         }
-                        .disabled(!model.canRefreshActionsInsights || isLoading)
+                        .labelsHidden()
                     }
                 }
             } footer: {
-                Text("Metrics are fetched live from GitHub for the selected period; only these filter choices are saved.")
+                Text("Metrics are fetched live from GitHub and reload whenever a filter changes; only these filter choices are saved.")
             }
 
             SettingsGroup(title: "Summary") {
@@ -83,8 +72,11 @@ struct ActionsInsightsSettingsPane: View {
                 Text("Workflow duration uses run start to completion. Job duration uses the selected job’s own start and completion timestamps.")
             }
         }
-        .task {
-            model.loadActionsInsightsDependenciesIfNeeded()
+        .onAppear {
+            model.actionsInsightsPaneDidAppear()
+        }
+        .onDisappear {
+            model.actionsInsightsPaneDidDisappear()
         }
     }
 
@@ -168,6 +160,9 @@ struct ActionsInsightsSettingsPane: View {
                 Button("Retry") {
                     model.refreshWorkflowJobNames(repositoryID: repository.id, workflow: workflow)
                 }
+            case .loaded(let jobNames) where jobNames.isEmpty:
+                Text("No jobs")
+                    .foregroundStyle(.secondary)
             case .loaded(let jobNames):
                 Picker(
                     "Job",
@@ -186,9 +181,6 @@ struct ActionsInsightsSettingsPane: View {
                 }
                 .labelsHidden()
             }
-        } else {
-            Text("All jobs")
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -198,7 +190,7 @@ struct ActionsInsightsSettingsPane: View {
         case .idle:
             SettingsTextBlock(
                 title: "No data loaded",
-                bodyText: "Choose a repository and workflow, then refresh to load Actions insights."
+                bodyText: "Select a repository, workflow, and job to load Actions insights."
             )
         case .loading:
             SettingsRow(
@@ -305,7 +297,8 @@ struct ActionsInsightsSettingsPane: View {
                         .frame(height: 180)
                     }
                 }
-                .padding(.vertical, 10)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
             }
         } else {
             SettingsTextBlock(
@@ -313,22 +306,6 @@ struct ActionsInsightsSettingsPane: View {
                 bodyText: "Refresh the dashboard after choosing filters."
             )
         }
-    }
-
-    private var refreshSubtitle: String {
-        if case .authenticated = model.authenticationState {
-            return "Fetch live Actions metrics for the selected filters."
-        }
-
-        return "Sign in before loading Actions metrics."
-    }
-
-    private var isLoading: Bool {
-        if case .loading = model.actionsInsightsState {
-            return true
-        }
-
-        return false
     }
 
     private func percentageText(_ rate: Double?) -> String {
@@ -379,6 +356,7 @@ private struct ActionsInsightsMetricRow: View {
                 .font(.headline.weight(.semibold))
                 .monospacedDigit()
         }
-        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
     }
 }

@@ -451,7 +451,7 @@ final class SettingsModelTests: XCTestCase {
             actionsInsightsService: insightsService
         )
 
-        model.loadActionsInsightsDependenciesIfNeeded()
+        model.actionsInsightsPaneDidAppear()
 
         await waitUntil("workflow names load") {
             !model.availableWorkflows(repositoryID: "openai/codex").isEmpty
@@ -485,6 +485,92 @@ final class SettingsModelTests: XCTestCase {
 
         let reloadedStore = SettingsStore(storageURL: storageURL)
         XCTAssertEqual(reloadedStore.settings.actionsInsightsSelection, store.settings.actionsInsightsSelection)
+    }
+
+    func testChangingJobOrPeriodReloadsInsightsWithoutManualRefresh() async throws {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings.observedRepositories = [ObservedRepository(owner: "openai", name: "codex")]
+        let workflow = ActionsWorkflowItem(id: 42, name: "CI", path: ".github/workflows/ci.yml", state: "active")
+        let insightsService = StubActionsInsightsLoading(
+            dashboard: ActionsInsightsDashboard(
+                dateInterval: DateInterval(start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 60)),
+                summary: ActionsInsightsSummary(totalCount: 1, successCount: 1, failureCount: 0, averageDurationSeconds: 60),
+                dataPoints: []
+            )
+        )
+        let model = SettingsModel(
+            store: store,
+            authenticationState: .authenticated(username: "octocat"),
+            workflowListService: StubActionsWorkflowListing(workflows: [workflow]),
+            workflowJobListService: StubActionsWorkflowJobListing(jobNames: ["Build", "Test"]),
+            actionsInsightsService: insightsService
+        )
+        model.actionsInsightsPaneDidAppear()
+        await waitUntil("workflow names load") {
+            !model.availableWorkflows(repositoryID: "openai/codex").isEmpty
+        }
+
+        model.setActionsInsightsRepositoryID("openai/codex")
+        model.setActionsInsightsWorkflowID(42)
+        model.setActionsInsightsJobName("Test")
+        await waitUntil("job selection loads insights") {
+            await insightsService.lastRequest?.jobName == "Test"
+        }
+
+        model.actionsInsightsPeriod = .last90Days
+        await waitUntil("period change loads insights") {
+            await insightsService.lastRequest?.period == .last90Days
+        }
+        await waitUntil("dashboard is loaded") {
+            if case .loaded = model.actionsInsightsState { return true }
+            return false
+        }
+    }
+
+    func testInsightsFiltersPreselectFirstWorkflowAndJobAndLoadOnceComplete() async {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        store.settings.observedRepositories = [ObservedRepository(owner: "openai", name: "codex")]
+        let workflows = [
+            ActionsWorkflowItem(id: 7, name: "Alpha", path: ".github/workflows/a.yml", state: "active"),
+            ActionsWorkflowItem(id: 8, name: "Beta", path: ".github/workflows/b.yml", state: "active")
+        ]
+        let insightsService = StubActionsInsightsLoading(
+            dashboard: ActionsInsightsDashboard(
+                dateInterval: DateInterval(start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 60)),
+                summary: ActionsInsightsSummary(totalCount: 1, successCount: 1, failureCount: 0, averageDurationSeconds: 60),
+                dataPoints: []
+            )
+        )
+        let model = SettingsModel(
+            store: store,
+            authenticationState: .authenticated(username: "octocat"),
+            workflowListService: StubActionsWorkflowListing(workflows: workflows),
+            workflowJobListService: StubActionsWorkflowJobListing(jobNames: ["Build", "Test"]),
+            actionsInsightsService: insightsService
+        )
+
+        XCTAssertNil(model.actionsInsightsSelectedWorkflow, "workflow stays hidden until workflows load")
+        XCTAssertNil(model.actionsInsightsResolvedJobChoice)
+
+        model.actionsInsightsPaneDidAppear()
+
+        await waitUntil("defaults resolve and insights load") {
+            if case .loaded = model.actionsInsightsState { return true }
+            return false
+        }
+
+        XCTAssertEqual(model.actionsInsightsSelectedWorkflow?.name, "Alpha")
+        XCTAssertEqual(model.actionsInsightsResolvedJobChoice, .job("Build"))
+        let request = await insightsService.lastRequest
+        XCTAssertEqual(request?.workflow.id, 7)
+        XCTAssertEqual(request?.jobName, "Build")
+
+        model.setActionsInsightsJobName(nil)
+        XCTAssertEqual(model.actionsInsightsResolvedJobChoice, .allJobs)
+        await waitUntil("all-jobs selection loads workflow-level insights") {
+            let last = await insightsService.lastRequest
+            return last != nil && last?.jobName == nil
+        }
     }
 
     func testWorkflowNameLoadingSurfacesFailures() async {
@@ -567,6 +653,22 @@ final class SettingsModelTests: XCTestCase {
     ) async {
         for _ in 0..<timeoutIterations {
             if condition() {
+                return
+            }
+
+            await Task.yield()
+        }
+
+        XCTFail("Timed out waiting for \(description)")
+    }
+
+    private func waitUntil(
+        _ description: String,
+        timeoutIterations: Int = 1_000,
+        condition: @escaping () async -> Bool
+    ) async {
+        for _ in 0..<timeoutIterations {
+            if await condition() {
                 return
             }
 

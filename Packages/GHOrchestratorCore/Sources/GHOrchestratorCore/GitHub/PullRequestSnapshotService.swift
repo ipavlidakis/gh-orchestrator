@@ -179,6 +179,7 @@ extension GHPullRequestSnapshotService {
                     status
                     conclusion
                     detailsUrl
+                    completedAt
                     checkSuite {
                       app {
                         name
@@ -376,6 +377,7 @@ extension GHPullRequestSnapshotService {
             status: status,
             conclusion: context.conclusion,
             detailsURL: context.detailsUrl,
+            completedAt: context.completedAt,
             appName: context.checkSuite?.app?.name,
             appSlug: context.checkSuite?.app?.slug,
             workflowRun: mapWorkflowRun(context.checkSuite?.workflowRun)

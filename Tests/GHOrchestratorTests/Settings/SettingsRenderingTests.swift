@@ -39,6 +39,8 @@ final class SettingsRenderingTests: XCTestCase {
         let model = SettingsModel(store: store, authenticationState: .authenticated(username: "example"))
         model.workflowListStatesByRepositoryID[repository.id] = .loaded(["CodeQL"])
         model.workflowItemsByRepositoryID[repository.id] = [ActionsWorkflowItem(id: 1, name: "CodeQL", path: ".github/workflows/codeql.yml", state: "active")]
+        let jobListKey = "\(RepositoryNotificationSettings.normalizedRepositoryID(repository.id))::\(RepositoryNotificationSettings.normalizedWorkflowName("CodeQL"))"
+        model.workflowJobListStatesByKey[jobListKey] = .loaded(["Analyze (swift)"])
         let updates = SoftwareUpdateModel(store: store, checker: GitHubReleaseUpdateChecker(), installer: DMGSoftwareUpdateInstaller())
         let general = SettingsWindowView(model: model, softwareUpdateModel: updates, requestLogModel: GitHubRequestLogModel(), menuVisibilityController: SettingsWindowMenuVisibilityController(mainMenuProvider: { nil }), onSettingsWindowVisibilityChange: { _ in })
         for scheme in [ColorScheme.light, .dark] {

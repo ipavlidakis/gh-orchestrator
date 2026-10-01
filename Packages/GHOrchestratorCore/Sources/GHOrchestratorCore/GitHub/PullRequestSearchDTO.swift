@@ -79,6 +79,7 @@ struct PullRequestSearchResponseDTO: Decodable {
         let status: String?
         let conclusion: String?
         let detailsUrl: URL?
+        let completedAt: Date?
         let checkSuite: CheckSuiteDTO?
         let context: String?
         let state: String?
@@ -91,6 +92,7 @@ struct PullRequestSearchResponseDTO: Decodable {
             case status
             case conclusion
             case detailsUrl
+            case completedAt
             case checkSuite
             case context
             case state

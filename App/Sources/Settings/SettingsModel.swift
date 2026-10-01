@@ -26,6 +26,9 @@ final class SettingsModel {
     @ObservationIgnored
     private var actionsInsightsTask: Task<Void, Never>?
 
+    @ObservationIgnored
+    private var isActionsInsightsPaneVisible = false
+
     var repositoryText: String {
         didSet {
             syncRepositories()
@@ -212,8 +215,41 @@ final class SettingsModel {
         actionsInsightsSelectedWorkflow?.id
     }
 
+    enum ActionsInsightsJobChoice: Equatable {
+        case allJobs
+        case job(String)
+    }
+
+    /// The job the dashboard uses: the saved choice when still valid, otherwise the first job of the
+    /// selected workflow. `nil` while jobs are loading or when the workflow has none.
+    var actionsInsightsResolvedJobChoice: ActionsInsightsJobChoice? {
+        guard let repository = actionsInsightsSelectedRepository,
+              let workflow = actionsInsightsSelectedWorkflow,
+              case .loaded(let jobNames) = workflowJobListState(repositoryID: repository.id, workflowName: workflow.name)
+        else {
+            return nil
+        }
+
+        let selection = store.settings.actionsInsightsSelection
+        if selection.includesAllJobs {
+            return .allJobs
+        }
+
+        if let jobName = selection.jobName,
+           let match = jobNames.first(where: { $0.caseInsensitiveCompare(jobName) == .orderedSame }) {
+            return .job(match)
+        }
+
+        return jobNames.first.map(ActionsInsightsJobChoice.job)
+    }
+
+    /// The job name sent to the insights service; `nil` means workflow-level (all jobs).
     var actionsInsightsSelectedJobName: String? {
-        store.settings.actionsInsightsSelection.jobName
+        if case .job(let jobName) = actionsInsightsResolvedJobChoice {
+            return jobName
+        }
+
+        return nil
     }
 
     var canRefreshActionsInsights: Bool {
@@ -222,7 +258,8 @@ final class SettingsModel {
         }
 
         return actionsInsightsSelectedRepository != nil &&
-            actionsInsightsSelectedWorkflow != nil
+            actionsInsightsSelectedWorkflow != nil &&
+            actionsInsightsResolvedJobChoice != nil
     }
 
     var actionsInsightsPeriod: ActionsInsightsPeriod {
@@ -231,7 +268,7 @@ final class SettingsModel {
             updateActionsInsightsSelection { selection in
                 selection.period = newValue
             }
-            actionsInsightsState = .idle
+            reloadActionsInsightsAfterSelectionChange()
         }
     }
 
@@ -416,12 +453,10 @@ final class SettingsModel {
             selection.workflowID = nil
             selection.workflowName = nil
             selection.jobName = nil
+            selection.includesAllJobs = false
         }
-        actionsInsightsState = .idle
-
-        if let normalizedRepositoryID {
-            loadWorkflowNamesIfNeeded(repositoryID: normalizedRepositoryID)
-        }
+        reloadActionsInsightsAfterSelectionChange()
+        loadActionsInsightsDependenciesIfNeeded()
     }
 
     func setActionsInsightsWorkflowID(_ workflowID: Int?) {
@@ -435,8 +470,9 @@ final class SettingsModel {
             selection.workflowID = workflow?.id
             selection.workflowName = workflow?.name
             selection.jobName = nil
+            selection.includesAllJobs = false
         }
-        actionsInsightsState = .idle
+        reloadActionsInsightsAfterSelectionChange()
 
         if let repository = actionsInsightsSelectedRepository,
            let workflow {
@@ -448,8 +484,52 @@ final class SettingsModel {
         let trimmed = jobName?.trimmingCharacters(in: .whitespacesAndNewlines)
         updateActionsInsightsSelection { selection in
             selection.jobName = trimmed?.isEmpty == false ? trimmed : nil
+            selection.includesAllJobs = selection.jobName == nil
         }
-        actionsInsightsState = .idle
+        reloadActionsInsightsAfterSelectionChange()
+    }
+
+    /// The Insights pane calls these as it appears and disappears so that background list loads
+    /// (shared with Notifications) only drive the dashboard while the pane is on screen.
+    func actionsInsightsPaneDidAppear() {
+        isActionsInsightsPaneVisible = true
+        loadActionsInsightsDependenciesIfNeeded()
+        loadActionsInsightsIfNeeded()
+    }
+
+    func actionsInsightsPaneDidDisappear() {
+        isActionsInsightsPaneVisible = false
+    }
+
+    /// Called when a workflow or job list finishes loading: defaults (first workflow, first job)
+    /// resolve, further lists load, and the dashboard loads once every filter is available.
+    private func advanceActionsInsightsCascade() {
+        guard isActionsInsightsPaneVisible else {
+            return
+        }
+
+        loadActionsInsightsDependenciesIfNeeded()
+        loadActionsInsightsIfNeeded()
+    }
+
+    private func loadActionsInsightsIfNeeded() {
+        guard case .idle = actionsInsightsState, canRefreshActionsInsights else {
+            return
+        }
+
+        refreshActionsInsights()
+    }
+
+    /// Selection changes load the dashboard right away. Without a complete selection
+    /// (for example right after switching repository) the previous results are cleared instead.
+    private func reloadActionsInsightsAfterSelectionChange() {
+        if canRefreshActionsInsights {
+            refreshActionsInsights()
+        } else {
+            actionsInsightsTask?.cancel()
+            actionsInsightsTask = nil
+            actionsInsightsState = .idle
+        }
     }
 
     func loadActionsInsightsDependenciesIfNeeded() {
@@ -488,6 +568,12 @@ final class SettingsModel {
             return
         }
 
+        guard actionsInsightsResolvedJobChoice != nil else {
+            actionsInsightsState = .idle
+            loadWorkflowJobNamesIfNeeded(repositoryID: repository.id, workflow: workflow)
+            return
+        }
+
         let selectedJobName = actionsInsightsSelectedJobName
         let selectedPeriod = actionsInsightsPeriod
         actionsInsightsState = .loading
@@ -506,6 +592,10 @@ final class SettingsModel {
                 }
 
                 await MainActor.run {
+                    guard !Task.isCancelled else {
+                        return
+                    }
+
                     self.actionsInsightsState = .loaded(dashboard)
                     self.actionsInsightsTask = nil
                 }
@@ -517,6 +607,10 @@ final class SettingsModel {
                 }
 
                 await MainActor.run {
+                    guard !Task.isCancelled else {
+                        return
+                    }
+
                     self.actionsInsightsState = .failed(error.localizedDescription)
                     self.actionsInsightsTask = nil
                 }
@@ -951,6 +1045,7 @@ final class SettingsModel {
                     self.workflowListStatesByRepositoryID[repositoryID] = .loaded(names)
                     self.workflowItemsByRepositoryID[repositoryID] = workflows
                     self.workflowListTasksByRepositoryID[repositoryID] = nil
+                    self.advanceActionsInsightsCascade()
                 }
             } catch is CancellationError {
                 return
@@ -1005,6 +1100,7 @@ final class SettingsModel {
                 await MainActor.run {
                     self.workflowJobListStatesByKey[key] = .loaded(jobNames)
                     self.workflowJobListTasksByKey[key] = nil
+                    self.advanceActionsInsightsCascade()
                 }
             } catch is CancellationError {
                 return

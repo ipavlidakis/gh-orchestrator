@@ -91,6 +91,7 @@ public struct CheckRunSnapshot: Equatable, Sendable {
     public let status: String
     public let conclusion: String?
     public let detailsURL: URL?
+    public let completedAt: Date?
     public let appName: String?
     public let appSlug: String?
     public let workflowRun: WorkflowRunReferenceSnapshot?
@@ -100,6 +101,7 @@ public struct CheckRunSnapshot: Equatable, Sendable {
         status: String,
         conclusion: String? = nil,
         detailsURL: URL? = nil,
+        completedAt: Date? = nil,
         appName: String? = nil,
         appSlug: String? = nil,
         workflowRun: WorkflowRunReferenceSnapshot? = nil
@@ -108,6 +110,7 @@ public struct CheckRunSnapshot: Equatable, Sendable {
         self.status = status
         self.conclusion = conclusion
         self.detailsURL = detailsURL
+        self.completedAt = completedAt
         self.appName = appName
         self.appSlug = appSlug
         self.workflowRun = workflowRun
