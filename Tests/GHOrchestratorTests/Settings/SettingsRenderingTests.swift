@@ -42,7 +42,7 @@ final class SettingsRenderingTests: XCTestCase {
         let updates = SoftwareUpdateModel(store: store, checker: GitHubReleaseUpdateChecker(), installer: DMGSoftwareUpdateInstaller())
         let general = SettingsWindowView(model: model, softwareUpdateModel: updates, requestLogModel: GitHubRequestLogModel(), menuVisibilityController: SettingsWindowMenuVisibilityController(mainMenuProvider: { nil }), onSettingsWindowVisibilityChange: { _ in })
         for scheme in [ColorScheme.light, .dark] {
-            let generalText = try await render(general, size: CGSize(width: 780, height: 1000), scheme: scheme, name: "general").text
+            let generalText = try await render(general.environment(\.settingsGlassDisabled, true), size: CGSize(width: 780, height: 1000), scheme: scheme, name: "general").text
             XCTAssertTrue(generalText.contains("refresh every"))
             XCTAssertTrue(generalText.contains("pull request order"))
             XCTAssertEqual(generalText.components(separatedBy: "seconds").count - 1, 1, "Polling units must appear once, without duplicate field/stepper labels")

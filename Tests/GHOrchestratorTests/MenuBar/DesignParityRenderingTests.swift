@@ -45,7 +45,7 @@ final class DesignParityRenderingTests: XCTestCase {
             menuVisibilityController: SettingsWindowMenuVisibilityController(mainMenuProvider: { nil }),
             onSettingsWindowVisibilityChange: { _ in }
         )
-        try await render(window, size: CGSize(width: 820, height: 620), name: "settings-window")
+        try await render(window.environment(\.settingsGlassDisabled, true), size: CGSize(width: 820, height: 620), name: "settings-window")
         try await renderChrome(window, name: "settings-chrome")
         func page<V: View>(_ v: V) -> some View {
             VStack(alignment: .leading, spacing: 20) { v }.padding(28).frame(width: 624, alignment: .leading)

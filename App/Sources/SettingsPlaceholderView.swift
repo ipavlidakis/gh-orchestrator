@@ -84,7 +84,17 @@ struct SettingsWindowView: View {
         }
         .frame(width: 820)
         .frame(minHeight: 620, idealHeight: 620, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background {
+            // A soft accent wash gives the glass sidebar, title and cards something to refract.
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+                LinearGradient(
+                    colors: [Color.accentColor.opacity(0.22), Color.accentColor.opacity(0.04)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
         .background(SettingsWindowChromeConfigurator())
         .ignoresSafeArea()
         .windowMinimizeBehavior(.disabled)
@@ -120,13 +130,15 @@ private struct SettingsSidebar: View {
     @Binding var selection: SettingsPane?
 
     var body: some View {
-        if #available(macOS 26, *) {
-            rail
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .padding(8)
-                .frame(width: 212)
-                .frame(maxHeight: .infinity, alignment: .topLeading)
-        } else {
+        SettingsGlassGate {
+            if #available(macOS 26, *) {
+                rail
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .padding(8)
+                    .frame(width: 212)
+                    .frame(maxHeight: .infinity, alignment: .topLeading)
+            }
+        } flat: {
             rail
                 .background(Color.primary.opacity(0.05))
                 .overlay(alignment: .trailing) {
@@ -191,20 +203,47 @@ private struct SettingsSidebarRow: View {
     }
 }
 
-/// Centered title above a scrolling stack of grouped cards.
+/// Floating title above a scrolling stack of grouped cards. On macOS 26 the title is a glass pill
+/// and every card is glass, grouped in one container so they render together.
 private struct SettingsDetailPage<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
 
     var body: some View {
-        if #available(macOS 26, *) {
-            page.buttonStyle(.glass)
-        } else {
-            page
+        SettingsGlassGate {
+            if #available(macOS 26, *) {
+                glassPage
+            }
+        } flat: {
+            flatPage
         }
     }
 
-    private var page: some View {
+    @available(macOS 26, *)
+    private var glassPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                content
+            }
+            .buttonStyle(.glass)
+            .padding(.horizontal, 28)
+            .padding(.top, 60)
+            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .overlay(alignment: .top) {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .padding(.horizontal, 18)
+                .padding(.vertical, 7)
+                .glassEffect(.regular, in: Capsule())
+                .padding(.top, 14)
+                .accessibilityAddTraits(.isHeader)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var flatPage: some View {
         VStack(spacing: 0) {
             Text(title)
                 .font(.system(size: 15, weight: .semibold))
@@ -1367,6 +1406,59 @@ private struct NotificationPermissionBanner: View {
     }
 }
 
+private struct SettingsGlassDisabledKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// Forces the flat Settings appearance. Offscreen renders cannot capture glass, so tests set this.
+    var settingsGlassDisabled: Bool {
+        get { self[SettingsGlassDisabledKey.self] }
+        set { self[SettingsGlassDisabledKey.self] = newValue }
+    }
+}
+
+/// Liquid Glass is used on macOS 26 unless Reduce Transparency is on (or tests disable it).
+private struct SettingsGlassGate<Glass: View, Flat: View>: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.settingsGlassDisabled) private var glassDisabled
+    @ViewBuilder let glass: () -> Glass
+    @ViewBuilder let flat: () -> Flat
+
+    var body: some View {
+        if #available(macOS 26, *), !reduceTransparency, !glassDisabled {
+            glass()
+        } else {
+            flat()
+        }
+    }
+}
+
+private struct SettingsCardSurface: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.settingsGlassDisabled) private var glassDisabled
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *), !reduceTransparency, !glassDisabled {
+            content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        } else {
+            content
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                }
+        }
+    }
+}
+
+extension View {
+    /// Liquid Glass card on macOS 26; a flat tinted card with a hairline border otherwise.
+    func settingsCardSurface() -> some View {
+        modifier(SettingsCardSurface())
+    }
+}
+
 struct SettingsGroup<Content: View, Footer: View>: View {
     let title: String
     @ViewBuilder let content: Content
@@ -1402,11 +1494,7 @@ struct SettingsGroup<Content: View, Footer: View>: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
-            }
+            .settingsCardSurface()
 
             footer
                 .font(.caption)
