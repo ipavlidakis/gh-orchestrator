@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 (Build 47) - 2026-10-01
+
+- Redesign the menu bar popover with a single-row header, status-chip PR cards, a checks progress bar, expandable workflow and job details, and a footer showing the update time and remaining API calls.
+- Fit the popover height to its content and make repository headers collapse and expand from anywhere on the row.
+- Add repository sorting by last modified, name, or team, ascending or descending.
+- Redesign Settings with a Liquid Glass sidebar, title, and cards on macOS 26 and a flat fallback elsewhere.
+- Refresh the app, Dock, and menu bar icons, with a status badge and attention count on the menu bar glyph.
+- Enable Retry job only once the workflow run finishes and show GitHub's reason when a retry is denied.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.4.6...0.5.0
+
 ## 0.4.6 (Build 46) - 2026-10-01
 
 - Make skipped jobs neutral and status text easier to read.

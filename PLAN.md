@@ -1308,6 +1308,19 @@
   - 2026-10-01: universal Release archive reports 0.4.6/build 46. Developer ID signatures, Apple notarization (`069c5f80-119b-4877-af5e-e093a09d1da9`), stapling, and Gatekeeper app/DMG assessments passed.
   - 2026-10-01: DMG and checksum assets uploaded; local and GitHub SHA-256 match `988878944be4afef0d6dfdfa9ecb8d9ccee23912aa29585f8eb1451663ab2ff8`. Full verification and the resolved notary-profile blocker are in `PLAN-menu-bar.md:T28`.
 
+### T57: Release 0.5.0 Build 47
+- status: `done`
+- owner: `claude-main`
+- depends_on: `PLAN-menu-bar.md:T29`
+- goal: publish the merged design refresh: popover, Settings, icons, repository sorting, and retry gating.
+- verification:
+  - 2026-10-01: published https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.5.0 as the latest release. Tag source is PR #3 merge commit `34b8621eb5ab6dc5ecfc250d689677d31458811d`.
+  - 2026-10-01: Release archive reports 0.5.0/build 47. Developer ID signing, Apple notarization, stapling, and `spctl` primary-signature assessment (Notarized Developer ID) passed for the DMG.
+  - 2026-10-01: DMG and checksum assets uploaded; local SHA-256 `07561473023aea1e0c945132034d95bc97ad7157f4baf553a96ae9af47b97305`.
+- notes:
+  - The release script created the release as a draft; it was published with `gh release edit 0.5.0 --draft=false --latest`.
+  - The script's local Gatekeeper check returned `Insufficient Context` and continued, as in earlier releases.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
