@@ -75,3 +75,7 @@ Config/Release.local.json
 
 # Release artifacts
 build/
+
+# macOS and local tooling
+.DS_Store
+.codex/config.toml
