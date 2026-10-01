@@ -12,6 +12,26 @@ public enum PullRequestSortOrder: String, Codable, CaseIterable, Sendable {
     }
 }
 
+public enum RepositorySortOrder: String, Codable, CaseIterable, Sendable {
+    case lastModifiedNewestFirst
+    case lastModifiedOldestFirst
+    case nameAscending
+    case nameDescending
+    case teamAscending
+    case teamDescending
+
+    public var title: String {
+        switch self {
+        case .lastModifiedNewestFirst: "Last modified (newest first)"
+        case .lastModifiedOldestFirst: "Last modified (oldest first)"
+        case .nameAscending: "Name (A–Z)"
+        case .nameDescending: "Name (Z–A)"
+        case .teamAscending: "Team (A–Z)"
+        case .teamDescending: "Team (Z–A)"
+        }
+    }
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public static let defaultPollingIntervalSeconds = 60
     public static let allowedPollingIntervalRange = 15...900
@@ -28,6 +48,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public var observedRepositories: [ObservedRepository]
     public var pullRequestSortOrder: PullRequestSortOrder
+    public var repositorySortOrder: RepositorySortOrder
     public var pollingIntervalSeconds: Int
     public var hideDockIcon: Bool
     public var startAtLogin: Bool
@@ -42,6 +63,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public init(
         observedRepositories: [ObservedRepository] = [],
         pullRequestSortOrder: PullRequestSortOrder = .title,
+        repositorySortOrder: RepositorySortOrder = .lastModifiedNewestFirst,
         pollingIntervalSeconds: Int = AppSettings.defaultPollingIntervalSeconds,
         hideDockIcon: Bool = AppSettings.defaultHideDockIcon,
         startAtLogin: Bool = AppSettings.defaultStartAtLogin,
@@ -57,6 +79,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
         self.observedRepositories = deduplicatedRepositories
         self.pullRequestSortOrder = pullRequestSortOrder
+        self.repositorySortOrder = repositorySortOrder
         self.pollingIntervalSeconds = Self.clampPollingInterval(pollingIntervalSeconds)
         self.hideDockIcon = hideDockIcon
         self.startAtLogin = startAtLogin
@@ -75,6 +98,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case observedRepositories
         case pullRequestSortOrder
+        case repositorySortOrder
         case pollingIntervalSeconds
         case hideDockIcon
         case startAtLogin
@@ -93,6 +117,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.init(
             observedRepositories: try container.decodeIfPresent([ObservedRepository].self, forKey: .observedRepositories) ?? [],
             pullRequestSortOrder: try container.decodeIfPresent(PullRequestSortOrder.self, forKey: .pullRequestSortOrder) ?? .title,
+            repositorySortOrder: try container.decodeIfPresent(RepositorySortOrder.self, forKey: .repositorySortOrder) ?? .lastModifiedNewestFirst,
             pollingIntervalSeconds: try container.decodeIfPresent(Int.self, forKey: .pollingIntervalSeconds) ?? Self.defaultPollingIntervalSeconds,
             hideDockIcon: try container.decodeIfPresent(Bool.self, forKey: .hideDockIcon) ?? Self.defaultHideDockIcon,
             startAtLogin: try container.decodeIfPresent(Bool.self, forKey: .startAtLogin) ?? Self.defaultStartAtLogin,

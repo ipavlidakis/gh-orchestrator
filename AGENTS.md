@@ -21,6 +21,9 @@
   - Prefer value types, `Codable`, and explicit mappers over ad hoc dictionaries.
   - Keep failures visible and actionable, especially for missing OAuth configuration, unauthenticated sessions, and API or auth failures.
 
+## UI Design
+- `DESIGN.md` is the implementation contract for UI: tokens, shared components, popover and Settings layout, icon generation, and how to verify visuals. Read it before adding or changing any view, and keep it aligned with the design canvas and the code.
+
 ## Task Workflow
 - `PLAN.md` is the shared program plan and registry for repo-wide history, cross-feature decisions, and active feature-plan pointers.
 - Feature-specific work may live in dedicated `PLAN-*.md` files.

@@ -33,7 +33,7 @@ struct GHOrchestratorApp: App {
                 }
             )
         }
-        .defaultSize(width: 780, height: 600)
+        .defaultSize(width: 820, height: 620)
         .windowResizability(.contentSize)
         .commands {
             SettingsWindowCommands(

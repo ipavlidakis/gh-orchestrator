@@ -1,4 +1,5 @@
 import AppKit
+import GHOrchestratorCore
 import SwiftUI
 
 struct MenuBarPopoverConfiguration: Equatable {
@@ -23,6 +24,8 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
     private let configuration: MenuBarPopoverConfiguration
     private let statusItem: NSStatusItem
     private let popover: NSPopover
+    /// Height the dashboard asked for, so the popover fits its content instead of a fixed size.
+    private var preferredHeight: CGFloat?
 
     init(
         controller: AppController,
@@ -47,7 +50,24 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
         }
 
         configuration.apply(to: popover)
+        applyPreferredHeight()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    }
+
+    private func updatePreferredHeight(_ height: CGFloat) {
+        guard height > 1 else { return }
+        preferredHeight = min(height.rounded(.up), configuration.contentSize.height)
+        applyPreferredHeight()
+    }
+
+    private func applyPreferredHeight() {
+        guard let preferredHeight, popover.contentSize.height != preferredHeight else { return }
+        // AppKit animates content-size changes and re-lays out the SwiftUI tree on every frame, which
+        // stutters on long job lists. Resize in one step instead.
+        let animates = popover.animates
+        popover.animates = false
+        popover.contentSize = CGSize(width: configuration.contentSize.width, height: preferredHeight)
+        popover.animates = animates
     }
 
     func closePopover() {
@@ -82,6 +102,58 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
         button.toolTip = AppMetadata.menuBarTitle
         button.setAccessibilityLabel(AppMetadata.menuBarTitle)
         applicationIconController.applyCurrentSystemAppearance()
+        observeStatus()
+    }
+
+    /// Re-renders the menu bar glyph whenever the dashboard changes.
+    private func observeStatus() {
+        withObservationTracking {
+            updateStatusImage()
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.observeStatus()
+            }
+        }
+    }
+
+    private func updateStatusImage() {
+        guard let button = statusItem.button else { return }
+        let status = MenuBarGlyphStatus(contentState: controller.dashboardModel.contentState)
+        let base = Self.menuBarTemplateImage
+
+        let attention = controller.dashboardModel.attentionCount
+        button.title = attention > 0 ? " \(attention)" : ""
+        button.imagePosition = attention > 0 ? .imageLeading : .imageOnly
+        button.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+
+        guard let badgeColor = status.badgeColor else {
+            button.image = base
+            return
+        }
+
+        let isDark = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        button.image = Self.badgedImage(base: base, badge: badgeColor, glyph: isDark ? .white : .black)
+        button.setAccessibilityValue(status.accessibilityValue)
+    }
+
+    private static func badgedImage(base: NSImage, badge: NSColor, glyph: NSColor) -> NSImage {
+        let size = base.size == .zero ? NSSize(width: 18, height: 18) : base.size
+        let image = NSImage(size: size, flipped: false) { rect in
+            glyph.setFill()
+            rect.fill()
+            base.draw(in: rect, from: .zero, operation: .destinationIn, fraction: 1)
+
+            let diameter = rect.width * 0.34
+            let dot = NSRect(x: rect.maxX - diameter, y: rect.minY, width: diameter, height: diameter)
+            NSGraphicsContext.current?.compositingOperation = .clear
+            NSBezierPath(ovalIn: dot.insetBy(dx: -1.2, dy: -1.2)).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            badge.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+            return true
+        }
+        image.isTemplate = false
+        return image
     }
 
     private func configurePopover() {
@@ -91,6 +163,11 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
             rootView: MenuBarPlaceholderView(
                 model: controller.dashboardModel,
                 softwareUpdateModel: softwareUpdateModel,
+                requestLogModel: controller.requestLogModel,
+                maximumHeight: configuration.contentSize.height,
+                onPreferredHeightChange: { [weak self] height in
+                    self?.updatePreferredHeight(height)
+                },
                 openSettingsAction: { [weak self] in
                     self?.openSettingsWindow()
                 },
@@ -103,7 +180,6 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
             )
             .frame(
                 width: configuration.contentSize.width,
-                height: configuration.contentSize.height,
                 alignment: .topLeading
             )
         )
@@ -160,5 +236,45 @@ final class MenuBarPopoverPresenter: NSObject, NSPopoverDelegate {
             .compactMap(\.submenu)
             .flatMap(\.items)
             .first { settingsTitles.contains($0.title) }
+    }
+}
+
+
+/// Aggregate CI state of the visible pull requests, shown as a badge on the menu bar glyph.
+enum MenuBarGlyphStatus: Equatable {
+    case idle
+    case pending
+    case failing
+
+    init(contentState: MenuBarDashboardModel.State) {
+        guard case .loaded(let sections) = contentState else {
+            self = .idle
+            return
+        }
+
+        let states = sections.flatMap(\.pullRequests).map(\.checkRollupState)
+        if states.contains(.failing) {
+            self = .failing
+        } else if states.contains(.pending) {
+            self = .pending
+        } else {
+            self = .idle
+        }
+    }
+
+    var badgeColor: NSColor? {
+        switch self {
+        case .idle: nil
+        case .pending: .systemOrange
+        case .failing: .systemRed
+        }
+    }
+
+    var accessibilityValue: String {
+        switch self {
+        case .idle: ""
+        case .pending: "Checks pending"
+        case .failing: "Checks failing"
+        }
     }
 }

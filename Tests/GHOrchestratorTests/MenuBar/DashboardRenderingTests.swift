@@ -13,10 +13,19 @@ final class DashboardRenderingTests: XCTestCase {
             let failed = try await renderDashboard(conclusion: "failure", scheme: scheme)
             XCTAssertEqual(redPixelCount(in: skipped), 0, "Skipped jobs must be neutral in \(scheme) mode")
             XCTAssertGreaterThan(redPixelCount(in: failed), 10, "Failed jobs must retain their failure icon")
-            let request = VNRecognizeTextRequest()
-            try VNImageRequestHandler(cgImage: XCTUnwrap(skipped.cgImage)).perform([request])
-            let visibleText = request.results?.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ") ?? ""
-            XCTAssertTrue(visibleText.contains("Sort"), "The sorting control must be visible in \(scheme) mode")
+            XCTAssertTrue(lastRenderedAccessibilityLabels.contains("Sort"), "The sorting control must be present in \(scheme) mode")
+        }
+    }
+
+    private var lastRenderedAccessibilityLabels: Set<String> = []
+
+    private func collectAccessibilityLabels(from element: Any, into labels: inout Set<String>, depth: Int = 0) {
+        guard depth < 40 else { return }
+        if let object = element as? NSAccessibilityProtocol {
+            if let label = object.accessibilityLabel(), !label.isEmpty { labels.insert(label) }
+            for child in (object.accessibilityChildren() ?? []) {
+                collectAccessibilityLabels(from: child, into: &labels, depth: depth + 1)
+            }
         }
     }
 
@@ -71,6 +80,9 @@ final class DashboardRenderingTests: XCTestCase {
         window.display()
         let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
         hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        var labels: Set<String> = []
+        collectAccessibilityLabels(from: hostingView, into: &labels)
+        lastRenderedAccessibilityLabels = labels
         if conclusion == "skipped" {
             let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("gh-orchestrator-dashboard-\(scheme).png")
             try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: outputURL)

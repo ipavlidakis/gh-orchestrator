@@ -17,6 +17,35 @@ final class RepositorySectionAggregationServiceTests: XCTestCase {
         }
     }
 
+    func testRepositorySortOrdersByNameTeamAndLastModified() {
+        let alpha = ObservedRepository(owner: "zeta", name: "alpha")
+        let beta = ObservedRepository(owner: "acme", name: "beta")
+        let gamma = ObservedRepository(owner: "mid", name: "gamma")
+        let items = [
+            pullRequest(repository: alpha, number: 1, updatedAt: date(300)),
+            pullRequest(repository: beta, number: 2, updatedAt: date(100)),
+            pullRequest(repository: gamma, number: 3, updatedAt: date(200))
+        ]
+        let service = RepositorySectionAggregationService()
+        let expectations: [(RepositorySortOrder, [String])] = [
+            (.nameAscending, ["zeta/alpha", "acme/beta", "mid/gamma"]),
+            (.nameDescending, ["mid/gamma", "acme/beta", "zeta/alpha"]),
+            (.teamAscending, ["acme/beta", "mid/gamma", "zeta/alpha"]),
+            (.teamDescending, ["zeta/alpha", "mid/gamma", "acme/beta"]),
+            (.lastModifiedNewestFirst, ["zeta/alpha", "mid/gamma", "acme/beta"]),
+            (.lastModifiedOldestFirst, ["acme/beta", "mid/gamma", "zeta/alpha"])
+        ]
+        for (order, expected) in expectations {
+            let sections = service.makeSections(
+                observedRepositories: [alpha, beta, gamma],
+                pullRequests: items,
+                sortOrder: .title,
+                repositorySortOrder: order
+            )
+            XCTAssertEqual(sections.map(\.repository.fullName), expected, "\(order)")
+        }
+    }
+
     func testMakeSectionsOrdersRepositoriesByMostRecentlyUpdatedPullRequest() {
         let firstRepository = ObservedRepository(owner: "openai", name: "codex")
         let secondRepository = ObservedRepository(owner: "swiftlang", name: "swift")

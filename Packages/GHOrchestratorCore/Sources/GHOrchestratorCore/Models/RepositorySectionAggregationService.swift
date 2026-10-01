@@ -4,8 +4,24 @@ public protocol RepositorySectionAggregating: Sendable {
     func makeSections(
         observedRepositories: [ObservedRepository],
         pullRequests: [PullRequestItem],
-        sortOrder: PullRequestSortOrder
+        sortOrder: PullRequestSortOrder,
+        repositorySortOrder: RepositorySortOrder
     ) -> [RepositorySection]
+}
+
+public extension RepositorySectionAggregating {
+    func makeSections(
+        observedRepositories: [ObservedRepository],
+        pullRequests: [PullRequestItem],
+        sortOrder: PullRequestSortOrder
+    ) -> [RepositorySection] {
+        makeSections(
+            observedRepositories: observedRepositories,
+            pullRequests: pullRequests,
+            sortOrder: sortOrder,
+            repositorySortOrder: .lastModifiedNewestFirst
+        )
+    }
 }
 
 public struct RepositorySectionAggregationService: RepositorySectionAggregating {
@@ -14,7 +30,8 @@ public struct RepositorySectionAggregationService: RepositorySectionAggregating 
     public func makeSections(
         observedRepositories: [ObservedRepository],
         pullRequests: [PullRequestItem],
-        sortOrder: PullRequestSortOrder = .title
+        sortOrder: PullRequestSortOrder = .title,
+        repositorySortOrder: RepositorySortOrder = .lastModifiedNewestFirst
     ) -> [RepositorySection] {
         let groupedPullRequests = Dictionary(grouping: pullRequests, by: \.repository.normalizedLookupKey)
         let repositoriesByKey = canonicalRepositories(
@@ -33,7 +50,7 @@ public struct RepositorySectionAggregationService: RepositorySectionAggregating 
             )
         }
 
-        return unsortedSections.sorted(by: Self.isSectionOrderedBefore)
+        return unsortedSections.sorted { Self.isSectionOrderedBefore($0, $1, order: repositorySortOrder) }
     }
 }
 
@@ -77,19 +94,42 @@ extension RepositorySectionAggregationService {
         return lhs.number > rhs.number
     }
 
-    static func isSectionOrderedBefore(_ lhs: RepositorySection, _ rhs: RepositorySection) -> Bool {
-        let lhsMostRecent = lhs.pullRequests.max { $0.updatedAt < $1.updatedAt }
-        let rhsMostRecent = rhs.pullRequests.max { $0.updatedAt < $1.updatedAt }
-
-        if lhsMostRecent?.updatedAt != rhsMostRecent?.updatedAt {
-            return (lhsMostRecent?.updatedAt ?? .distantPast) > (rhsMostRecent?.updatedAt ?? .distantPast)
+    static func isSectionOrderedBefore(
+        _ lhs: RepositorySection,
+        _ rhs: RepositorySection,
+        order: RepositorySortOrder = .lastModifiedNewestFirst
+    ) -> Bool {
+        func compare(_ left: String, _ right: String) -> ComparisonResult {
+            left.localizedStandardCompare(right)
         }
 
+        switch order {
+        case .nameAscending, .nameDescending:
+            let result = compare(lhs.repository.name, rhs.repository.name)
+            if result != .orderedSame {
+                return (result == .orderedAscending) == (order == .nameAscending)
+            }
+        case .teamAscending, .teamDescending:
+            let result = compare(lhs.repository.owner, rhs.repository.owner)
+            if result != .orderedSame {
+                return (result == .orderedAscending) == (order == .teamAscending)
+            }
+        case .lastModifiedNewestFirst, .lastModifiedOldestFirst:
+            let left = lhs.pullRequests.map(\.updatedAt).max() ?? .distantPast
+            let right = rhs.pullRequests.map(\.updatedAt).max() ?? .distantPast
+            if left != right {
+                return order == .lastModifiedNewestFirst ? left > right : left < right
+            }
+        }
+
+        // Stable tie-breakers keep equal keys in a predictable order.
         let nameComparison = lhs.repository.fullName.localizedCaseInsensitiveCompare(rhs.repository.fullName)
         if nameComparison != .orderedSame {
             return nameComparison == .orderedAscending
         }
 
-        return (lhsMostRecent?.number ?? 0) > (rhsMostRecent?.number ?? 0)
+        let lhsNumber = lhs.pullRequests.max { $0.updatedAt < $1.updatedAt }?.number ?? 0
+        let rhsNumber = rhs.pullRequests.max { $0.updatedAt < $1.updatedAt }?.number ?? 0
+        return lhsNumber > rhsNumber
     }
 }
