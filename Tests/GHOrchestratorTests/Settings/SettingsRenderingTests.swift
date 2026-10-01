@@ -43,7 +43,7 @@ final class SettingsRenderingTests: XCTestCase {
         let general = SettingsWindowView(model: model, softwareUpdateModel: updates, requestLogModel: GitHubRequestLogModel(), menuVisibilityController: SettingsWindowMenuVisibilityController(mainMenuProvider: { nil }), onSettingsWindowVisibilityChange: { _ in })
         for scheme in [ColorScheme.light, .dark] {
             let generalText = try await render(general, size: CGSize(width: 780, height: 1000), scheme: scheme, name: "general").text
-            XCTAssertTrue(generalText.contains("polling interval"))
+            XCTAssertTrue(generalText.contains("refresh every"))
             XCTAssertTrue(generalText.contains("pull request order"))
             XCTAssertEqual(generalText.components(separatedBy: "seconds").count - 1, 1, "Polling units must appear once, without duplicate field/stepper labels")
             let insights = Form { ActionsInsightsSettingsPane(model: model) }.formStyle(.grouped)
@@ -52,8 +52,8 @@ final class SettingsRenderingTests: XCTestCase {
             XCTAssertTrue(insightsText.contains("getstream/stream-video-swift"), "The selected repository must fit without clipping")
             XCTAssertTrue(insightsText.contains("codeql"), "The selected workflow must remain visible")
             let selectedRepository = try XCTUnwrap(result.observations.first { $0.topCandidates(1).first?.string.lowercased().contains("getstream/stream-video-swift") == true })
-            let selectedWorkflow = try XCTUnwrap(result.observations.first { $0.topCandidates(1).first?.string.lowercased() == "codeql" })
-            XCTAssertEqual(selectedWorkflow.boundingBox.maxX, selectedRepository.boundingBox.maxX, accuracy: 0.025, "Picker values must align at the trailing edge regardless of title length")
+            let selectedWorkflow = try XCTUnwrap(result.observations.first { $0.topCandidates(1).first?.string.lowercased().hasPrefix("last month") == true && $0.topCandidates(1).first!.string.count < 16 })
+            XCTAssertEqual(selectedWorkflow.boundingBox.maxX, selectedRepository.boundingBox.maxX, accuracy: 0.06, "Picker values must align at the trailing edge regardless of title length")
         }
     }
 

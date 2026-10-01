@@ -447,6 +447,8 @@ private struct NotificationDebugPreviewCard: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .multilineTextAlignment(.leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

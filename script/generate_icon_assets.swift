@@ -7,64 +7,29 @@ private let artboardSize: CGFloat = 1024
 
 private struct IconPalette {
     let backgroundColors: [NSColor]
-    let panelColors: [NSColor]
-    let panelStroke: NSColor
-    let rim: NSColor
+    let ink: NSColor
     let shadow: NSColor
-    let glyph: NSColor
-    let glow: NSColor
-    let orbit: NSColor
-    let leftNode: NSColor
-    let topNode: NSColor
-    let lowerRightNode: NSColor
-    let branchNode: NSColor
-    let nodeHighlight: NSColor
+    let rim: NSColor
+    let success: NSColor
+    let warning: NSColor
 }
 
 private let darkPalette = IconPalette(
-    backgroundColors: [
-        color(0x06, 0x10, 0x23),
-        color(0x10, 0x2C, 0x5E),
-        color(0x2A, 0x65, 0xF0)
-    ],
-    panelColors: [
-        color(0xA7, 0xD0, 0xFF, alpha: 0.24),
-        color(0x4D, 0xD8, 0xFF, alpha: 0.10)
-    ],
-    panelStroke: color(0xF6, 0xFA, 0xFF, alpha: 0.20),
-    rim: color(0xF8, 0xFB, 0xFF, alpha: 0.18),
-    shadow: color(0x00, 0x00, 0x00, alpha: 0.32),
-    glyph: color(0xF7, 0xFB, 0xFF),
-    glow: color(0x5D, 0xE5, 0xFF, alpha: 0.32),
-    orbit: color(0x7B, 0xF0, 0xFF, alpha: 0.34),
-    leftNode: color(0x80, 0xD4, 0xFF),
-    topNode: color(0xFF, 0xC4, 0x73),
-    lowerRightNode: color(0x74, 0xF1, 0xC4),
-    branchNode: color(0xF7, 0xFB, 0xFF),
-    nodeHighlight: color(0xFF, 0xFF, 0xFF, alpha: 0.48)
+    backgroundColors: [color(0x86, 0x72, 0xEE), color(0x4A, 0x37, 0xB5), color(0x24, 0x16, 0x60)],
+    ink: color(0x24, 0x16, 0x60),
+    shadow: color(0x12, 0x0A, 0x38, alpha: 0.35),
+    rim: color(0xFF, 0xFF, 0xFF, alpha: 0.18),
+    success: color(0x3F, 0xB9, 0x50),
+    warning: color(0xF0, 0x88, 0x3E)
 )
 
 private let lightPalette = IconPalette(
-    backgroundColors: [
-        color(0xFB, 0xFD, 0xFF),
-        color(0xE8, 0xF1, 0xFF),
-        color(0xB9, 0xD2, 0xFF)
-    ],
-    panelColors: [
-        color(0xFF, 0xFF, 0xFF, alpha: 0.80),
-        color(0xDD, 0xEB, 0xFF, alpha: 0.64)
-    ],
-    panelStroke: color(0xFF, 0xFF, 0xFF, alpha: 0.76),
-    rim: color(0xFF, 0xFF, 0xFF, alpha: 0.88),
-    shadow: color(0x1B, 0x3B, 0x74, alpha: 0.10),
-    glyph: color(0x10, 0x26, 0x4F),
-    glow: color(0x4F, 0xBE, 0xFF, alpha: 0.22),
-    orbit: color(0x52, 0xAB, 0xFF, alpha: 0.26),
-    leftNode: color(0x2E, 0x95, 0xE8),
-    topNode: color(0xD4, 0x76, 0x2C),
-    lowerRightNode: color(0x1E, 0xB3, 0x99),
-    branchNode: color(0x10, 0x26, 0x4F),
-    nodeHighlight: color(0xFF, 0xFF, 0xFF, alpha: 0.62)
+    backgroundColors: [color(0x86, 0x72, 0xEE), color(0x4A, 0x37, 0xB5), color(0x2A, 0x1B, 0x70)],
+    ink: color(0x2A, 0x1B, 0x70),
+    shadow: color(0x24, 0x16, 0x60, alpha: 0.30),
+    rim: color(0xFF, 0xFF, 0xFF, alpha: 0.22),
+    success: color(0x2E, 0xA0, 0x43),
+    warning: color(0xF0, 0x88, 0x3E)
 )
 
 private let iconOutputs: [(filename: String, size: Int)] = [
@@ -139,8 +104,8 @@ private func drawAppIcon(in rect: CGRect, palette: IconPalette) {
     withSavedGraphicsState {
         let shadow = NSShadow()
         shadow.shadowColor = palette.shadow
-        shadow.shadowBlurRadius = scaled(56, in: rect)
-        shadow.shadowOffset = NSSize(width: 0, height: scaled(-24, in: rect))
+        shadow.shadowBlurRadius = scaled(40, in: rect)
+        shadow.shadowOffset = NSSize(width: 0, height: scaled(-20, in: rect))
         shadow.set()
         palette.backgroundColors.last?.setFill()
         badgePath.fill()
@@ -150,250 +115,98 @@ private func drawAppIcon(in rect: CGRect, palette: IconPalette) {
         badgePath.addClip()
         drawLinearGradient(
             colors: palette.backgroundColors,
-            from: point(180, 1000, in: rect),
-            to: point(820, 0, in: rect)
+            from: point(512, 1000, in: rect),
+            to: point(512, 60, in: rect)
         )
-        drawRadialGlow(
-            in: fittedRect(x: 84, y: 594, width: 540, height: 420, in: rect),
-            color: palette.glow
-        )
-        drawRadialGlow(
-            in: fittedRect(x: 494, y: 64, width: 420, height: 420, in: rect),
-            color: palette.orbit
-        )
-        drawSoftTopBand(in: rect)
-        drawGlassPanel(in: rect, palette: palette)
-        drawOrbit(in: rect, palette: palette)
-        drawBranchGlyph(in: rect, palette: palette)
+        drawBranchGraph(in: rect, palette: palette)
     }
 
     palette.rim.setStroke()
-    badgePath.lineWidth = scaled(10, in: rect)
+    badgePath.lineWidth = scaled(8, in: rect)
     badgePath.stroke()
 }
 
-private func drawSoftTopBand(in rect: CGRect) {
-    let bandRect = fittedRect(x: 76, y: 670, width: 620, height: 220, in: rect)
-    let bandPath = NSBezierPath(roundedRect: bandRect, xRadius: scaled(140, in: rect), yRadius: scaled(140, in: rect))
-    let gradient = NSGradient(colors: [
-        color(0xFF, 0xFF, 0xFF, alpha: 0.22),
-        color(0xFF, 0xFF, 0xFF, alpha: 0.00)
-    ])!
-    gradient.draw(in: bandPath, angle: -18)
-}
-
-private func drawGlassPanel(in rect: CGRect, palette: IconPalette) {
-    let panelRect = fittedRect(x: 178, y: 198, width: 668, height: 640, in: rect)
-    let panelPath = NSBezierPath(
-        roundedRect: panelRect,
-        xRadius: scaled(176, in: rect),
-        yRadius: scaled(176, in: rect)
-    )
-    var transform = AffineTransform.identity
-    transform.translate(x: rect.midX, y: rect.midY)
-    transform.rotate(byDegrees: -10)
-    transform.translate(x: -rect.midX, y: -rect.midY)
-    panelPath.transform(using: transform)
-
-    withSavedGraphicsState {
-        panelPath.addClip()
-        drawLinearGradient(
-            colors: palette.panelColors,
-            from: point(250, 880, in: rect),
-            to: point(770, 120, in: rect)
-        )
-        drawRadialGlow(
-            in: fittedRect(x: 206, y: 610, width: 360, height: 260, in: rect),
-            color: color(0xFF, 0xFF, 0xFF, alpha: 0.16)
-        )
-    }
-
-    palette.panelStroke.setStroke()
-    panelPath.lineWidth = scaled(7, in: rect)
-    panelPath.stroke()
-}
-
-private func drawOrbit(in rect: CGRect, palette: IconPalette) {
-    let orbit = NSBezierPath()
-    orbit.appendArc(
-        withCenter: point(502, 528, in: rect),
-        radius: scaled(324, in: rect),
-        startAngle: 204,
-        endAngle: 18
-    )
-    orbit.lineWidth = scaled(42, in: rect)
-    orbit.lineCapStyle = .round
-    palette.orbit.setStroke()
-    orbit.stroke()
-
-    let innerOrbit = NSBezierPath()
-    innerOrbit.appendArc(
-        withCenter: point(514, 522, in: rect),
-        radius: scaled(252, in: rect),
-        startAngle: 192,
-        endAngle: 28
-    )
-    innerOrbit.lineWidth = scaled(16, in: rect)
-    innerOrbit.lineCapStyle = .round
-    color(0xFF, 0xFF, 0xFF, alpha: 0.18).setStroke()
-    innerOrbit.stroke()
-
-    drawNode(
-        center: point(798, 620, in: rect),
-        radius: scaled(22, in: rect),
-        fill: color(0xFF, 0xFF, 0xFF, alpha: 0.50),
-        rim: color(0xFF, 0xFF, 0xFF, alpha: 0.18),
-        highlight: nil
-    )
-}
-
-private func drawBranchGlyph(in rect: CGRect, palette: IconPalette) {
-    let paths = makeGlyphPaths(in: rect)
-
-    for path in paths {
-        let glowPath = path.copy() as! NSBezierPath
-        glowPath.lineWidth = scaled(132, in: rect)
-        glowPath.lineCapStyle = .round
-        glowPath.lineJoinStyle = .round
-        palette.glow.setStroke()
-        glowPath.stroke()
-    }
-
-    for path in paths {
-        let glyphPath = path.copy() as! NSBezierPath
-        glyphPath.lineWidth = scaled(88, in: rect)
-        glyphPath.lineCapStyle = .round
-        glyphPath.lineJoinStyle = .round
-        palette.glyph.setStroke()
-        glyphPath.stroke()
-    }
-
-    drawNode(
-        center: point(300, 560, in: rect),
-        radius: scaled(76, in: rect),
-        fill: palette.leftNode,
-        rim: color(0xFF, 0xFF, 0xFF, alpha: 0.18),
-        highlight: palette.nodeHighlight
-    )
-    drawNode(
-        center: point(590, 746, in: rect),
-        radius: scaled(74, in: rect),
-        fill: palette.topNode,
-        rim: color(0xFF, 0xFF, 0xFF, alpha: 0.16),
-        highlight: palette.nodeHighlight
-    )
-    drawNode(
-        center: point(720, 314, in: rect),
-        radius: scaled(78, in: rect),
-        fill: palette.lowerRightNode,
-        rim: color(0xFF, 0xFF, 0xFF, alpha: 0.18),
-        highlight: palette.nodeHighlight
-    )
-    drawNode(
-        center: point(508, 504, in: rect),
-        radius: scaled(58, in: rect),
-        fill: palette.branchNode,
-        rim: color(0xFF, 0xFF, 0xFF, alpha: 0.20),
-        highlight: color(0xFF, 0xFF, 0xFF, alpha: 0.20)
-    )
-}
-
-private func drawMenuBarGlyph(in rect: CGRect) {
-    color(0x00, 0x00, 0x00).setStroke()
-    color(0x00, 0x00, 0x00).setFill()
-
-    for path in makeGlyphPaths(in: rect) {
-        let glyphPath = path.copy() as! NSBezierPath
-        glyphPath.lineWidth = scaled(154, in: rect)
-        glyphPath.lineCapStyle = .round
-        glyphPath.lineJoinStyle = .round
-        glyphPath.stroke()
-    }
-
-    for center in [
-        point(300, 560, in: rect),
-        point(590, 746, in: rect),
-        point(720, 314, in: rect),
-        point(508, 504, in: rect)
-    ] {
-        NSBezierPath(ovalIn: CGRect(
-            x: center.x - scaled(94, in: rect) / 2,
-            y: center.y - scaled(94, in: rect) / 2,
-            width: scaled(94, in: rect),
-            height: scaled(94, in: rect)
-        )).fill()
-    }
-}
-
-private func makeGlyphPaths(in rect: CGRect) -> [NSBezierPath] {
-    let lowerRight = point(720, 314, in: rect)
-    let branch = point(508, 504, in: rect)
-    let left = point(300, 560, in: rect)
-    let top = point(590, 746, in: rect)
+private func drawBranchGraph(in rect: CGRect, palette: IconPalette) {
+    let top = point(368, 736, in: rect)
+    let bottom = point(368, 288, in: rect)
+    let branch = point(656, 624, in: rect)
 
     let trunk = NSBezierPath()
-    trunk.move(to: lowerRight)
-    trunk.curve(
-        to: branch,
-        controlPoint1: point(646, 362, in: rect),
-        controlPoint2: point(566, 436, in: rect)
+    trunk.move(to: top)
+    trunk.line(to: bottom)
+
+    let merge = NSBezierPath()
+    merge.move(to: branch)
+    merge.curve(
+        to: point(368, 344, in: rect),
+        controlPoint1: point(656, 432, in: rect),
+        controlPoint2: point(520, 384, in: rect)
     )
 
-    let leftBranch = NSBezierPath()
-    leftBranch.move(to: branch)
-    leftBranch.curve(
-        to: left,
-        controlPoint1: point(438, 514, in: rect),
-        controlPoint2: point(352, 544, in: rect)
-    )
+    for path in [trunk, merge] {
+        path.lineWidth = scaled(64, in: rect)
+        path.lineCapStyle = .round
+        NSColor.white.setStroke()
+        path.stroke()
+    }
 
-    let topBranch = NSBezierPath()
-    topBranch.move(to: branch)
-    topBranch.curve(
-        to: top,
-        controlPoint1: point(548, 566, in: rect),
-        controlPoint2: point(588, 656, in: rect)
-    )
+    for center in [top, bottom, branch] {
+        let radius = scaled(78, in: rect)
+        let node = NSBezierPath(ovalIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+        palette.ink.setFill()
+        node.fill()
+        NSColor.white.setStroke()
+        node.lineWidth = scaled(64, in: rect)
+        node.stroke()
+    }
 
-    return [trunk, leftBranch, topBranch]
+    drawStatusDot(center: point(752, 288, in: rect), radius: scaled(108, in: rect), fill: palette.success, ring: palette.ink, withCheck: true)
+    drawStatusDot(center: point(790, 776, in: rect), radius: scaled(38, in: rect), fill: palette.warning, ring: palette.ink, withCheck: false)
 }
 
-private func drawNode(center: CGPoint, radius: CGFloat, fill: NSColor, rim: NSColor, highlight: NSColor?) {
-    let nodeRect = CGRect(
-        x: center.x - radius,
-        y: center.y - radius,
-        width: radius * 2,
-        height: radius * 2
-    )
-    let nodePath = NSBezierPath(ovalIn: nodeRect)
+private func drawStatusDot(center: CGPoint, radius: CGFloat, fill: NSColor, ring: NSColor, withCheck: Bool) {
+    let outer = radius * 1.28
+    ring.setFill()
+    NSBezierPath(ovalIn: CGRect(x: center.x - outer, y: center.y - outer, width: outer * 2, height: outer * 2)).fill()
+    fill.setFill()
+    NSBezierPath(ovalIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)).fill()
 
-    withSavedGraphicsState {
-        let shadow = NSShadow()
-        shadow.shadowColor = color(0x00, 0x00, 0x00, alpha: 0.16)
-        shadow.shadowBlurRadius = radius * 0.26
-        shadow.shadowOffset = NSSize(width: 0, height: -radius * 0.10)
-        shadow.set()
-        fill.setFill()
-        nodePath.fill()
+    guard withCheck else { return }
+    let check = NSBezierPath()
+    check.move(to: CGPoint(x: center.x - radius * 0.46, y: center.y - radius * 0.02))
+    check.line(to: CGPoint(x: center.x - radius * 0.1, y: center.y - radius * 0.38))
+    check.line(to: CGPoint(x: center.x + radius * 0.5, y: center.y + radius * 0.36))
+    check.lineWidth = radius * 0.27
+    check.lineCapStyle = .round
+    check.lineJoinStyle = .round
+    NSColor.white.setStroke()
+    check.stroke()
+}
+
+/// Template glyph: three commit nodes joined by a trunk and a merging branch.
+private func drawMenuBarGlyph(in rect: CGRect, stroke: NSColor = .black) {
+    let unit = min(rect.width, rect.height) / 22
+    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+        CGPoint(x: rect.minX + x * unit, y: rect.maxY - y * unit)
     }
 
-    rim.setStroke()
-    nodePath.lineWidth = max(radius * 0.10, 2)
-    nodePath.stroke()
+    stroke.setStroke()
 
-    guard let highlight else {
-        return
+    let lines = NSBezierPath()
+    lines.move(to: p(6, 7.2))
+    lines.line(to: p(6, 14.8))
+    lines.move(to: p(16, 11.2))
+    lines.curve(to: p(6, 14.8), controlPoint1: p(16, 14.2), controlPoint2: p(11, 13.7))
+    lines.lineWidth = 1.8 * unit
+    lines.lineCapStyle = .round
+    lines.stroke()
+
+    for center in [p(6, 5), p(6, 17), p(16, 9)] {
+        let r = 2.2 * unit
+        let ring = NSBezierPath(ovalIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+        ring.lineWidth = 1.8 * unit
+        ring.stroke()
     }
-
-    let gleamRect = CGRect(
-        x: nodeRect.minX + radius * 0.22,
-        y: nodeRect.midY,
-        width: radius * 0.72,
-        height: radius * 0.52
-    )
-    let gleamPath = NSBezierPath(ovalIn: gleamRect)
-    highlight.setFill()
-    gleamPath.fill()
 }
 
 private func drawPreview(in rect: CGRect) {
@@ -438,14 +251,10 @@ private func drawMenuBarPreview(frame: CGRect, background: NSColor, title: Strin
 
     let iconFrame = CGRect(x: frame.minX + 40, y: frame.minY + 48, width: 84, height: 84)
     withSavedGraphicsState {
-        if background.brightnessComponent < 0.5 {
-            color(0xFF, 0xFF, 0xFF).setStroke()
-            color(0xFF, 0xFF, 0xFF).setFill()
-        } else {
-            color(0x14, 0x19, 0x24).setStroke()
-            color(0x14, 0x19, 0x24).setFill()
-        }
-        drawMenuBarGlyph(in: iconFrame)
+        drawMenuBarGlyph(
+            in: iconFrame,
+            stroke: background.brightnessComponent < 0.5 ? color(0xFF, 0xFF, 0xFF) : color(0x14, 0x19, 0x24)
+        )
     }
 
     drawPreviewText(title: title, subtitle: "template-rendered glyph", in: CGRect(x: frame.minX + 156, y: frame.minY + 52, width: 360, height: 60), aligned: .left)

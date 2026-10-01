@@ -59,16 +59,10 @@ struct SettingsWindowView: View {
     @Environment(\.appearsActive) private var appearsActive
 
     var body: some View {
-        NavigationSplitView {
-            List(SettingsPane.allCases, selection: selectedPaneBinding) { pane in
-                Label(pane.title, systemImage: pane.systemImage)
-                    .tag(pane)
-            }
-            .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 230)
-            .toolbar(removing: .sidebarToggle)
-        } detail: {
-            SettingsDetailForm(title: selectedPane.title) {
+        HStack(spacing: 0) {
+            SettingsSidebar(selection: selectedPaneBinding)
+
+            SettingsDetailPage(title: selectedPane.title) {
                 switch selectedPane {
                 case .general:
                     GeneralSettingsPane(
@@ -88,8 +82,11 @@ struct SettingsWindowView: View {
                 }
             }
         }
-        .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 760, idealWidth: 780, minHeight: 560, idealHeight: 600)
+        .frame(width: 820)
+        .frame(minHeight: 620, idealHeight: 620, maxHeight: .infinity)
+        .background(Color(nsColor: .textBackgroundColor))
+        .background(SettingsWindowChromeConfigurator())
+        .ignoresSafeArea()
         .windowMinimizeBehavior(.disabled)
         .windowResizeBehavior(.disabled)
         .onAppear {
@@ -117,26 +114,153 @@ struct SettingsWindowView: View {
     }
 }
 
-private struct SettingsDetailForm<Content: View>: View {
+/// Left rail: window controls sit on top of it, then the panes, then the app mark.
+private struct SettingsSidebar: View {
+    @Binding var selection: SettingsPane?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(SettingsPane.allCases) { pane in
+                SettingsSidebarRow(pane: pane, isSelected: selection == pane) {
+                    selection = pane
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 8) {
+                AppMarkView(size: 22)
+                Text(AppMetadata.menuBarTitle)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 8)
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 52)
+        .padding(.bottom, 14)
+        .frame(width: 196)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.primary.opacity(0.05))
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(.separator).frame(width: 0.5)
+        }
+    }
+}
+
+private struct SettingsSidebarRow: View {
+    let pane: SettingsPane
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: pane.systemImage)
+                    .frame(width: 16)
+                Text(pane.title)
+                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.accentColor)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// Centered title above a scrolling stack of grouped cards.
+private struct SettingsDetailPage<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
 
     var body: some View {
         if #available(macOS 26, *) {
-            settingsForm.buttonStyle(.glass)
+            page.buttonStyle(.glass)
         } else {
-            settingsForm
+            page
         }
     }
 
-    private var settingsForm: some View {
-        Form { content }
-        .formStyle(.grouped)
-        .navigationTitle(title)
+    private var page: some View {
+        VStack(spacing: 0) {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.top, 16)
+                .padding(.bottom, 12)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    content
+                }
+                .padding(.horizontal, 28)
+                .padding(.bottom, 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
-private struct GitHubRequestUsagePane: View {
+/// Moves the traffic lights onto the sidebar by letting content run under a transparent title bar.
+private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        ChromeView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class ChromeView: NSView {
+        private var observers: [NSObjectProtocol] = []
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            observers.forEach(NotificationCenter.default.removeObserver)
+            // SwiftUI reapplies its own title bar settings after the window appears, so reassert ours.
+            observers = [
+                NSWindow.didBecomeKeyNotification,
+                NSWindow.didUpdateNotification,
+                NSWindow.didResizeNotification
+            ].map { name in
+                NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.applyChrome() }
+                }
+            }
+            applyChrome()
+            // With the title bar folded into the content, the window is exactly the design size.
+            DispatchQueue.main.async { [weak window] in
+                window?.setContentSize(NSSize(width: 820, height: 620))
+            }
+        }
+
+        private func applyChrome() {
+            guard let window else { return }
+            if !window.styleMask.contains(.fullSizeContentView) { window.styleMask.insert(.fullSizeContentView) }
+            if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
+            if window.titleVisibility != .hidden { window.titleVisibility = .hidden }
+            if window.titlebarSeparatorStyle != .none { window.titlebarSeparatorStyle = .none }
+            if !window.isMovableByWindowBackground { window.isMovableByWindowBackground = true }
+            if window.backgroundColor != .textBackgroundColor { window.backgroundColor = .textBackgroundColor }
+        }
+
+        deinit {
+            observers.forEach(NotificationCenter.default.removeObserver)
+        }
+    }
+}
+
+struct GitHubRequestUsagePane: View {
     let requestLogModel: GitHubRequestLogModel
 
     var body: some View {
@@ -292,7 +416,7 @@ private struct GitHubRequestRecordRow: View {
     }
 }
 
-private struct GeneralSettingsPane: View {
+struct GeneralSettingsPane: View {
     @Bindable var model: SettingsModel
     @Bindable var softwareUpdateModel: SoftwareUpdateModel
 
@@ -308,11 +432,18 @@ private struct GeneralSettingsPane: View {
                 }
 
                 SettingsRow(
-                    title: "Hide Dock icon",
-                    subtitle: "Keep GHOrchestrator in the menu bar while removing it from the Dock."
+                    title: "Show Dock icon",
+                    subtitle: "Off keeps GHOrchestrator in the menu bar only. It reappears while Settings is open."
                 ) {
-                    Toggle("Hide Dock icon", isOn: $model.hideDockIcon)
-                        .labelsHidden()
+                    Toggle(
+                        "Show Dock icon",
+                        isOn: Binding(
+                            get: { !model.hideDockIcon },
+                            set: { model.hideDockIcon = !$0 }
+                        )
+                    )
+                    .labelsHidden()
+                    .toggleStyle(.switch)
                 }
 
                 SettingsRow(
@@ -328,12 +459,13 @@ private struct GeneralSettingsPane: View {
 
                         Toggle("Start at login", isOn: $model.startAtLogin)
                             .labelsHidden()
+                            .toggleStyle(.switch)
                     }
                 }
 
                 SettingsRow(
-                    title: "Polling interval",
-                    subtitle: "Refresh on this interval whether the menu is hidden or visible."
+                    title: "Refresh every",
+                    subtitle: "Runs whether the popover is open or not."
                 ) {
                     HStack(spacing: 10) {
                         TextField("Seconds", text: $model.pollingIntervalText)
@@ -375,25 +507,9 @@ private struct GeneralSettingsPane: View {
 
             SettingsGroup(title: "Software updates") {
                 SettingsRow(
-                    title: "Installed version",
-                    subtitle: softwareUpdateModel.statusDescription
-                ) {
-                    Text("\(softwareUpdateModel.currentVersion) (\(AppMetadata.currentBuild))")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-
-                SettingsRow(
-                    title: "Automatic checks",
-                    subtitle: "Look for new GitHub Release builds periodically."
-                ) {
-                    Toggle("Automatic checks", isOn: $softwareUpdateModel.automaticallyCheckForUpdates)
-                        .labelsHidden()
-                }
-
-                SettingsRow(
-                    title: "Actions",
-                    subtitle: updateActionSubtitle
+                    title: "Version \(softwareUpdateModel.currentVersion) (\(AppMetadata.currentBuild))",
+                    subtitle: updateStatusLine,
+                    subtitleColor: updateStatusColor
                 ) {
                     HStack(spacing: 10) {
                         if case .checking = softwareUpdateModel.state {
@@ -414,6 +530,15 @@ private struct GeneralSettingsPane: View {
                     }
                 }
 
+                SettingsRow(
+                    title: "Check automatically",
+                    subtitle: "Uses the signed, notarized DMG from the latest GitHub Release."
+                ) {
+                    Toggle("Check automatically", isOn: $softwareUpdateModel.automaticallyCheckForUpdates)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                }
+
                 if let releaseNotes = softwareUpdateModel.availableUpdate?.releaseNotes {
 
                     SettingsTextBlock(
@@ -421,8 +546,6 @@ private struct GeneralSettingsPane: View {
                         bodyText: releaseNotes
                     )
                 }
-            } footer: {
-                Text("Updates use the signed, notarized DMG attached to the project’s latest GitHub Release.")
             }
 
             SettingsGroup(title: "Dashboard query limits") {
@@ -509,7 +632,15 @@ private struct GeneralSettingsPane: View {
         }
     }
 
-    private var updateActionSubtitle: String {
+    private var updateStatusColor: Color {
+        switch softwareUpdateModel.state {
+        case .upToDate: .green
+        case .failed: .red
+        case .idle, .checking, .updateAvailable, .installing: .secondary
+        }
+    }
+
+    private var updateStatusLine: String {
         switch softwareUpdateModel.state {
         case .idle:
             return "Check the project’s latest GitHub Release."
@@ -517,8 +648,8 @@ private struct GeneralSettingsPane: View {
             return "Contacting GitHub Releases."
         case .upToDate:
             return softwareUpdateModel.lastCheckedAt.map {
-                "Last checked \($0.formatted(date: .omitted, time: .shortened))."
-            } ?? "No newer release was found."
+                "You’re up to date · checked \($0.formatted(date: .omitted, time: .shortened))"
+            } ?? "You’re up to date."
         case .updateAvailable(let update):
             return "Download, verify, and install GHOrchestrator \(update.version)."
         case .installing:
@@ -529,7 +660,7 @@ private struct GeneralSettingsPane: View {
     }
 }
 
-private struct GitHubSettingsPane: View {
+struct GitHubSettingsPane: View {
     @Bindable var model: SettingsModel
 
     var body: some View {
@@ -667,7 +798,7 @@ private struct GitHubSettingsPane: View {
     }
 }
 
-private struct RepositorySettingsPane: View {
+struct RepositorySettingsPane: View {
     @Bindable var model: SettingsModel
     @State private var selectedRepositoryIDs = Set<String>()
 
@@ -751,49 +882,52 @@ private struct RepositorySettingsPane: View {
     }
 }
 
-private struct NotificationSettingsPane: View {
+struct NotificationSettingsPane: View {
     @Bindable var model: SettingsModel
 
     var body: some View {
         Group {
             SettingsGroup(title: "Permission") {
-                SettingsRow(
-                    title: "Status",
-                    subtitle: notificationPermissionSubtitle
-                ) {
-                    Text(model.notificationAuthorizationDescription)
-                        .foregroundStyle(notificationPermissionColor)
-                }
+                NotificationPermissionBanner(
+                    title: notificationPermissionTitle,
+                    message: notificationPermissionSubtitle,
+                    systemImage: notificationPermissionSymbol,
+                    tint: notificationPermissionColor
+                )
 
-                SettingsRow(
-                    title: "Enable Notifications",
-                    subtitle: "Allow GHOrchestrator to deliver local macOS alerts for matching repository events."
-                ) {
-                    Button("Enable") {
-                        model.requestNotificationAuthorization()
+                if model.canRequestNotificationAuthorization {
+                    SettingsRow(
+                        title: "Enable Notifications",
+                        subtitle: "Allow GHOrchestrator to deliver local macOS alerts for matching repository events."
+                    ) {
+                        Button("Enable") {
+                            model.requestNotificationAuthorization()
+                        }
                     }
-                    .disabled(!model.canRequestNotificationAuthorization)
                 }
             }
 
-            SettingsGroup(title: "Repository triggers") {
-                if model.observedRepositories.isEmpty {
+            if model.observedRepositories.isEmpty {
+                SettingsGroup(title: "Repository triggers") {
                     SettingsTextBlock(
                         title: "No repositories configured",
                         bodyText: "Add repositories before enabling notification triggers."
                     )
-                } else {
-                    Group {
-                        ForEach(model.observedRepositories) { repository in
-                            RepositoryNotificationSettingsRows(
-                                repository: repository,
-                                model: model
-                            )
-                        }
+                }
+            } else {
+                ForEach(model.observedRepositories) { repository in
+                    SettingsGroup(title: repository.fullName) {
+                        RepositoryNotificationSettingsRows(
+                            repository: repository,
+                            model: model
+                        )
                     }
                 }
-            } footer: {
+
                 Text("Notification polling checks all open PRs in enabled repositories, independent of the dashboard filter.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
             }
 
 #if DEBUG
@@ -802,6 +936,23 @@ private struct NotificationSettingsPane: View {
                 preview: model.notificationDebugPreview
             )
 #endif
+        }
+    }
+
+    private var notificationPermissionTitle: String {
+        switch model.notificationAuthorizationStatus {
+        case .authorized, .provisional, .ephemeral: "Notifications allowed"
+        case .denied: "Notifications blocked"
+        case .notDetermined: "Permission needed"
+        case .unknown: "Permission unknown"
+        }
+    }
+
+    private var notificationPermissionSymbol: String {
+        switch model.notificationAuthorizationStatus {
+        case .authorized, .provisional, .ephemeral: "checkmark.circle.fill"
+        case .denied: "xmark.octagon.fill"
+        case .notDetermined, .unknown: "bell.badge"
         }
     }
 
@@ -835,64 +986,64 @@ private struct RepositoryNotificationSettingsRows: View {
     @Bindable var model: SettingsModel
 
     var body: some View {
-        Group {
-            SettingsRow(
-                title: repository.fullName,
-                subtitle: "Evaluate all open pull requests in this repository."
-            ) {
-                Toggle(
-                    "Repository notifications",
-                    isOn: Binding(
-                        get: {
-                            model.isRepositoryNotificationsEnabled(repositoryID: repository.id)
-                        },
-                        set: { isEnabled in
-                            model.setRepositoryNotificationsEnabled(
-                                isEnabled,
-                                repositoryID: repository.id
-                            )
-                        }
-                    )
+        let isEnabled = model.isRepositoryNotificationsEnabled(repositoryID: repository.id)
+
+        SettingsRow(
+            title: "Watch this repository",
+            subtitle: "Evaluate all open pull requests in this repository."
+        ) {
+            Toggle(
+                "Repository notifications",
+                isOn: Binding(
+                    get: { isEnabled },
+                    set: { newValue in
+                        model.setRepositoryNotificationsEnabled(
+                            newValue,
+                            repositoryID: repository.id
+                        )
+                    }
                 )
-                .labelsHidden()
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(RepositoryNotificationTrigger.allCases, id: \.self) { trigger in
-                    NotificationTriggerToggleRow(
-                        trigger: trigger,
-                        repositoryID: repository.id,
-                        model: model
-                    )
-                }
-
-                SettingsRow(
-                    title: "Workflow filters",
-                    subtitle: "Empty selection matches every PR-attached workflow completion."
-                ) {
-                    WorkflowFilterPicker(
-                        repositoryID: repository.id,
-                        model: model
-                    )
-                }
-
-                SettingsRow(
-                    title: "Job filters",
-                    subtitle: "Optional job names for job-completion alerts. Empty selection matches every job in a workflow."
-                ) {
-                    WorkflowJobFilterPicker(
-                        repositoryID: repository.id,
-                        model: model
-                    )
-                }
-            }
-            .padding(.leading, 18)
-            .disabled(!model.isRepositoryNotificationsEnabled(repositoryID: repository.id))
+            )
+            .labelsHidden()
+            .toggleStyle(.switch)
         }
-        .padding(.vertical, 8)
         .task {
             model.loadWorkflowNamesIfNeeded(repositoryID: repository.id)
         }
+
+        ForEach(RepositoryNotificationTrigger.allCases, id: \.self) { trigger in
+            NotificationTriggerToggleRow(
+                trigger: trigger,
+                repositoryID: repository.id,
+                model: model
+            )
+            .padding(.leading, 14)
+            .disabled(!isEnabled)
+        }
+
+        SettingsRow(
+            title: "Workflow filters",
+            subtitle: "Empty selection matches every PR-attached workflow completion."
+        ) {
+            WorkflowFilterPicker(
+                repositoryID: repository.id,
+                model: model
+            )
+        }
+        .padding(.leading, 14)
+        .disabled(!isEnabled)
+
+        SettingsRow(
+            title: "Job filters",
+            subtitle: "Optional job names for job-completion alerts. Empty selection matches every job in a workflow."
+        ) {
+            WorkflowJobFilterPicker(
+                repositoryID: repository.id,
+                model: model
+            )
+        }
+        .padding(.leading, 14)
+        .disabled(!isEnabled)
     }
 }
 
@@ -1162,6 +1313,35 @@ private extension RepositoryNotificationTrigger {
     }
 }
 
+private struct NotificationPermissionBanner: View {
+    let title: String
+    let message: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+                .imageScale(.large)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .fontWeight(.semibold)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.12))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct SettingsGroup<Content: View, Footer: View>: View {
     let title: String
     @ViewBuilder let content: Content
@@ -1178,12 +1358,35 @@ struct SettingsGroup<Content: View, Footer: View>: View {
     }
 
     var body: some View {
-        Section {
-            content
-        } header: {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
-        } footer: {
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.leading, 4)
+                .accessibilityAddTraits(.isHeader)
+
+            Group(subviews: content) { subviews in
+                VStack(spacing: 0) {
+                    ForEach(Array(subviews.enumerated()), id: \.offset) { index, subview in
+                        if index > 0 {
+                            Divider()
+                        }
+                        subview
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+            }
+
             footer
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
         }
     }
 }
@@ -1191,34 +1394,44 @@ struct SettingsGroup<Content: View, Footer: View>: View {
 struct SettingsRow<Accessory: View>: View {
     let title: String
     let subtitle: String?
+    let subtitleColor: Color
     @ViewBuilder let accessory: Accessory
 
     init(
         title: String,
         subtitle: String? = nil,
+        subtitleColor: Color = .secondary,
         @ViewBuilder accessory: () -> Accessory
     ) {
         self.title = title
         self.subtitle = subtitle
+        self.subtitleColor = subtitleColor
         self.accessory = accessory()
     }
 
     var body: some View {
-        LabeledContent {
-            accessory
-                .labelsHidden()
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
+                    .font(.system(size: 13))
 
                 if let subtitle {
                     Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(subtitleColor)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+
+            Spacer(minLength: 12)
+
+            accessory
+                .labelsHidden()
+                .fixedSize(horizontal: true, vertical: false)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -1234,7 +1447,9 @@ struct SettingsTextBlock: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

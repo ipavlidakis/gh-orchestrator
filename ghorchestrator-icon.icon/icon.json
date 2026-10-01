@@ -2,8 +2,8 @@
   "color-space-for-untagged-svg-colors" : "display-p3",
   "fill" : {
     "linear-gradient" : [
-      "srgb:1.00000,0.76671,0.59309,1.00000",
-      "srgb:0.48368,0.53686,1.00000,1.00000"
+      "srgb:0.40000,0.32157,0.83922,1.00000",
+      "srgb:0.14118,0.08627,0.37647,1.00000"
     ],
     "orientation" : {
       "start" : {
@@ -12,7 +12,7 @@
       },
       "stop" : {
         "x" : 0.5,
-        "y" : 0.7
+        "y" : 1
       }
     }
   },
@@ -20,41 +20,13 @@
     {
       "layers" : [
         {
-          "fill" : {
-            "linear-gradient" : [
-              "srgb:1.00000,0.76671,0.59309,1.00000",
-              "extended-srgb:0.79608,0.18824,0.87843,1.00000"
-            ],
-            "orientation" : {
-              "start" : {
-                "x" : 0.5,
-                "y" : 0
-              },
-              "stop" : {
-                "x" : 0.5,
-                "y" : 0.5
-              }
-            }
-          },
-          "image-name" : "arrow.trianglehead.branch 2.png",
-          "name" : "arrow.trianglehead.branch 2",
+          "image-name" : "branch-graph.svg",
+          "name" : "branch-graph",
           "position" : {
-            "scale" : 2.5,
+            "scale" : 1,
             "translation-in-points" : [
-              17.9609375,
-              -205.8515625
-            ]
-          }
-        },
-        {
-          "image-name" : "github.svg",
-          "name" : "github",
-          "opacity" : 1,
-          "position" : {
-            "scale" : 1.0999999999999999,
-            "translation-in-points" : [
-              -0.4399999999999409,
-              -29.590000000000146
+              0,
+              0
             ]
           }
         }
@@ -64,7 +36,7 @@
         "opacity" : 0.5
       },
       "translucency" : {
-        "enabled" : true,
+        "enabled" : false,
         "value" : 0.5
       }
     }

@@ -49,6 +49,7 @@ final class MenuBarDashboardModel {
     var retryingJobIDs = Set<Int>()
     var retryErrorMessagesByJobID: [Int: String] = [:]
     var refreshWarningMessage: String?
+    var lastRefreshedAt: Date?
 
     var isRefreshing: Bool {
         if case .loading = state {
@@ -66,6 +67,14 @@ final class MenuBarDashboardModel {
             pullRequests: sections.flatMap(\.pullRequests),
             sortOrder: settingsStore.settings.pullRequestSortOrder
         ))
+    }
+
+    /// Pull requests that need the user's attention: failing checks or requested changes.
+    var attentionCount: Int {
+        guard case .loaded(let sections) = state else { return 0 }
+        return sections.flatMap(\.pullRequests).filter {
+            $0.checkRollupState == .failing || $0.reviewStatus == .changesRequested
+        }.count
     }
 
     var areDashboardFiltersDisabled: Bool {
@@ -348,6 +357,7 @@ final class MenuBarDashboardModel {
     }
 
     private func applyLoadedSections(_ sections: [RepositorySection]) {
+        lastRefreshedAt = Date()
         let visibleRepositoryIDs = Set(sections.map(\.repository.normalizedLookupKey))
         let visibleIDs = Set(
             sections.flatMap { section in
