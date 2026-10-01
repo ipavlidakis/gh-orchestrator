@@ -260,14 +260,14 @@
   - Native-hosted renders verify layout but do not prove live pointer interaction/full-window glass composition. Existing fields, preview formatting, and delivery actions remain wired to the same models.
 
 ### T27: Dashboard And Settings Feedback Delivery
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T20`, `T21`, `T22`, `T23`, `T24`, `T25`, `T26`
 - goal: review and publish the accumulated feedback fixes as a feature-branch PR.
 - verification:
-  - 2026-10-01: OCR workspace preview and Swift rules resolved; host review covered all 15 delivered source/config files with no blocking findings. Manually reviewed the eight test/fixture files and two plan files excluded by OCR defaults. Local `.codex/config.toml` was skipped as unrelated workspace configuration; Finder metadata is excluded.
+  - 2026-10-01: OCR workspace preview and Swift rules resolved: 16 reviewable files, 15 reviewed, one skipped (93.75% preview coverage; 100% of delivered source/config files), with no blocking findings. Manually reviewed the eight test/fixture files and two plan files excluded by OCR defaults. Local `.codex/config.toml` was skipped as unrelated workspace configuration; Finder metadata is excluded.
   - 2026-10-01: final candidate passed 24 focused core tests and 50 focused app tests. The only warning is the known SceneStorage default-value warning in the native rendering harness; diff whitespace checks passed.
-  - pending: branch commit/push and PR creation.
+  - 2026-10-01: committed the reviewed candidate as `982ebc897fa2374c7b0fa008b8b995a6b5db26ff`, pushed `iliaspavlidakis/native-macos-ui-and-pr-sorting`, and opened https://github.com/ipavlidakis/gh-orchestrator/pull/2 against `main`. HTTPS push stalled; a command-scoped SSH URL rewrite succeeded without changing the saved remote.
 
 ## Decision Log
 - 2026-10-01: remove fixed-width wrappers from Insights pickers so native Form alignment governs their placement. Show notification preview content in its own native Section with full-width leading-aligned title/body text, outside LabeledContent value styling.
