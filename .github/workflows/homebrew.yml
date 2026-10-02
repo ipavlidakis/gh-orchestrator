@@ -1,0 +1,49 @@
+name: Update Homebrew cask
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable release tag to verify and apply
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: homebrew-cask
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Test release automation
+        run: python3 script/test_homebrew_release.py
+      - name: Verify release and update cask
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+        run: python3 script/update_homebrew_cask.py --repo "$GH_REPO" --tag "$RELEASE_TAG"
+      - name: Commit and push cask update
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if git diff --quiet -- Casks/gh-orchestrator.rb; then
+            echo "Homebrew cask is already current or this release was skipped."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Casks/gh-orchestrator.rb
+          git commit -m '[Hygiene] Update Homebrew cask for published release'
+          git push origin "HEAD:$DEFAULT_BRANCH"

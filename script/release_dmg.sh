@@ -301,7 +301,7 @@ preflight() {
 create_release_payload() {
   local payload_file="$1"
 
-  /usr/bin/python3 - "$payload_file" "$RELEASE_TAG" "$TARGET_COMMITISH" "$RELEASE_NAME" "$DRAFT_RELEASE" "$PRERELEASE" "$RELEASE_NOTES_FILE" <<'PY'
+  /usr/bin/python3 - "$payload_file" "$RELEASE_TAG" "$TARGET_COMMITISH" "$RELEASE_NAME" "$PRERELEASE" "$RELEASE_NOTES_FILE" <<'PY'
 import json
 import pathlib
 import sys
@@ -310,9 +310,8 @@ payload_path = pathlib.Path(sys.argv[1])
 tag = sys.argv[2]
 target = sys.argv[3]
 name = sys.argv[4]
-draft = sys.argv[5] == "true"
-prerelease = sys.argv[6] == "true"
-notes_file = sys.argv[7]
+prerelease = sys.argv[5] == "true"
+notes_file = sys.argv[6]
 
 body = ""
 if notes_file:
@@ -323,7 +322,7 @@ payload = {
     "target_commitish": target,
     "name": name or tag,
     "body": body,
-    "draft": draft,
+    "draft": True,
     "prerelease": prerelease,
 }
 
@@ -619,6 +618,15 @@ if [[ "$UPLOAD_RELEASE" == true ]]; then
     github_release_response "$release_response"
     upload_asset "$release_response" "$DMG_PATH" "application/x-apple-diskimage"
     upload_asset "$release_response" "$CHECKSUM_PATH" "text/plain; charset=utf-8"
+    if [[ "$DRAFT_RELEASE" == false && "$(json_field "$release_response" "draft")" == true ]]; then
+      publish_payload="$(make_temp_file)"
+      printf '{"draft":false}\n' > "$publish_payload"
+      release_id="$(json_field "$release_response" "id")"
+      status="$(github_request PATCH "https://api.github.com/repos/$REPOSITORY/releases/$release_id" "$release_response" "$publish_payload")"
+      rm -f "$publish_payload"
+      [[ "$status" == "200" ]] || die "assets uploaded, but release publication failed (HTTP $status); publish the draft on GitHub"
+      info "Published release $RELEASE_TAG after uploading both assets."
+    fi
     rm -f "$release_response"
   fi
 fi

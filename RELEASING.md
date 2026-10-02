@@ -82,36 +82,43 @@ Optional flags:
 4. Signs the DMG with the `Developer ID Application` identity.
 5. Submits the DMG to Apple notarization, waits for completion, and staples the ticket.
 6. Writes a SHA-256 checksum file.
-7. Optionally creates or updates a GitHub Release and uploads both assets.
+7. Optionally creates a draft GitHub Release and uploads both assets. If a public release was requested (`draft: false`), publishes it only after both uploads succeed.
+8. Publishing a stable release triggers the Homebrew workflow, which verifies the uploaded DMG checksum and commits the cask update to the default branch.
 
-## Update the Homebrew cask
+## Automatic Homebrew updates
 
-This repository also serves as the Homebrew tap. After publishing a stable
-release and uploading its final notarized DMG, update `version` and `sha256` in
-`Casks/gh-orchestrator.rb`. Use the SHA-256 of the uploaded DMG, not the checksum
-text file. Do not point the cask at draft or prerelease assets.
+This repository also serves as the Homebrew tap. `.github/workflows/homebrew.yml`
+runs when a release is published, including when a draft is published later.
+It downloads the final DMG and checksum asset, verifies their SHA-256 match,
+updates `version` and `sha256` in `Casks/gh-orchestrator.rb`, and commits/pushes
+the change to the default branch with the repository's `GITHUB_TOKEN`.
+No separate tap or additional Actions secret is needed.
 
-For example, download and verify the published release:
-
-```bash
-gh release download 0.5.1 --repo ipavlidakis/gh-orchestrator \
-  --pattern 'GHOrchestrator-0.5.1.dmg*' --dir /tmp/ghorchestrator-homebrew-0.5.1
-shasum -a 256 /tmp/ghorchestrator-homebrew-0.5.1/GHOrchestrator-0.5.1.dmg
-cat /tmp/ghorchestrator-homebrew-0.5.1/GHOrchestrator-0.5.1.dmg.sha256.txt
-```
-
-Replace the example version and temporary directory for each release. Compare
-the downloaded DMG hash with the checksum asset, then validate the updated cask
-from a tap checkout containing the changes:
+The example local config uses `draft: true`. After reviewing the uploaded draft,
+publish it to trigger the automatic Homebrew update:
 
 ```bash
-brew style --cask ipavlidakis/gh-orchestrator/gh-orchestrator
-brew audit --cask --online ipavlidakis/gh-orchestrator/gh-orchestrator
-brew fetch --cask ipavlidakis/gh-orchestrator/gh-orchestrator
-brew livecheck --cask ipavlidakis/gh-orchestrator/gh-orchestrator
+gh release edit 0.5.3 --repo ipavlidakis/gh-orchestrator --draft=false --latest
+gh run list --repo ipavlidakis/gh-orchestrator --workflow homebrew.yml --limit 5
 ```
 
-Commit and push the cask update to the default branch so `brew update` discovers
-it. Users upgrade with `brew upgrade --cask --greedy
-ipavlidakis/gh-orchestrator/gh-orchestrator`, because the app also supports
-in-app updates. The release script does not commit or push cask changes.
+Replace `0.5.3` with the new version. Stable tags must match the numeric version
+used by the cask's download URL, such as `0.5.3`. Drafts and prereleases are skipped;
+only the latest stable release can update the cask, and older versions cannot
+roll it back. A checksum mismatch fails the workflow before changing the cask.
+
+If the workflow fails, fix the missing/incorrect assets or repository permission
+error shown in its log, then rerun it in Actions or dispatch it for the same tag:
+
+```bash
+gh workflow run homebrew.yml --repo ipavlidakis/gh-orchestrator -f tag=0.5.3
+```
+
+Rerunning an already-current release verifies its assets without creating a
+duplicate commit. Releases created by another Actions workflow using its
+`GITHUB_TOKEN` do not trigger `release.published`; that workflow should explicitly
+dispatch `homebrew.yml` after uploading and publishing its assets.
+
+Users discover the update with `brew update`, then upgrade with
+`brew upgrade --cask --greedy ipavlidakis/gh-orchestrator/gh-orchestrator`,
+because the app also supports in-app updates.

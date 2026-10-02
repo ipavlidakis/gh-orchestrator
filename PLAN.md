@@ -1359,6 +1359,22 @@
   - 2026-10-02: user-authorized commit/push to `main`, README and screenshot refresh, stable 0.5.2/build 49 release, and public Homebrew verification are complete. Installation: `brew tap ipavlidakis/gh-orchestrator https://github.com/ipavlidakis/gh-orchestrator.git`, then `brew install --cask ipavlidakis/gh-orchestrator/gh-orchestrator`. For future stable releases, follow `RELEASING.md` to update the cask version/checksum.
   - During test uninstall, Homebrew automatically removed six unrelated formulae. All six were restored to their original versions, and the three dependencies upgraded during restoration were restored to their previous versions. Gradle 9.7.1 runs with JDK 25.0.4.1. Future isolated Homebrew verification should set `HOMEBREW_NO_AUTO_UPDATE=1`, `HOMEBREW_NO_AUTOREMOVE=1`, and `HOMEBREW_NO_INSTALL_CLEANUP=1` to avoid changing unrelated tools.
 
+### T60: Automatic Homebrew Release Updates
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `T59`
+- goal: publishing a stable GitHub release automatically verifies its DMG checksum and commits the cask version/checksum to the default branch.
+- scope:
+  - add a release-published workflow and a small release-to-cask updater.
+  - publish script-created releases only after both assets upload, so the workflow sees complete assets.
+  - document automatic updates and workflow retries.
+- verification:
+  - 2026-10-02: focused stdlib tests passed: two test groups, 16 scenarios covering verified updates, idempotence, drafts/prereleases, older and superseded releases, malformed tags/casks, bad/empty checksums, missing assets, upload failure, and publication failure. The shell entry-point regression failed on the previous implementation (three public-release scenarios) because it published before assets were uploaded; all scenarios pass after the fix.
+  - 2026-10-02: live updater verified the actual 0.5.2 DMG/checksum without changing the already-current cask. Bash syntax, workflow YAML parsing, and whitespace checks passed. OCR delegation preview/rules and host review covered all three selected files (release script, workflow, updater), with no unresolved findings; both Markdown diffs and the excluded test helper were reviewed manually. Existing app source is unchanged; prior app/package/build verification remains applicable.
+  - hosted workflow verification against the current published release is pending push.
+- notes:
+  - User requested automation of the manual Homebrew release step; existing authorization to commit/push `main` persists.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1389,6 +1405,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-02: T60 supersedes T59's manual cask maintenance: a GitHub `release.published` workflow verifies the final DMG against its checksum asset and commits the cask update to the default branch. Drafts, prereleases, and older releases cannot advance or roll back the cask. Release uploads create a draft first and publish after both assets upload when a public release was requested.
 - 2026-10-02: Homebrew distribution uses `Casks/gh-orchestrator.rb` in this repository, with an explicit Git URL in `brew tap`. The cask installs the existing signed, notarized universal DMG and pins its version and SHA-256; release maintainers update both after publishing each stable release.
 - 2026-10-01: the dashboard and General Settings expose persisted PR ordering: title A-Z (default), creation newest first, or creation oldest first. T25 supersedes the fixed-title-only decision.
 - 2026-10-01: Debug builds use stable Apple Development signing with the existing personal team UBW6JB7T2F certificate, preserving the Keychain designated requirement across rebuilds. Dashboard chrome and controls follow native macOS defaults; see `PLAN-menu-bar.md:T22` and `T23`.
