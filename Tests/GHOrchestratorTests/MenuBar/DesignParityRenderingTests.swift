@@ -14,12 +14,12 @@ final class DesignParityRenderingTests: XCTestCase {
         let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: storageURL) }
         let store = SettingsStore(storageURL: storageURL)
-        let repository = ObservedRepository(owner: "GetStream", name: "stream-video-swift")
+        let repository = ObservedRepository(owner: "orbit-labs", name: "nova-app")
         store.settings.observedRepositories = [repository]
         let updates = SoftwareUpdateModel(store: store, checker: GitHubReleaseUpdateChecker(), installer: DMGSoftwareUpdateInstaller())
 
         let model = MenuBarDashboardModel(settingsStore: store)
-        model.authenticationState = .authenticated(username: "ipavlidakis")
+        model.authenticationState = .authenticated(username: "alex")
         let pulls = fixturePullRequests(repository: repository)
         model.state = .loaded([RepositorySection(repository: repository, pullRequests: pulls)])
         model.lastRefreshedAt = Date().addingTimeInterval(-12)
@@ -45,12 +45,16 @@ final class DesignParityRenderingTests: XCTestCase {
 
         let workflow = ActionsWorkflowItem(id: 2, name: "CodeQL", path: ".github/workflows/codeql.yml", state: "active")
         store.settings.actionsInsightsSelection = ActionsInsightsSelection(repositoryID: repository.id, workflowID: workflow.id, workflowName: workflow.name, period: .last7Days)
-        let settingsModel = SettingsModel(store: store, authenticationState: .authenticated(username: "ipavlidakis"), notificationAuthorizationStatus: .authorized)
+        let settingsModel = SettingsModel(store: store, authenticationState: .authenticated(username: "alex"), notificationAuthorizationStatus: .authorized)
         settingsModel.setRepositoryNotificationsEnabled(true, repositoryID: repository.id)
         settingsModel.workflowListStatesByRepositoryID[repository.id] = .loaded([workflow.name])
         settingsModel.workflowItemsByRepositoryID[repository.id] = [workflow]
         let jobKey = "\(RepositoryNotificationSettings.normalizedRepositoryID(repository.id))::\(RepositoryNotificationSettings.normalizedWorkflowName(workflow.name))"
         settingsModel.workflowJobListStatesByKey[jobKey] = .loaded(["Analyze (swift)"])
+        settingsModel.setNotificationTrigger(.pullRequestCreated, isEnabled: false, repositoryID: repository.id)
+        settingsModel.setNotificationTrigger(.approval, isEnabled: false, repositoryID: repository.id)
+        settingsModel.setWorkflowNameFilter(workflow.name, isSelected: true, repositoryID: repository.id)
+        settingsModel.setWorkflowJobNameFilter("Analyze (swift)", isSelected: true, repositoryID: repository.id, workflowName: workflow.name)
         let now = Date()
         let points = (0..<7).map { day in
             ActionsInsightsDataPoint(date: now.addingTimeInterval(Double(day - 6) * 86400), successCount: 20 + day % 3, failureCount: 4 - day % 3, averageDurationSeconds: Double(240 + day * 15))
@@ -84,11 +88,11 @@ final class DesignParityRenderingTests: XCTestCase {
         let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: storageURL) }
         let store = SettingsStore(storageURL: storageURL)
-        let repository = ObservedRepository(owner: "GetStream", name: "stream-video-swift")
+        let repository = ObservedRepository(owner: "orbit-labs", name: "nova-app")
         store.settings.observedRepositories = [repository]
         let updates = SoftwareUpdateModel(store: store, checker: GitHubReleaseUpdateChecker(), installer: DMGSoftwareUpdateInstaller())
         let model = MenuBarDashboardModel(settingsStore: store)
-        model.authenticationState = .authenticated(username: "ipavlidakis")
+        model.authenticationState = .authenticated(username: "alex")
         let pulls = fixturePullRequests(repository: repository)
         var reported: [CGFloat] = []
 
@@ -116,39 +120,39 @@ final class DesignParityRenderingTests: XCTestCase {
         let now = Date()
         func url(_ n: Int) -> URL { URL(string: "https://github.com/x/y/pull/\(n)")! }
         let pending = PullRequestItem(
-            repository: repository, number: 1335,
-            title: "[IOS-2105] Stop retrying unrecoverable join errors and evict failed calls",
-            url: url(1335), isDraft: false, updatedAt: now.addingTimeInterval(-660),
+            repository: repository, number: 42,
+            title: "Add a smoother onboarding flow",
+            url: url(42), isDraft: false, updatedAt: now.addingTimeInterval(-660),
             reviewStatus: .reviewRequired, unresolvedReviewThreadCount: 0, checkRollupState: .pending,
             workflowRuns: [
-                WorkflowRunItem(id: 1, name: "SDK Size", status: "queued", detailsURL: url(1), jobs: [
-                    ActionJobItem(id: 11, name: "Metrics", status: "queued", createdAt: now.addingTimeInterval(-1680))
+                WorkflowRunItem(id: 1, name: "App Build", status: "queued", detailsURL: url(1), jobs: [
+                    ActionJobItem(id: 11, name: "Release build", status: "queued", createdAt: now.addingTimeInterval(-1680))
                 ]),
                 WorkflowRunItem(id: 2, name: "CodeQL", status: "completed", conclusion: "success", detailsURL: url(2), jobs: [
-                    ActionJobItem(id: 21, name: "Analyze (actions)", status: "completed", conclusion: "success",
+                    ActionJobItem(id: 21, name: "Analyze (swift)", status: "completed", conclusion: "success",
                                   startedAt: now.addingTimeInterval(-100), completedAt: now.addingTimeInterval(-68))
                 ]),
                 WorkflowRunItem(id: 3, name: "Smoke Checks", status: "in_progress", detailsURL: url(3), jobs: [
-                    ActionJobItem(id: 31, name: "Guard", status: "completed", conclusion: "success",
+                    ActionJobItem(id: 31, name: "Lint", status: "completed", conclusion: "success",
                                   startedAt: now.addingTimeInterval(-143), completedAt: now.addingTimeInterval(-100)),
-                    ActionJobItem(id: 32, name: "Test LLC (Debug)", status: "queued", createdAt: now.addingTimeInterval(-1620)),
-                    ActionJobItem(id: 33, name: "Test UIKit (Debug)", status: "queued", createdAt: now.addingTimeInterval(-1620))
+                    ActionJobItem(id: 32, name: "Unit tests", status: "queued", createdAt: now.addingTimeInterval(-1620)),
+                    ActionJobItem(id: 33, name: "UI tests", status: "queued", createdAt: now.addingTimeInterval(-1620))
                 ])
             ]
         )
         let failing = PullRequestItem(
-            repository: repository, number: 1329, title: "[IOS-2091] Fix audio route change on reconnect",
-            url: url(1329), isDraft: false, updatedAt: now.addingTimeInterval(-10800),
+            repository: repository, number: 38, title: "Keep favorites in sync across devices",
+            url: url(38), isDraft: false, updatedAt: now.addingTimeInterval(-10800),
             reviewStatus: .changesRequested, unresolvedReviewThreadCount: 1,
             unresolvedReviewComments: [UnresolvedReviewCommentItem(
-                url: url(1329), authorLogin: "octocat",
-                bodyText: "Could we add a regression test for reconnecting after the audio route changes?",
-                filePath: "Sources/Call/AudioSession.swift"
+                url: url(38), authorLogin: "sam",
+                bodyText: "Could we cover an offline edit before the next sync?",
+                filePath: "Sources/Sync/FavoritesStore.swift"
             )], checkRollupState: .failing
         )
         let ready = PullRequestItem(
-            repository: repository, number: 1318, title: "[IOS-2077] Document call quality metrics",
-            url: url(1318), isDraft: false, updatedAt: now.addingTimeInterval(-86400),
+            repository: repository, number: 35, title: "Polish the empty states",
+            url: url(35), isDraft: false, updatedAt: now.addingTimeInterval(-86400),
             reviewStatus: .approved, unresolvedReviewThreadCount: 0, checkRollupState: .passing
         )
         return [pending, failing, ready]

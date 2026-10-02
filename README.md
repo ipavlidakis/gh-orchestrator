@@ -60,6 +60,7 @@ Uninstalling preserves your settings and GitHub session in Keychain.
 - Native macOS Settings window with panes for General, GitHub, Repositories, Insights, Notifications, and Requests.
 - Repository management using one `owner/repo` entry per observed repository.
 - Per-repository local notifications with trigger toggles plus optional workflow and job filters.
+- Native macOS alerts when PR-attached workflow jobs finish, whether they succeed or fail. Customize the repositories, events, workflows and jobs that notify you in Settings → Notifications.
 - Live Actions insights charts in Settings for a selected repository, workflow, job, and time period.
 - Request quota visibility for recent GitHub calls and per-resource rate-limit headers.
 - Adjustable polling interval plus GraphQL dashboard limit controls.
@@ -93,7 +94,7 @@ support Liquid Glass in Settings.
     <td align="center" valign="top">
       <img src="docs/screenshots/settings-notifications.png" alt="Notifications settings" width="360"><br>
       <strong>Notifications settings</strong><br>
-      Per-repository triggers with workflow and job filtering.
+      Success/failure job alerts with per-repository triggers and selected workflow/job filters.
     </td>
   </tr>
   <tr>

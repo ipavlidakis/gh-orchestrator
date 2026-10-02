@@ -124,7 +124,7 @@ swiftc script/generate_icon_assets.swift -o /tmp/genicon && /tmp/genicon
 - Do not animate popover resizing or add per-frame work to list rows.
 
 ## Product landing page
-The static `docs/` presentation extends this product identity for the web. Its content is deliberately limited to the product description, T61 introduction video, Homebrew installation, four native screenshots, GitHub and the creator's website. The native-app rules above continue to govern app UI.
+The static `docs/` presentation extends this product identity for the web. Its content is deliberately limited to the product description, introduction video, Homebrew installation, five native screenshots, GitHub and the creator's website. The native-app rules above continue to govern app UI.
 
 - Audience: Mac developers checking PRs and Actions; the primary task is understanding the app and copying its installation commands.
 - Direction: warm white document, dark indigo display type, lavender surfaces and the real app icon. The large video is the focal object; screenshots prove the product rather than decorate it. The video itself supplies the motion.
@@ -134,4 +134,5 @@ The static `docs/` presentation extends this product identity for the web. Its c
 - Reusable primitives: pill links and copy button (default, hover, focus, pressed, success/failure text); eyebrow label; section heading; rounded media frame; screenshot figure with caption. Buttons have 44 px minimum targets, radius 12 px; media frames radius 24 px, inset screenshots radius 12 px. Neutral hairlines and soft shadows provide separation.
 - Responsive behavior: two-column intro becomes one column below 1024 px; screenshot grid becomes one column below 640 px; commands wrap without truncating. Media retain explicit dimensions, video aspect ratio 16:9. Screenshots show full native views and can be opened directly for detail.
 - Accessibility: semantic landmarks/headings, visible focus, descriptive image alternatives, native video controls with a text summary, no autoplay, no color-only status. Commands remain selectable when clipboard access is unavailable; copy results are announced in a polite live region. No decorative animation; hover color transitions are 160 ms and disabled for reduced motion.
+- Notifications: one full-width gallery figure pairs the real Settings capture with success/failure job-alert copy and repository, event, workflow and job customization. Its image/caption columns stack below 640 px. The silent 25-second video uses the same capture in a dedicated notification scene.
 - Accepted debt: none. Static HTML intentionally has no framework, analytics, external fonts or tracking.

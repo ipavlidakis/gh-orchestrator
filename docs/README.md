@@ -24,8 +24,8 @@ Edit `index.html` (including its embedded CSS) or `install.js`, preview at deskt
 
 ## Media
 
-`assets/intro.mp4` is the silent 24-second FFrames video from `marketing/intro/gh-orchestrator-intro.mp4`. It is checked in here so Pages hosts it directly. Keep its poster in sync when replacing the video.
+`assets/intro.mp4` is the silent 25-second FFrames video from `marketing/intro/gh-orchestrator-intro.mp4`, including customizable success/failure workflow-job notifications. It is checked in here so Pages hosts it directly. Keep its poster in sync when replacing the video.
 
-The four WebP screenshots come from `marketing/intro/media/` and use fictional native fixtures from `DesignParityRenderingTests.swift`. They are compressed copies without content changes. Open a screenshot on the page to inspect it at full size. The app icon comes from the app's generated artwork.
+The five WebP screenshots come from `marketing/intro/media/` and use fictional native fixtures from `DesignParityRenderingTests.swift`. They are compressed copies without content changes. The notification capture shows selected workflow/job filters and enabled completion alerts. Open a screenshot on the page to inspect it at full size. The app icon comes from the app's generated artwork.
 
 Videos never autoplay; loading is user-initiated. Screenshots load lazily. No analytics, cookies or third-party embeds are used.

@@ -1427,6 +1427,23 @@
   - Real Chrome checks against the `docs/` preview passed at 375, 768 and 1280 px: no horizontal overflow, all media loaded, clipboard success and denied-access fallback passed, and native 24-second 1080p playback passed. JavaScript syntax and whitespace checks passed. T62's Lighthouse results remain applicable to the unchanged page and media.
   - Publishing instructions now use Deploy from a branch → main → /docs. GitHub's live source was still main/root during the move; the user owns selecting /docs before hosted verification.
 
+### T64: Workflow Notifications in Product Marketing
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T63`
+- goal: show success/failure workflow-job alerts and notification customization in the introduction video, website and native screenshots.
+- scope:
+  - add a dedicated notification scene to the silent 16:9 fictional-data video.
+  - capture native notification settings with selected workflow/job filters; publish the screenshot and concise product copy in `docs/`.
+  - verify native captures, video frames and browser playback/layout, then commit and push to main.
+- verification:
+  - 2026-10-02: two native rendering tests passed with fictional data and selected workflow/job filters. The existing offscreen SceneStorage warning remains; app runtime behavior is unchanged.
+  - FFrames Skia Metal export is H.264, 1920×1080, 30 fps, 25 seconds / 750 frames with no audio stream. All-frame inspection found no warnings; full encoded-video decoding passed. Seven visually reviewed snapshot comparisons and the all-frame test passed.
+  - Real Chrome checks at 375, 768 and 1280 px passed: no horizontal overflow, all five screenshots loaded, notification copy and customization were visible, native playback and seeking to the notification scene passed, and clipboard success/fallback and creator link remained correct. Captures: `/tmp/gho-notifications-qa/`.
+  - Three mobile and three desktop Lighthouse runs each scored 100 in performance, accessibility, best practices and SEO. JavaScript syntax, whitespace and main-session source/design review passed.
+- notes:
+  - Editable FFrames source, pinned Cargo dependencies, fictional native media and seven snapshot baselines are included under `marketing/intro/`; generated video and temporary previews are ignored there. Pages hosts the final export from `docs/assets/intro.mp4`.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1457,6 +1474,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-02: T64 gives workflow-job notifications a dedicated marketing scene and screenshot. Alerts cover successful and failed PR-attached jobs; customization is by repository, trigger, workflow and job. Keep fictional data, silent playback and installation commands only on the website. Rebalance the introduction to 25 seconds.
 - 2026-10-02: T63 supersedes T62's `website/` Actions deployment. The user chose branch-based Pages publishing from `main` / `/docs`; landing files move into `docs/` alongside preserved README screenshots, and the custom deployment workflow is removed to prevent competing publications.
 - 2026-10-02: T62 adds a static product site in `website/`, with deployment from `main` through GitHub Pages Actions after the user enables that source. The web presentation extends the existing indigo app identity, uses the T61 silent intro and fictional native captures, and includes Homebrew installation plus a creator website link.
 - 2026-10-02: T60 supersedes T59's manual cask maintenance: a GitHub `release.published` workflow verifies the final DMG against its checksum asset and commits the cask update to the default branch. Drafts, prereleases, and older releases cannot advance or roll back the cask. Release uploads create a draft first and publish after both assets upload when a public release was requested.
