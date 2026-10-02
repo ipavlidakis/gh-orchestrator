@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FBFAFF">
+  <title>GHOrchestrator — GitHub, in your menu bar</title>
+  <meta name="description" content="Keep GitHub pull requests, reviews and Actions within reach. GHOrchestrator is a native macOS menu-bar app. Install with Homebrew.">
+  <link rel="canonical" href="https://ipavlidakis.github.io/gh-orchestrator/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="GHOrchestrator — GitHub, in your menu bar">
+  <meta property="og:description" content="Less tab chaos. More room to ship. Pull requests, reviews and Actions in a native macOS menu-bar app.">
+  <meta property="og:url" content="https://ipavlidakis.github.io/gh-orchestrator/">
+  <meta property="og:image" content="https://ipavlidakis.github.io/gh-orchestrator/assets/intro-poster.webp">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" href="assets/app-icon.png">
+  <link rel="preload" as="image" href="assets/intro-poster.webp" fetchpriority="high">
+  <style>
+:root {
+  color-scheme: light;
+  --page: #fbfaff;
+  --paper: #fff;
+  --ink: #201a33;
+  --muted: #62596f;
+  --accent: #3b2f88;
+  --accent-hover: #2b2168;
+  --soft: #f0edf8;
+  --line: #dfdaea;
+  --terminal-ink: #f8f6ff;
+  --terminal-muted: #c4bbd9;
+  --lavender: #bda8ff;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --small: 14px;
+  --body: 16px;
+  --lead: 20px;
+  --display: clamp(44px, 6vw, 80px);
+  --heading: clamp(32px, 4vw, 48px);
+  --radius: 12px;
+  --media-radius: 24px;
+  --shadow: 0 8px 32px rgb(32 26 51 / 8%);
+  --video-shadow: 0 24px 64px rgb(32 26 51 / 14%);
+  --transition: 160ms ease;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: var(--body)/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+a { color: var(--accent); text-underline-offset: var(--space-1); }
+button { font: inherit; cursor: pointer; }
+a:focus-visible, button:focus-visible, video:focus-visible { outline: 3px solid var(--accent); outline-offset: var(--space-1); }
+img { display: block; max-width: 100%; height: auto; }
+p, h1, h2, h3, figure { margin: 0; }
+.shell { width: min(100% - var(--space-20), 1120px); margin-inline: auto; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding-block: var(--space-8); }
+.wordmark { display: flex; align-items: center; gap: var(--space-3); color: var(--ink); text-decoration: none; font-size: var(--body); font-weight: 650; letter-spacing: -0.02em; }
+.wordmark img { width: 44px; height: 44px; }
+.text-link { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px; text-decoration: none; font-weight: 600; }
+.text-link:hover, .footer a:hover { text-decoration: underline; }
+.hero { padding-top: var(--space-12); }
+.hero-copy { display: grid; grid-template-columns: 1.4fr 1fr; align-items: end; gap: var(--space-12); margin-bottom: var(--space-12); }
+.eyebrow { color: var(--accent); font-size: var(--small); font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: var(--space-4); }
+h1 { font-size: var(--display); line-height: 1.05; font-weight: 650; letter-spacing: -0.055em; }
+h1 span { color: var(--accent); }
+.hero-description > p:first-child { font-size: var(--lead); color: var(--muted); max-width: 38ch; }
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); align-items: center; margin-block: var(--space-6) var(--space-4); }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-3); padding: var(--space-3) var(--space-6); min-height: 48px; border-radius: var(--radius); font-size: var(--body); font-weight: 600; text-decoration: none; transition: background-color var(--transition); }
+.button-primary { background: var(--accent); color: var(--paper); }
+.button-primary:hover { background: var(--accent-hover); }
+.button-primary:active { background: var(--ink); }
+.compatibility { color: var(--muted); font-size: var(--small); }
+.video-frame { overflow: hidden; background: var(--paper); border-radius: var(--media-radius); box-shadow: var(--video-shadow); }
+video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: var(--ink); }
+.video-frame figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2) var(--space-6); padding: var(--space-4) var(--space-6); color: var(--muted); font-size: var(--small); }
+.section { margin-top: var(--space-24); scroll-margin-top: var(--space-8); }
+.section-heading { max-width: 760px; margin-bottom: var(--space-8); }
+h2 { font-size: var(--heading); font-weight: 650; line-height: 1.15; letter-spacing: -0.045em; }
+.section-heading > p:last-child { margin-top: var(--space-4); color: var(--muted); font-size: var(--lead); max-width: 58ch; }
+.terminal { border-radius: var(--media-radius); background: var(--ink); color: var(--terminal-ink); overflow: hidden; }
+.terminal-header { display: flex; justify-content: space-between; align-items: center; padding: var(--space-4) var(--space-6); border-bottom: 1px solid rgb(248 246 255 / 14%); font-size: var(--small); color: var(--terminal-muted); }
+.copy-button { min-height: 44px; padding: var(--space-2) var(--space-4); border: 0; border-radius: var(--radius); background: rgb(248 246 255 / 8%); color: var(--terminal-ink); font-size: var(--small); transition: background-color var(--transition); }
+.copy-button:hover { background: rgb(248 246 255 / 14%); }
+.copy-button:focus-visible { outline-color: var(--lavender); }
+pre { margin: 0; padding: var(--space-8) var(--space-6); white-space: pre-wrap; overflow-wrap: anywhere; font: var(--body)/1.8 ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.install-note, .demo-note { color: var(--muted); font-size: var(--small); margin-top: var(--space-4); }
+.screenshot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-12) var(--space-8); }
+.screenshot-image { display: flex; justify-content: center; align-items: center; min-height: 440px; padding: var(--space-8); background: var(--soft); border-radius: var(--media-radius); }
+.screenshot-image img { width: auto; max-width: 100%; max-height: 376px; border-radius: var(--radius); box-shadow: var(--shadow); }
+.screenshot figcaption { padding-top: var(--space-6); }
+h3 { font-size: var(--lead); letter-spacing: -0.02em; font-weight: 650; }
+.screenshot figcaption p { margin-top: var(--space-2); color: var(--muted); max-width: 44ch; }
+.demo-note { margin-top: var(--space-8); }
+.footer { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); margin-top: var(--space-24); padding-block: var(--space-8); border-top: 1px solid var(--line); font-size: var(--small); color: var(--muted); }
+.footer a { display: inline-flex; align-items: center; min-height: 44px; }
+.skip-link { position: fixed; top: var(--space-4); left: var(--space-4); padding: var(--space-3) var(--space-4); background: var(--paper); border-radius: var(--radius); transform: translateY(-200%); z-index: 1; }
+.skip-link:focus { transform: translateY(0); }
+[hidden] { display: none !important; }
+@media (max-width: 1023px) {
+  .shell { width: calc(100% - var(--space-12)); }
+  .header { padding-block: var(--space-6); }
+  .hero { padding-top: var(--space-8); }
+  .hero-copy { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); margin-bottom: var(--space-8); }
+  .hero-description > p:first-child { max-width: 48ch; font-size: 18px; }
+  .section { margin-top: var(--space-16); }
+  .section-heading > p:last-child { font-size: 18px; }
+  .screenshot-image { min-height: 360px; padding: var(--space-6); }
+  .screenshot-image img { max-height: 312px; }
+  .footer { margin-top: var(--space-16); }
+}
+@media (max-width: 639px) {
+  .screenshot-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-10); }
+  .video-frame figcaption { padding-inline: var(--space-4); }
+  pre { font-size: var(--small); padding: var(--space-6); }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+  </style>
+  <script src="install.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="header shell">
+    <a class="wordmark" href="./" aria-label="GHOrchestrator home">
+      <img src="assets/app-icon.png" width="44" height="44" alt="">
+      <span>GHOrchestrator</span>
+    </a>
+    <a class="text-link" href="https://github.com/ipavlidakis/gh-orchestrator">GitHub <span aria-hidden="true">↗</span></a>
+  </header>
+  <main id="main" class="shell">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <div>
+          <p class="eyebrow">GitHub, in your menu bar</p>
+          <h1 id="hero-title">Less tab chaos.<br><span>More room to ship.</span></h1>
+        </div>
+        <div class="hero-description">
+          <p>Keep pull requests, reviews and Actions within reach. A native Mac app for seeing what needs you, without breaking your flow.</p>
+          <div class="actions">
+            <a class="button button-primary" href="#install">Install with Homebrew <span aria-hidden="true">↓</span></a>
+            <a class="text-link" href="https://github.com/ipavlidakis/gh-orchestrator/releases/latest">Download for Mac <span aria-hidden="true">↗</span></a>
+          </div>
+          <p class="compatibility">macOS 15+ · Apple Silicon &amp; Intel</p>
+        </div>
+      </div>
+      <figure class="video-frame">
+        <video controls playsinline preload="none" poster="assets/intro-poster.webp" width="1920" height="1080" aria-label="GHOrchestrator introduction: pull requests, checks, review comments and Actions insights">
+          <source src="assets/intro.mp4" type="video/mp4">
+          <p>Your browser cannot play this video. <a href="assets/intro.mp4">Download the introduction.</a></p>
+        </video>
+        <figcaption><span>A little less switching. A lot more focus.</span><span>24 seconds · Silent demo</span></figcaption>
+      </figure>
+    </section>
+
+    <section id="install" class="install section" aria-labelledby="install-title">
+      <div class="section-heading">
+        <p class="eyebrow">Up and running</p>
+        <h2 id="install-title">Two commands. Then back to work.</h2>
+        <p>Install with Homebrew, open GHOrchestrator, sign in with GitHub and add the repositories you care about.</p>
+      </div>
+      <div class="terminal">
+        <div class="terminal-header"><span>Homebrew</span><button class="copy-button" type="button" hidden>Copy commands</button></div>
+        <pre><code id="install-command">brew tap ipavlidakis/gh-orchestrator https://github.com/ipavlidakis/gh-orchestrator.git
+brew install --cask ipavlidakis/gh-orchestrator/gh-orchestrator</code></pre>
+      </div>
+      <p class="install-note" id="copy-status" role="status">Requires <a href="https://brew.sh/">Homebrew</a> and macOS 15 or later.</p>
+    </section>
+
+    <section id="screenshots" class="section screenshots" aria-labelledby="screenshots-title">
+      <div class="section-heading">
+        <p class="eyebrow">One clear view</p>
+        <h2 id="screenshots-title">Know what needs you.</h2>
+        <p>Your PRs, their checks, the conversation and the bigger picture. One click from the menu bar.</p>
+      </div>
+      <div class="screenshot-grid">
+        <figure class="screenshot">
+          <a class="screenshot-image" href="assets/dashboard-overview.webp" aria-label="Open full-size pull request dashboard screenshot">
+            <img src="assets/dashboard-overview.webp" width="880" height="1140" loading="lazy" decoding="async" alt="Pull requests in orbit-labs/nova-app with pending, failing and passing checks.">
+          </a>
+          <figcaption><h3>Pull requests, at a glance.</h3><p>See your PRs or the whole team's. Find the next thing that needs your attention.</p></figcaption>
+        </figure>
+        <figure class="screenshot">
+          <a class="screenshot-image" href="assets/dashboard-pr-details.webp" aria-label="Open full-size checks and workflows screenshot">
+            <img src="assets/dashboard-pr-details.webp" width="880" height="950" loading="lazy" decoding="async" alt="Expanded App Build, CodeQL and Smoke Checks workflows showing job status and duration.">
+          </a>
+          <figcaption><h3>Checks, without the chase.</h3><p>Inspect workflows and jobs inline. Retry failed jobs when GitHub allows it.</p></figcaption>
+        </figure>
+        <figure class="screenshot">
+          <a class="screenshot-image" href="assets/dashboard-comments.webp" aria-label="Open full-size unresolved review comments screenshot">
+            <img src="assets/dashboard-comments.webp" width="880" height="740" loading="lazy" decoding="async" alt="An unresolved review comment from sam asking about offline edits in FavoritesStore.swift.">
+          </a>
+          <figcaption><h3>Keep reviews moving.</h3><p>Find unresolved comments and jump straight to the conversation on GitHub.</p></figcaption>
+        </figure>
+        <figure class="screenshot">
+          <a class="screenshot-image" href="assets/settings-insights.webp" aria-label="Open full-size Actions insights screenshot">
+            <img src="assets/settings-insights.webp" width="1248" height="2200" loading="lazy" decoding="async" alt="Actions insights showing run success rates, failures, average duration and trends.">
+          </a>
+          <figcaption><h3>See the bigger picture.</h3><p>Explore Actions success rates and durations by repository, workflow and job.</p></figcaption>
+        </figure>
+      </div>
+      <p class="demo-note">Real app views, fictional repositories and pull requests. Settings shown with the flat appearance.</p>
+    </section>
+  </main>
+  <footer class="footer shell">
+    <p>Made by <a href="https://ipavlidakis.dev">Ilias Pavlidakis <span aria-hidden="true">↗</span></a></p>
+    <a class="text-link" href="https://github.com/ipavlidakis/gh-orchestrator">View on GitHub <span aria-hidden="true">↗</span></a>
+  </footer>
+</body>
+</html>

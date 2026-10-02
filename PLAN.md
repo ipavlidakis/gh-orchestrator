@@ -1375,6 +1375,44 @@
 - notes:
   - User requested automation of the manual Homebrew release step; existing authorization to commit/push `main` persists.
 
+### T61: GHOrchestrator Introduction Video
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T60`
+- goal: create a short, polished FFrames introduction video featuring the actual app design with fictional data.
+- scope:
+  - silent landscape 16:9 video, approximately 20–25 seconds, focused on motion and typography.
+  - no Homebrew command; fictional repository names, PR titles, accounts, and review comments.
+  - reuse native view rendering for demo assets; keep the Rust/FFrames video project separate from app dependencies.
+  - render and visually inspect the final MP4 and scene frames, and leave editable video source locally.
+- verification:
+  - Native `DesignParityRenderingTests`: 2 passed; four app captures use fictional demo data.
+  - FFrames 1.1.0 Skia Metal rendered 720 frames; inspection reports no findings. Six reviewed snapshot comparisons and the all-frame test passed.
+  - Reviewed full-size frames, the complete scene strip, transition frames, and a frame decoded from the final MP4.
+  - FFprobe confirms H.264, 1920×1080, 30 fps, exactly 24 seconds / 720 frames, one video stream and no audio stream. Full FFmpeg decode completed without errors.
+- notes:
+  - Video source and exports are local deliverables; no upload or new app release was requested.
+  - MP4: `marketing/intro/gh-orchestrator-intro.mp4`; editable source and repeatable export instructions: `marketing/intro/README.md`.
+
+### T62: Product Landing Page on GitHub Pages
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T61`
+- goal: publish a focused product landing page with the intro video, Homebrew installation, fictional-data screenshots and a short description.
+- scope:
+  - static HTML/CSS with a small clipboard enhancement; no frontend framework or app dependency changes.
+  - responsive layout and accessible native video controls; link to the repository and https://ipavlidakis.dev.
+  - put all page files in `website/` with a GitHub Pages Actions workflow; document local preview and future updates.
+- verification:
+  - 2026-10-02: real Chrome/OmOWright captures at 375, 768 and 1280 px show no horizontal overflow; all media load. Tablet hero spacing was corrected and the complete page recaptured.
+  - Installation commands match README and the public tap; clipboard success and denied-access selection fallback passed. Install anchor navigation and the creator link passed.
+  - Native video playback passed: 24 seconds, 1920×1080, user-controlled playback without autoplay. The website MP4 matches the approved T61 export byte-for-byte.
+  - Real Chrome controlled by Playwright with the Lighthouse Node API: three mobile and three desktop runs each scored 100 in performance, accessibility, best practices and SEO. Poster sizing/preloading and embedded CSS removed the initial mobile loading bottleneck.
+  - JavaScript syntax and whitespace checks passed. Main-session source/design/security review found no blockers. Browser evidence: `/tmp/gho-landing-qa/`; publishing setup: `website/README.md`.
+- notes:
+  - User requested the creator website link in the footer. Video and screenshots use fictional app data. User will configure the Pages publishing source on GitHub.
+  - At handoff, GitHub Pages was configured for branch `main` / root. Select GitHub Actions instead, then run `Deploy product website` to publish `website/`; automatic deployments follow subsequent website pushes. Hosted-page verification awaits that user configuration.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1405,6 +1443,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-02: T62 adds a static product site in `website/`, with deployment from `main` through GitHub Pages Actions after the user enables that source. The web presentation extends the existing indigo app identity, uses the T61 silent intro and fictional native captures, and includes Homebrew installation plus a creator website link.
 - 2026-10-02: T60 supersedes T59's manual cask maintenance: a GitHub `release.published` workflow verifies the final DMG against its checksum asset and commits the cask update to the default branch. Drafts, prereleases, and older releases cannot advance or roll back the cask. Release uploads create a draft first and publish after both assets upload when a public release was requested.
 - 2026-10-02: Homebrew distribution uses `Casks/gh-orchestrator.rb` in this repository, with an explicit Git URL in `brew tap`. The cask installs the existing signed, notarized universal DMG and pins its version and SHA-256; release maintainers update both after publishing each stable release.
 - 2026-10-01: the dashboard and General Settings expose persisted PR ordering: title A-Z (default), creation newest first, or creation oldest first. T25 supersedes the fixed-title-only decision.

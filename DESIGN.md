@@ -122,3 +122,16 @@ swiftc script/generate_icon_assets.swift -o /tmp/genicon && /tmp/genicon
 - Do not hardcode colors, add third-party packages, or call GitHub from a view.
 - Do not make a status readable by color alone.
 - Do not animate popover resizing or add per-frame work to list rows.
+
+## Product landing page
+The static `website/` presentation extends this product identity for the web. Its content is deliberately limited to the product description, T61 introduction video, Homebrew installation, four native screenshots, GitHub and the creator's website. The native-app rules above continue to govern app UI.
+
+- Audience: Mac developers checking PRs and Actions; the primary task is understanding the app and copying its installation commands.
+- Direction: warm white document, dark indigo display type, lavender surfaces and the real app icon. The large video is the focal object; screenshots prove the product rather than decorate it. The video itself supplies the motion.
+- Colors: page `#FBFAFF`, paper `#FFFFFF`, ink `#201A33`, muted `#62596F`, accent `#3B2F88`, hover `#2B2168`, soft `#F0EDF8`, line `#DFDAEA`, terminal `#201A33`, terminal ink `#F8F6FF`, terminal muted `#C4BBD9`, lavender `#BDA8FF`. Shadows use ink at 8% and 14% opacity.
+- Typography: native system sans for display/body, system monospace for commands. Display fluid 44–80 px, section heading 32–48 px, body 18–20 px, small/body details 14–16 px. Display tracking -0.055em; body line-height 1.6.
+- Layout: document owns scrolling; maximum content width 1120 px; page gutters 24 px mobile / 40 px desktop. Spacing on a 4 px grid: 4, 8, 12, 16, 24, 32, 40, 48, 64, 80, 96. Sections use 80–96 px desktop and 48–64 px mobile separation.
+- Reusable primitives: pill links and copy button (default, hover, focus, pressed, success/failure text); eyebrow label; section heading; rounded media frame; screenshot figure with caption. Buttons have 44 px minimum targets, radius 12 px; media frames radius 24 px, inset screenshots radius 12 px. Neutral hairlines and soft shadows provide separation.
+- Responsive behavior: two-column intro becomes one column below 1024 px; screenshot grid becomes one column below 640 px; commands wrap without truncating. Media retain explicit dimensions, video aspect ratio 16:9. Screenshots show full native views and can be opened directly for detail.
+- Accessibility: semantic landmarks/headings, visible focus, descriptive image alternatives, native video controls with a text summary, no autoplay, no color-only status. Commands remain selectable when clipboard access is unavailable; copy results are announced in a polite live region. No decorative animation; hover color transitions are 160 ms and disabled for reduced motion.
+- Accepted debt: none. Static HTML intentionally has no framework, analytics, external fonts or tracking.
