@@ -1336,7 +1336,7 @@
   - The script's local Gatekeeper check returned `Insufficient Context` and continued, as in earlier releases.
 
 ### T59: Homebrew Cask Distribution
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T58`
 - goal: install the existing signed, notarized release through Homebrew using this repository as the tap.
@@ -1351,9 +1351,12 @@
   - 2026-10-02: OCR delegation preview/rules and host review completed against the working tree based on `7b8626fd87b31bf5658c10f242201dd3390851ff`: 1/1 selected file reviewed (`Casks/gh-orchestrator.rb`), 100% selected-file coverage, no findings. OCR excluded the three Markdown files as `unsupported_ext`; all three documentation diffs were manually reviewed.
   - 2026-10-02: final screenshot/documentation host review found no issues. OCR selected the cask (1/1 reviewed), excluded four Markdown files (`unsupported_ext`), the rendering helper (`default_path`), and five images (`binary`). All excluded diffs were manually reviewed, including visual inspection of all five renders. The render helper uses current views with demo data and the supported flat Settings appearance, disclosed in the README.
   - 2026-10-02: all 99 app tests passed on macOS arm64 with version 0.5.2/build 49, including both rendering tests; zero errors or failures. The existing offscreen-render SceneStorage diagnostic remains. `git diff --check` passed.
+  - 2026-10-02: published stable release `0.5.2`/build `49` from `562759575137d324f87d5ec592e726ed392612c5`. Universal Release archive succeeded; Apple notarization `59e84963-192a-4447-bd61-fbfc6a0bbfff` was accepted, and DMG stapling/validation passed. Existing archive warnings concern skipped App Intents metadata and missing app category. Local DMG assessment returned `Insufficient Context`; both the archived app and the app installed from the public DMG passed Gatekeeper as `Notarized Developer ID`.
+  - 2026-10-02: pushed the final 0.5.2 cask in `82e91126892f2abb27a5db5b2924a21febeb54cc`. A clean GitHub tap checkout passed cask style, online audit, fetch, and livecheck (`0.5.2 ==> 0.5.2`). GitHub's latest stable release, uploaded DMG digest, and cask agree on SHA-256 `f7888604e435d2befad76dc233fe0b9c10a54bb280e91786a26f76e351bdef3c`.
+  - 2026-10-02: installed 0.5.2/build 49 through the public tap into a temporary Applications directory; verified minimum macOS 15, Intel/Apple Silicon architectures, strict signature validity, and Gatekeeper acceptance. Test uninstall succeeded with autoremove/cleanup disabled; the original installed 0.5.1 app was preserved, temporary tap removed, and Homebrew developer mode restored to off.
 - notes:
   - User chose to keep the tap in this repository rather than create a dedicated tap.
-  - 2026-10-02: user authorized commit/push to `main`, a new Homebrew release, README updates, and screenshots of the current design. Finish documentation and screenshots before the initial publishing commit; then release 0.5.2/build 49 and update the cask to its final DMG checksum.
+  - 2026-10-02: user-authorized commit/push to `main`, README and screenshot refresh, stable 0.5.2/build 49 release, and public Homebrew verification are complete. Installation: `brew tap ipavlidakis/gh-orchestrator https://github.com/ipavlidakis/gh-orchestrator.git`, then `brew install --cask ipavlidakis/gh-orchestrator/gh-orchestrator`. For future stable releases, follow `RELEASING.md` to update the cask version/checksum.
   - During test uninstall, Homebrew automatically removed six unrelated formulae. All six were restored to their original versions, and the three dependencies upgraded during restoration were restored to their previous versions. Gradle 9.7.1 runs with JDK 25.0.4.1. Future isolated Homebrew verification should set `HOMEBREW_NO_AUTO_UPDATE=1`, `HOMEBREW_NO_AUTOREMOVE=1`, and `HOMEBREW_NO_INSTALL_CLEANUP=1` to avoid changing unrelated tools.
 
 ## Suggested Parallel Pickup Order
