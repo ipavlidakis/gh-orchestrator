@@ -4,6 +4,36 @@ GHOrchestrator is a Tuist-managed macOS 15+ menu-bar app for tracking your open 
 
 It signs in with GitHub OAuth device flow, stores the resulting session in Keychain, fetches pull request and Actions data directly from the GitHub GraphQL and REST APIs, and keeps the SwiftUI app target thin by pushing transport, parsing, mapping, and storage into a local Swift package.
 
+## Install with Homebrew
+
+Requires macOS 15 or later. The release supports Apple Silicon and Intel Macs.
+
+```bash
+brew tap ipavlidakis/gh-orchestrator https://github.com/ipavlidakis/gh-orchestrator.git
+brew install --cask ipavlidakis/gh-orchestrator/gh-orchestrator
+```
+
+Launch GHOrchestrator from Applications, open Settings, add your repositories,
+and sign in with GitHub.
+
+To update through Homebrew:
+
+```bash
+brew update
+brew upgrade --cask --greedy ipavlidakis/gh-orchestrator/gh-orchestrator
+```
+
+`--greedy` includes apps with their own update support. You can also use the
+app's **Check for Updates** action.
+
+To uninstall:
+
+```bash
+brew uninstall --cask ipavlidakis/gh-orchestrator/gh-orchestrator
+```
+
+Uninstalling preserves your settings and GitHub session in Keychain.
+
 ## Features
 
 ### Menu-bar dashboard
@@ -34,6 +64,10 @@ It signs in with GitHub OAuth device flow, stores the resulting session in Keych
 - Start-at-login, optional Dock icon hiding, and GitHub Release-based software update checks/install flow.
 
 ## Screenshots
+
+Rendered from the current app views with demo data and the flat Settings appearance
+used on macOS 15 or when Reduce Transparency is enabled. macOS 26 and later also
+support Liquid Glass in Settings.
 
 <table>
   <tr>
@@ -90,6 +124,7 @@ It signs in with GitHub OAuth device flow, stores the resulting session in Keych
 
 ```text
 App/                            SwiftUI app target
+Casks/                          Homebrew cask for the published macOS release
 Packages/GHOrchestratorCore/    Local Swift package for auth, transport, models, and tests
 Tests/GHOrchestratorTests/      App-target unit tests
 Config/                         Local example config files
@@ -99,7 +134,7 @@ PLAN-menu-bar.md                Feature-specific plan for menu commands
 RELEASING.md                    Signed/notarized DMG release workflow
 ```
 
-## Quick Start
+## Build from Source
 
 1. Install Xcode and Tuist.
 2. Copy `Config/GitHubOAuth.local.example.json` to `Config/GitHubOAuth.local.json`.

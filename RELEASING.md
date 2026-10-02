@@ -83,3 +83,35 @@ Optional flags:
 5. Submits the DMG to Apple notarization, waits for completion, and staples the ticket.
 6. Writes a SHA-256 checksum file.
 7. Optionally creates or updates a GitHub Release and uploads both assets.
+
+## Update the Homebrew cask
+
+This repository also serves as the Homebrew tap. After publishing a stable
+release and uploading its final notarized DMG, update `version` and `sha256` in
+`Casks/gh-orchestrator.rb`. Use the SHA-256 of the uploaded DMG, not the checksum
+text file. Do not point the cask at draft or prerelease assets.
+
+For example, download and verify the published release:
+
+```bash
+gh release download 0.5.1 --repo ipavlidakis/gh-orchestrator \
+  --pattern 'GHOrchestrator-0.5.1.dmg*' --dir /tmp/ghorchestrator-homebrew-0.5.1
+shasum -a 256 /tmp/ghorchestrator-homebrew-0.5.1/GHOrchestrator-0.5.1.dmg
+cat /tmp/ghorchestrator-homebrew-0.5.1/GHOrchestrator-0.5.1.dmg.sha256.txt
+```
+
+Replace the example version and temporary directory for each release. Compare
+the downloaded DMG hash with the checksum asset, then validate the updated cask
+from a tap checkout containing the changes:
+
+```bash
+brew style --cask ipavlidakis/gh-orchestrator/gh-orchestrator
+brew audit --cask --online ipavlidakis/gh-orchestrator/gh-orchestrator
+brew fetch --cask ipavlidakis/gh-orchestrator/gh-orchestrator
+brew livecheck --cask ipavlidakis/gh-orchestrator/gh-orchestrator
+```
+
+Commit and push the cask update to the default branch so `brew update` discovers
+it. Users upgrade with `brew upgrade --cask --greedy
+ipavlidakis/gh-orchestrator/gh-orchestrator`, because the app also supports
+in-app updates. The release script does not commit or push cask changes.

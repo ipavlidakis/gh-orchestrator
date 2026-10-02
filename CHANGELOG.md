@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2 (Build 49) - 2026-10-02
+
+- Added Homebrew installation using the project's own tap.
+- Updated the README with Homebrew instructions and screenshots of the current design.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.5.1...0.5.2
+
 ## 0.5.1 (Build 48) - 2026-10-01
 
 - Load Actions insights much faster: job lookups are batched through GraphQL, run pages load concurrently, and completed runs are cached in memory.

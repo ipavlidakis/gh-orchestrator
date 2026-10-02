@@ -15,15 +15,13 @@ final class DesignParityRenderingTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: storageURL) }
         let store = SettingsStore(storageURL: storageURL)
         let repository = ObservedRepository(owner: "GetStream", name: "stream-video-swift")
-        let other = ObservedRepository(owner: "ipavlidakis", name: "vesputio-fullstack")
-        store.settings.observedRepositories = [repository, other]
+        store.settings.observedRepositories = [repository]
         let updates = SoftwareUpdateModel(store: store, checker: GitHubReleaseUpdateChecker(), installer: DMGSoftwareUpdateInstaller())
 
         let model = MenuBarDashboardModel(settingsStore: store)
         model.authenticationState = .authenticated(username: "ipavlidakis")
         let pulls = fixturePullRequests(repository: repository)
         model.state = .loaded([RepositorySection(repository: repository, pullRequests: pulls)])
-        model.expandedChecksPullRequestIDs = [pulls[0].id]
         model.lastRefreshedAt = Date().addingTimeInterval(-12)
         let log = GitHubRequestLogModel()
         await log.record(GitHubRequestRecord(
@@ -36,23 +34,49 @@ final class DesignParityRenderingTests: XCTestCase {
             model: model, softwareUpdateModel: updates, requestLogModel: log,
             openSettingsAction: {}, openURLAction: { _ in }, onMenuVisibilityChange: { _ in }
         )
-        .frame(width: 440, height: 740, alignment: .topLeading)
-        try await render(popover, size: CGSize(width: 440, height: 740), name: "popover")
+        .frame(width: 440, alignment: .topLeading)
+        try await render(popover, size: CGSize(width: 440, height: 570), name: "dashboard-overview")
+        model.state = .loaded([RepositorySection(repository: repository, pullRequests: [pulls[0]])])
+        model.expandedChecksPullRequestIDs = [pulls[0].id]
+        try await render(popover, size: CGSize(width: 440, height: 475), name: "dashboard-pr-details")
+        model.state = .loaded([RepositorySection(repository: repository, pullRequests: [pulls[1]])])
+        model.expandedCommentPullRequestIDs = [pulls[1].id]
+        try await render(popover, size: CGSize(width: 440, height: 370), name: "dashboard-comments")
 
-        let settingsModel = SettingsModel(store: store, authenticationState: .authenticated(username: "ipavlidakis"))
+        let workflow = ActionsWorkflowItem(id: 2, name: "CodeQL", path: ".github/workflows/codeql.yml", state: "active")
+        store.settings.actionsInsightsSelection = ActionsInsightsSelection(repositoryID: repository.id, workflowID: workflow.id, workflowName: workflow.name, period: .last7Days)
+        let settingsModel = SettingsModel(store: store, authenticationState: .authenticated(username: "ipavlidakis"), notificationAuthorizationStatus: .authorized)
+        settingsModel.setRepositoryNotificationsEnabled(true, repositoryID: repository.id)
+        settingsModel.workflowListStatesByRepositoryID[repository.id] = .loaded([workflow.name])
+        settingsModel.workflowItemsByRepositoryID[repository.id] = [workflow]
+        let jobKey = "\(RepositoryNotificationSettings.normalizedRepositoryID(repository.id))::\(RepositoryNotificationSettings.normalizedWorkflowName(workflow.name))"
+        settingsModel.workflowJobListStatesByKey[jobKey] = .loaded(["Analyze (swift)"])
+        let now = Date()
+        let points = (0..<7).map { day in
+            ActionsInsightsDataPoint(date: now.addingTimeInterval(Double(day - 6) * 86400), successCount: 20 + day % 3, failureCount: 4 - day % 3, averageDurationSeconds: Double(240 + day * 15))
+        }
+        settingsModel.actionsInsightsState = .loaded(ActionsInsightsDashboard(
+            dateInterval: DateInterval(start: points[0].date, end: now),
+            summary: ActionsInsightsSummary(totalCount: 168, successCount: 146, failureCount: 22, averageDurationSeconds: 285),
+            dataPoints: points
+        ))
         let window = SettingsWindowView(
             model: settingsModel, softwareUpdateModel: updates, requestLogModel: log,
             menuVisibilityController: SettingsWindowMenuVisibilityController(mainMenuProvider: { nil }),
             onSettingsWindowVisibilityChange: { _ in }
         )
         try await render(window.environment(\.settingsGlassDisabled, true), size: CGSize(width: 820, height: 620), name: "settings-window")
-        try await renderChrome(window, name: "settings-chrome")
+        try await renderChrome(window.environment(\.settingsGlassDisabled, true), name: "settings-chrome")
         func page<V: View>(_ v: V) -> some View {
-            VStack(alignment: .leading, spacing: 20) { v }.padding(28).frame(width: 624, alignment: .leading)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) { v }.padding(28).frame(width: 624, alignment: .leading)
+            }
+            .environment(\.settingsGlassDisabled, true)
         }
         try await render(page(GitHubSettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 420), name: "pane-github")
         try await render(page(RepositorySettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 420), name: "pane-repositories")
-        try await render(page(NotificationSettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 760), name: "pane-notifications")
+        try await render(page(NotificationSettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 680), name: "settings-notifications")
+        try await render(page(ActionsInsightsSettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 1100), name: "settings-insights")
         try await render(page(GitHubRequestUsagePane(requestLogModel: log)), size: CGSize(width: 624, height: 420), name: "pane-requests")
     }
 
@@ -115,7 +139,12 @@ final class DesignParityRenderingTests: XCTestCase {
         let failing = PullRequestItem(
             repository: repository, number: 1329, title: "[IOS-2091] Fix audio route change on reconnect",
             url: url(1329), isDraft: false, updatedAt: now.addingTimeInterval(-10800),
-            reviewStatus: .changesRequested, unresolvedReviewThreadCount: 0, checkRollupState: .failing
+            reviewStatus: .changesRequested, unresolvedReviewThreadCount: 1,
+            unresolvedReviewComments: [UnresolvedReviewCommentItem(
+                url: url(1329), authorLogin: "octocat",
+                bodyText: "Could we add a regression test for reconnecting after the audio route changes?",
+                filePath: "Sources/Call/AudioSession.swift"
+            )], checkRollupState: .failing
         )
         let ready = PullRequestItem(
             repository: repository, number: 1318, title: "[IOS-2077] Document call quality metrics",
@@ -142,7 +171,7 @@ final class DesignParityRenderingTests: XCTestCase {
     }
 
     private func render<Content: View>(_ content: Content, size: CGSize, name: String) async throws {
-        let hostingView = NSHostingView(rootView: content.background(Color(nsColor: .windowBackgroundColor)))
+        let hostingView = NSHostingView(rootView: content.frame(width: size.width, height: size.height, alignment: .topLeading).background(Color(nsColor: .windowBackgroundColor)))
         let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: .titled, backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: .aqua)
         window.contentView = hostingView

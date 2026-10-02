@@ -1335,6 +1335,27 @@
   - The worktree was made clean by ignoring `.DS_Store` and `.codex/config.toml` instead of passing `--allow-dirty`.
   - The script's local Gatekeeper check returned `Insufficient Context` and continued, as in earlier releases.
 
+### T59: Homebrew Cask Distribution
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `T58`
+- goal: install the existing signed, notarized release through Homebrew using this repository as the tap.
+- scope:
+  - add `Casks/gh-orchestrator.rb` with a pinned release and checksum.
+  - document installation, upgrades, and release maintenance.
+  - refresh the README screenshots from the current app views and publish 0.5.2/build 49.
+- verification:
+  - 2026-10-02: `brew style --cask`, `brew audit --cask --online`, `brew fetch --cask`, and `brew livecheck --cask` passed for `ipavlidakis/gh-orchestrator/gh-orchestrator`. Livecheck agrees with the latest stable release, 0.5.1; Homebrew resolves the minimum OS to macOS >= 15.
+  - 2026-10-02: installed through Homebrew into a temporary Applications directory, verified version 0.5.1, minimum macOS 15.0, Intel/Apple Silicon architectures, strict Developer ID signature validation, and Gatekeeper acceptance (`Notarized Developer ID`). Uninstall removed only the test app; the existing `/Applications/GHOrchestrator.app` was preserved and restored after the baseline launch check.
+  - 2026-10-02: `tuist generate --no-open`, all 97 core package tests, and `./script/build_and_run.sh --verify` passed, with no build warnings or errors. `git diff --check` passed.
+  - 2026-10-02: OCR delegation preview/rules and host review completed against the working tree based on `7b8626fd87b31bf5658c10f242201dd3390851ff`: 1/1 selected file reviewed (`Casks/gh-orchestrator.rb`), 100% selected-file coverage, no findings. OCR excluded the three Markdown files as `unsupported_ext`; all three documentation diffs were manually reviewed.
+  - 2026-10-02: final screenshot/documentation host review found no issues. OCR selected the cask (1/1 reviewed), excluded four Markdown files (`unsupported_ext`), the rendering helper (`default_path`), and five images (`binary`). All excluded diffs were manually reviewed, including visual inspection of all five renders. The render helper uses current views with demo data and the supported flat Settings appearance, disclosed in the README.
+  - 2026-10-02: all 99 app tests passed on macOS arm64 with version 0.5.2/build 49, including both rendering tests; zero errors or failures. The existing offscreen-render SceneStorage diagnostic remains. `git diff --check` passed.
+- notes:
+  - User chose to keep the tap in this repository rather than create a dedicated tap.
+  - 2026-10-02: user authorized commit/push to `main`, a new Homebrew release, README updates, and screenshots of the current design. Finish documentation and screenshots before the initial publishing commit; then release 0.5.2/build 49 and update the cask to its final DMG checksum.
+  - During test uninstall, Homebrew automatically removed six unrelated formulae. All six were restored to their original versions, and the three dependencies upgraded during restoration were restored to their previous versions. Gradle 9.7.1 runs with JDK 25.0.4.1. Future isolated Homebrew verification should set `HOMEBREW_NO_AUTO_UPDATE=1`, `HOMEBREW_NO_AUTOREMOVE=1`, and `HOMEBREW_NO_INSTALL_CLEANUP=1` to avoid changing unrelated tools.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1365,6 +1386,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-02: Homebrew distribution uses `Casks/gh-orchestrator.rb` in this repository, with an explicit Git URL in `brew tap`. The cask installs the existing signed, notarized universal DMG and pins its version and SHA-256; release maintainers update both after publishing each stable release.
 - 2026-10-01: the dashboard and General Settings expose persisted PR ordering: title A-Z (default), creation newest first, or creation oldest first. T25 supersedes the fixed-title-only decision.
 - 2026-10-01: Debug builds use stable Apple Development signing with the existing personal team UBW6JB7T2F certificate, preserving the Keychain designated requirement across rebuilds. Dashboard chrome and controls follow native macOS defaults; see `PLAN-menu-bar.md:T22` and `T23`.
 - 2026-10-01: PR rows use stable natural title A-Z ordering rather than update time; repository sections retain latest-activity ordering. Implementation is tracked in `PLAN-menu-bar.md:T21`.
