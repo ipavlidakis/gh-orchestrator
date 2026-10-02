@@ -1360,7 +1360,7 @@
   - During test uninstall, Homebrew automatically removed six unrelated formulae. All six were restored to their original versions, and the three dependencies upgraded during restoration were restored to their previous versions. Gradle 9.7.1 runs with JDK 25.0.4.1. Future isolated Homebrew verification should set `HOMEBREW_NO_AUTO_UPDATE=1`, `HOMEBREW_NO_AUTOREMOVE=1`, and `HOMEBREW_NO_INSTALL_CLEANUP=1` to avoid changing unrelated tools.
 
 ### T60: Automatic Homebrew Release Updates
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T59`
 - goal: publishing a stable GitHub release automatically verifies its DMG checksum and commits the cask version/checksum to the default branch.
@@ -1371,7 +1371,7 @@
 - verification:
   - 2026-10-02: focused stdlib tests passed: two test groups, 16 scenarios covering verified updates, idempotence, drafts/prereleases, older and superseded releases, malformed tags/casks, bad/empty checksums, missing assets, upload failure, and publication failure. The shell entry-point regression failed on the previous implementation (three public-release scenarios) because it published before assets were uploaded; all scenarios pass after the fix.
   - 2026-10-02: live updater verified the actual 0.5.2 DMG/checksum without changing the already-current cask. Bash syntax, workflow YAML parsing, and whitespace checks passed. OCR delegation preview/rules and host review covered all three selected files (release script, workflow, updater), with no unresolved findings; both Markdown diffs and the excluded test helper were reviewed manually. Existing app source is unchanged; prior app/package/build verification remains applicable.
-  - hosted workflow verification against the current published release is pending push.
+  - 2026-10-02: committed/pushed automation at `b736753352c9814054c71b1924eba7087e6ecad6`. Hosted workflow run `37027611034` succeeded against 0.5.2: both test groups passed on Ubuntu, the real DMG matched SHA-256 `f7888604e435d2befad76dc233fe0b9c10a54bb280e91786a26f76e351bdef3c`, and the commit step correctly made no duplicate commit for the unchanged cask. No new release was created for this verification. Run: https://github.com/ipavlidakis/gh-orchestrator/actions/runs/37027611034
 - notes:
   - User requested automation of the manual Homebrew release step; existing authorization to commit/push `main` persists.
 
