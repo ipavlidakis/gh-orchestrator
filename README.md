@@ -2,7 +2,7 @@
 
 GHOrchestrator is a Tuist-managed macOS 15+ menu-bar app for tracking your open GitHub pull requests in a curated set of repositories.
 
-[Product website](https://ipavlidakis.github.io/gh-orchestrator/) · [Website preview and publishing instructions](website/README.md)
+[Product website](https://ipavlidakis.github.io/gh-orchestrator/) · [Website preview and publishing instructions](docs/README.md)
 
 It signs in with GitHub OAuth device flow, stores the resulting session in Keychain, fetches pull request and Actions data directly from the GitHub GraphQL and REST APIs, and keeps the SwiftUI app target thin by pushing transport, parsing, mapping, and storage into a local Swift package.
 

@@ -1413,6 +1413,20 @@
   - User requested the creator website link in the footer. Video and screenshots use fictional app data. User will configure the Pages publishing source on GitHub.
   - At handoff, GitHub Pages was configured for branch `main` / root. Select GitHub Actions instead, then run `Deploy product website` to publish `website/`; automatic deployments follow subsequent website pushes. Hosted-page verification awaits that user configuration.
 
+### T63: Branch-Based Pages Publishing from Docs
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T62`
+- goal: move the product landing page to `docs/` so GitHub Pages can publish it directly from `main` / `/docs`.
+- scope:
+  - preserve existing `docs/screenshots/` and move the landing page and media into `docs/`.
+  - remove the competing custom Pages workflow and update preview/publishing instructions.
+  - verify moved assets, commit and push to main; the user owns the Pages source selection.
+- verification:
+  - 2026-10-02: `docs/index.html` and `docs/install.js` match the approved landing page byte-for-byte. Existing `docs/screenshots/` files are unchanged. The custom deployment workflow is removed and `docs/.nojekyll` exists.
+  - Real Chrome checks against the `docs/` preview passed at 375, 768 and 1280 px: no horizontal overflow, all media loaded, clipboard success and denied-access fallback passed, and native 24-second 1080p playback passed. JavaScript syntax and whitespace checks passed. T62's Lighthouse results remain applicable to the unchanged page and media.
+  - Publishing instructions now use Deploy from a branch → main → /docs. GitHub's live source was still main/root during the move; the user owns selecting /docs before hosted verification.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1443,6 +1457,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-02: T63 supersedes T62's `website/` Actions deployment. The user chose branch-based Pages publishing from `main` / `/docs`; landing files move into `docs/` alongside preserved README screenshots, and the custom deployment workflow is removed to prevent competing publications.
 - 2026-10-02: T62 adds a static product site in `website/`, with deployment from `main` through GitHub Pages Actions after the user enables that source. The web presentation extends the existing indigo app identity, uses the T61 silent intro and fictional native captures, and includes Homebrew installation plus a creator website link.
 - 2026-10-02: T60 supersedes T59's manual cask maintenance: a GitHub `release.published` workflow verifies the final DMG against its checksum asset and commits the cask update to the default branch. Drafts, prereleases, and older releases cannot advance or roll back the cask. Release uploads create a draft first and publish after both assets upload when a public release was requested.
 - 2026-10-02: Homebrew distribution uses `Casks/gh-orchestrator.rb` in this repository, with an explicit Git URL in `brew tap`. The cask installs the existing signed, notarized universal DMG and pins its version and SHA-256; release maintainers update both after publishing each stable release.

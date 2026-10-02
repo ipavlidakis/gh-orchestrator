@@ -124,7 +124,7 @@ swiftc script/generate_icon_assets.swift -o /tmp/genicon && /tmp/genicon
 - Do not animate popover resizing or add per-frame work to list rows.
 
 ## Product landing page
-The static `website/` presentation extends this product identity for the web. Its content is deliberately limited to the product description, T61 introduction video, Homebrew installation, four native screenshots, GitHub and the creator's website. The native-app rules above continue to govern app UI.
+The static `docs/` presentation extends this product identity for the web. Its content is deliberately limited to the product description, T61 introduction video, Homebrew installation, four native screenshots, GitHub and the creator's website. The native-app rules above continue to govern app UI.
 
 - Audience: Mac developers checking PRs and Actions; the primary task is understanding the app and copying its installation commands.
 - Direction: warm white document, dark indigo display type, lavender surfaces and the real app icon. The large video is the focal object; screenshots prove the product rather than decorate it. The video itself supplies the motion.

@@ -9,16 +9,16 @@ Live URL: https://ipavlidakis.github.io/gh-orchestrator/
 From the repository root:
 
 ```sh
-python3 -m http.server 8080 --directory website
+python3 -m http.server 8080 --directory docs
 ```
 
 Open http://localhost:8080. The page uses relative asset paths so it also works under the GitHub Pages repository prefix.
 
 ## Publish and update
 
-In the repository's **Settings → Pages**, choose **GitHub Actions** as the publishing source. Branch-based Pages publishing only supports the repository root or `/docs`; the included workflow publishes `website/` directly.
+In the repository's **Settings → Pages**, choose **Deploy from a branch**, select **main** and **/docs**, then save. GitHub Pages publishes this directory directly; `.nojekyll` keeps it a plain static site.
 
-`.github/workflows/pages.yml` uploads only `website/` and deploys after changes to that directory reach `main`. After enabling Pages for the first time, run **Deploy product website** from the Actions tab using **Run workflow**. Subsequent website changes deploy automatically.
+Subsequent pushes to `main` publish automatically through GitHub's built-in Pages deployment. No custom workflow or build step is needed.
 
 Edit `index.html` (including its embedded CSS) or `install.js`, preview at desktop and mobile widths, then commit and push to `main`. The Homebrew commands match the tap in this repository. Download links always point to the latest stable GitHub release, so releases require no website version edit.
 
