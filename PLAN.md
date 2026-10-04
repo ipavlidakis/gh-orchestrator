@@ -1457,14 +1457,18 @@
   - Changes are local; no release was published.
 
 ### T66: Release 0.5.3 (Build 50)
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `T65`
 - goal: commit and push the Actions cache fix to main, publish a signed and notarized GitHub release, and verify Homebrew and website distribution.
 - verification:
   - 2026-10-04: OCR delegation reviewed the one selected production file against Swift rules (1/1, 100% coverage), with no blocking findings. Tests excluded by OCR defaults and plan/changelog prose were reviewed manually. The 98 core and 99 app tests passed during T65 validation.
   - 2026-10-04: main matches origin/main before the release commit. Live website download points to GitHub's latest-release URL and has no pinned version, so no website source update is needed.
-  - Pending archive, notarization, publication, and public Homebrew/latest-release checks.
+  - 2026-10-04: fix and changelog committed/pushed to main as `cc498ff2ec161aadf4acbe541c4023216b638c92`; release tag `0.5.3` resolves to that commit. Universal Release archive contains x86_64 and arm64, version 0.5.3/build 50, with Developer ID signing and Hardened Runtime. Strict signature verification passed.
+  - 2026-10-04: Apple accepted notarization submission `d4e8a0bf-a48e-4f46-adb6-8f0ce0cfa405`; DMG stapling and ticket validation passed, and Gatekeeper accepted the app as Notarized Developer ID. The local DMG-path assessment returned Insufficient Context, handled by the existing release script after ticket validation. Archive retains the existing unset-app-category and App Intents metadata warnings.
+  - 2026-10-04: published https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.5.3 as the latest stable release with DMG and checksum assets. GitHub's DMG digest matches the local checksum: `ce8c3a13a82d91de75bb36e70f1cbff4ae87d115ca41f9110586a17652161edf`.
+  - 2026-10-04: Homebrew workflow `37230499549` succeeded and pushed cask update `58f22e1b7f1cbdeb9c4c6c9765c1650ebd56b179`. A fresh public tap reports 0.5.3 with the matching SHA-256; cask style, online audit, and public download/checksum verification passed.
+  - 2026-10-04: https://ipavlidakis.github.io/gh-orchestrator/ returns HTTP 200, and its Download for Mac link resolves to the 0.5.3 release with HTTP 200. No website source change or separate deployment is needed.
 - notes:
   - 2026-10-04: user explicitly authorized committing, pushing main, and publishing the release across GitHub, Homebrew, and the website where needed.
 
