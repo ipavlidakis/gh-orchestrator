@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.3 (Build 50) - 2026-10-04
+
+- Fixed Actions jobs remaining queued after they had completed on GitHub.
+- Workflow summaries now reflect all jobs, and rerunning any job refreshes its cached results.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.5.2...0.5.3
+
 ## 0.5.2 (Build 49) - 2026-10-02
 
 - Added Homebrew installation using the project's own tap.

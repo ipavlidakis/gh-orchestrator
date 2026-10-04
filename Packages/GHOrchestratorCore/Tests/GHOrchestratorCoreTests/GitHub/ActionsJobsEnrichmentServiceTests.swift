@@ -268,6 +268,15 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
                 checkRollupState: .passing,
                 checkRuns: [
                     CheckRunSnapshot(
+                        name: "guard",
+                        status: "COMPLETED",
+                        conclusion: "SUCCESS",
+                        completedAt: Date(timeIntervalSince1970: 1_699_999_900),
+                        appName: "GitHub Actions",
+                        appSlug: "github-actions",
+                        workflowRun: WorkflowRunReferenceSnapshot(id: 321, url: nil, workflowName: "Lint")
+                    ),
+                    CheckRunSnapshot(
                         name: "lint-linux",
                         status: "COMPLETED",
                         conclusion: "SUCCESS",
@@ -292,6 +301,66 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
         XCTAssertEqual(afterRerun, 2)
         XCTAssertEqual(first, second)
         XCTAssertFalse(first.first?.workflowRuns.first?.jobs.isEmpty ?? true)
+    }
+
+    func testEarlyCompletedCheckDoesNotFreezeQueuedOrRunningJobs() async throws {
+        let repository = ObservedRepository(owner: "cli", name: "cli")
+        let snapshot = PullRequestSnapshotItem(
+            repository: repository,
+            number: 106,
+            title: "Guard completes before tests",
+            url: URL(string: "https://github.com/cli/cli/pull/106")!,
+            isDraft: false,
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_300),
+            reviewStatus: .approved,
+            unresolvedReviewThreadCount: 0,
+            unresolvedReviewComments: [],
+            checkRollupState: .pending,
+            checkRuns: [CheckRunSnapshot(
+                name: "Guard",
+                status: "COMPLETED",
+                conclusion: "SUCCESS",
+                completedAt: date("2026-04-14T06:10:05Z"),
+                appName: "GitHub Actions",
+                appSlug: "github-actions",
+                workflowRun: WorkflowRunReferenceSnapshot(id: 321, url: nil, workflowName: "Smoke Checks")
+            )],
+            statusContexts: []
+        )
+        let transport = StubGitHubHTTPTransport(results: ["queued", "in_progress", "completed"].map { status in
+            let conclusion = status == "completed" ? #""failure""# : "null"
+            let payload = """
+            {"jobs":[
+                {"id":1,"name":"Guard","status":"completed","conclusion":"success"},
+                {"id":2,"name":"Tests","status":"\(status)","conclusion":\(conclusion)}
+            ]}
+            """
+            return .success(
+                data: Data(payload.utf8),
+                response: makeHTTPResponse(url: "https://api.github.com/repos/cli/cli/actions/runs/321/jobs", statusCode: 200)
+            )
+        })
+        let service = ActionsJobsEnrichmentService(client: URLSessionGitHubAPIClient(
+            transport: transport,
+            credentialStore: StubGitHubCredentialStore()
+        ))
+        let snapshots = [RepositoryPullRequestSnapshot(repository: repository, pullRequests: [snapshot])]
+
+        let queued = try await service.buildPullRequestItems(from: snapshots)
+        let running = try await service.buildPullRequestItems(from: snapshots)
+        let completed = try await service.buildPullRequestItems(from: snapshots)
+        let cached = try await service.buildPullRequestItems(from: snapshots)
+        let requests = await transport.recordedRequests()
+
+        XCTAssertEqual(queued.first?.workflowRuns.first?.jobs.last?.status, "queued")
+        XCTAssertEqual(running.first?.workflowRuns.first?.jobs.last?.status, "in_progress")
+        XCTAssertEqual(completed.first?.workflowRuns.first?.jobs.last?.status, "completed")
+        XCTAssertEqual(queued.first?.workflowRuns.first?.status, "queued")
+        XCTAssertNil(queued.first?.workflowRuns.first?.conclusion)
+        XCTAssertEqual(running.first?.workflowRuns.first?.status, "in_progress")
+        XCTAssertEqual(completed.first?.workflowRuns.first?.conclusion, "failure")
+        XCTAssertEqual(completed, cached)
+        XCTAssertEqual(requests.count, 3)
     }
 
     func testActionsStepLinkBuilderFallsBackToJobURLWhenStepNumberIsInvalid() {

@@ -1444,6 +1444,30 @@
 - notes:
   - Editable FFrames source, pinned Cargo dependencies, fictional native media and seven snapshot baselines are included under `marketing/intro/`; generated video and temporary previews are ignored there. Pages hosts the final export from `docs/assets/intro.mp4`.
 
+### T65: Refresh Actions Jobs Until The Whole Workflow Completes
+- status: `done`
+- owner: `codex-main`
+- goal: fix completed PR checks remaining queued after an early workflow job completes.
+- verification:
+  - 2026-10-04: reproduced the cache freeze and sibling-rerun invalidation failure on the original implementation; both regressions passed after the fix.
+  - 2026-10-04: all 98 core tests and 99 app tests passed. Tuist generation, `./script/build_and_run.sh --verify` (exit 0), and diff whitespace checks passed. App tests retain the unrelated unused-variable warning in `PopoverPerformanceTests.swift:49`.
+  - 2026-10-04: GitHub GraphQL checks and REST jobs for GetStream/stream-video-swift#1346 agree that all ten Smoke Checks jobs completed, with the E2E job failing. Native automation could not resolve the running menu-bar app, so the live popup remains visually unverified.
+- notes:
+  - Cache only nonempty, completed job lists when every associated check is completed and has a completion timestamp. Compare all sibling check snapshots to invalidate reruns; derive workflow summaries from the returned jobs.
+  - Changes are local; no release was published.
+
+### T66: Release 0.5.3 (Build 50)
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `T65`
+- goal: commit and push the Actions cache fix to main, publish a signed and notarized GitHub release, and verify Homebrew and website distribution.
+- verification:
+  - 2026-10-04: OCR delegation reviewed the one selected production file against Swift rules (1/1, 100% coverage), with no blocking findings. Tests excluded by OCR defaults and plan/changelog prose were reviewed manually. The 98 core and 99 app tests passed during T65 validation.
+  - 2026-10-04: main matches origin/main before the release commit. Live website download points to GitHub's latest-release URL and has no pinned version, so no website source update is needed.
+  - Pending archive, notarization, publication, and public Homebrew/latest-release checks.
+- notes:
+  - 2026-10-04: user explicitly authorized committing, pushing main, and publishing the release across GitHub, Homebrew, and the website where needed.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`

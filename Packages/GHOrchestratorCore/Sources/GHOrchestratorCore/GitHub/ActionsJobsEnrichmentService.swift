@@ -59,13 +59,15 @@ public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
 
         return zip(pullRequests, referencesByPullRequest).map { snapshot, references in
             let workflowRuns = references.map { reference in
-                WorkflowRunItem(
+                let jobs = jobsByRunKey[ActionJobsCache.Key(repository: snapshot.repository, runID: reference.id)] ?? []
+                let state = workflowState(jobs: jobs, reference: reference)
+                return WorkflowRunItem(
                     id: reference.id,
                     name: reference.workflowName ?? reference.checkName,
-                    status: reference.status,
-                    conclusion: reference.conclusion,
+                    status: state.status,
+                    conclusion: state.conclusion,
                     detailsURL: reference.url ?? reference.fallbackDetailsURL,
-                    jobs: jobsByRunKey[ActionJobsCache.Key(repository: snapshot.repository, runID: reference.id)] ?? []
+                    jobs: jobs
                 )
             }
 
@@ -97,22 +99,41 @@ public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
 }
 
 extension ActionsJobsEnrichmentService {
-    /// Completed runs are immutable until re-run, and a re-run changes the check run's
-    /// `completedAt`, so `(run id, completedAt)` safely identifies a cached job list.
+    /// A check run represents one job, not the whole workflow. Cache only terminal
+    /// job lists, and invalidate when any sibling check changes (including reruns).
     private func jobs(for target: JobsFetchTarget) async throws -> [ActionJobItem] {
-        let cacheEntryID = target.isCacheable ? target.reference.completedAt : nil
+        let cacheChecks = target.isCacheable ? target.reference.checkRuns : nil
 
-        if let cacheEntryID, let cached = await jobsCache.jobs(for: target.runKey, completedAt: cacheEntryID) {
+        if let cacheChecks, let cached = await jobsCache.jobs(for: target.runKey, checkRuns: cacheChecks) {
             return cached
         }
 
         let jobs = try await fetchJobs(repository: target.repository, runID: target.reference.id)
 
-        if let cacheEntryID {
-            await jobsCache.store(jobs, for: target.runKey, completedAt: cacheEntryID)
+        if let cacheChecks, !jobs.isEmpty,
+           jobs.allSatisfy({ $0.status.caseInsensitiveCompare("completed") == .orderedSame }) {
+            await jobsCache.store(jobs, for: target.runKey, checkRuns: cacheChecks)
         }
 
         return jobs
+    }
+
+    private func workflowState(
+        jobs: [ActionJobItem],
+        reference: WorkflowRunReference
+    ) -> (status: String, conclusion: String?) {
+        guard !jobs.isEmpty else {
+            return (reference.status, reference.conclusion)
+        }
+        if jobs.contains(where: { $0.status.caseInsensitiveCompare("in_progress") == .orderedSame }) {
+            return ("in_progress", nil)
+        }
+        if let pending = jobs.first(where: { $0.status.caseInsensitiveCompare("completed") != .orderedSame }) {
+            return (pending.status, nil)
+        }
+        let conclusions = jobs.compactMap { $0.conclusion?.lowercased() }
+        let failure = conclusions.first { !["success", "skipped", "neutral"].contains($0) }
+        return ("completed", failure ?? (conclusions.contains("success") ? "success" : conclusions.first))
     }
 
     private func externalChecks(for snapshot: PullRequestSnapshotItem) -> [ExternalCheckItem] {
@@ -148,6 +169,7 @@ extension ActionsJobsEnrichmentService {
     ) -> [WorkflowRunReference] {
         var orderedReferences: [WorkflowRunReference] = []
         var seenRunIDs = Set<Int>()
+        let checksByRunID = Dictionary(grouping: checkRuns.filter(isActionsBacked)) { $0.workflowRun?.id }
 
         for checkRun in checkRuns where isActionsBacked(checkRun) {
             guard let workflowRun = checkRun.workflowRun else {
@@ -166,7 +188,7 @@ extension ActionsJobsEnrichmentService {
                     checkName: checkRun.name,
                     status: checkRun.status,
                     conclusion: checkRun.conclusion,
-                    completedAt: checkRun.completedAt,
+                    checkRuns: checksByRunID[workflowRun.id] ?? [],
                     fallbackDetailsURL: checkRun.detailsURL
                 )
             )
@@ -243,7 +265,7 @@ private struct WorkflowRunReference: Equatable, Sendable {
     let checkName: String
     let status: String
     let conclusion: String?
-    let completedAt: Date?
+    let checkRuns: [CheckRunSnapshot]
     let fallbackDetailsURL: URL?
 }
 
@@ -256,7 +278,9 @@ private struct JobsFetchTarget: Sendable {
     }
 
     var isCacheable: Bool {
-        reference.status.caseInsensitiveCompare("completed") == .orderedSame && reference.completedAt != nil
+        !reference.checkRuns.isEmpty && reference.checkRuns.allSatisfy {
+            $0.status.caseInsensitiveCompare("completed") == .orderedSame && $0.completedAt != nil
+        }
     }
 }
 
@@ -272,26 +296,26 @@ private actor ActionJobsCache {
     }
 
     private struct Entry {
-        let completedAt: Date
+        let checkRuns: [CheckRunSnapshot]
         let jobs: [ActionJobItem]
     }
 
     private let maximumEntryCount = 500
     private var entries: [Key: Entry] = [:]
 
-    func jobs(for key: Key, completedAt: Date) -> [ActionJobItem]? {
-        guard let entry = entries[key], entry.completedAt == completedAt else {
+    func jobs(for key: Key, checkRuns: [CheckRunSnapshot]) -> [ActionJobItem]? {
+        guard let entry = entries[key], entry.checkRuns == checkRuns else {
             return nil
         }
 
         return entry.jobs
     }
 
-    func store(_ jobs: [ActionJobItem], for key: Key, completedAt: Date) {
+    func store(_ jobs: [ActionJobItem], for key: Key, checkRuns: [CheckRunSnapshot]) {
         if entries.count >= maximumEntryCount, entries[key] == nil {
             entries.removeAll(keepingCapacity: true)
         }
 
-        entries[key] = Entry(completedAt: completedAt, jobs: jobs)
+        entries[key] = Entry(checkRuns: checkRuns, jobs: jobs)
     }
 }
