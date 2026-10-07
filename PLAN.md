@@ -1489,6 +1489,19 @@
 - notes:
   - The user explicitly authorized pushing everything to main and making a new Homebrew release. Keep release secrets in the ignored local config; use the existing same-repository tap and publication workflow.
 
+### T68: Recover Pages Deployment After Release
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T63`, `T67`
+- goal: diagnose the failed Pages run, recover publishing from main /docs, and verify the deployed site.
+- verification:
+  - 2026-10-07: run `37636686560` failed for `afbd847e16164bd030e312ca85dc0c89b6224cfb`. Its build job remained queued without steps, logs or error annotations; deploy was skipped. Only PLAN.md changed from the preceding successful Pages revision `223911a`.
+  - 2026-10-07: live Pages configuration remains branch publishing from main /docs. The two preceding deployments succeeded; retry the same failed revision before changing website source or publishing configuration.
+  - 2026-10-07: reran `37636686560` on the identical `afbd847e16164bd030e312ca85dc0c89b6224cfb` revision. Attempt 2 completed successfully: build 6 seconds, status reporting 4 seconds, deploy 22 seconds. The Pages API now reports that revision built without an error.
+  - 2026-10-07: the hosted landing page loads in a real browser with the expected GHOrchestrator title, product heading and latest-release download link. No website source or publishing configuration change was needed. The original failure occurred before build execution; GitHub exposes no precise cause, so recovery is verified without claiming a confirmed root cause.
+- notes:
+  - User reported the Pages deployment failure after the 0.5.4 release. Preserve the chosen branch-based publishing setup.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
