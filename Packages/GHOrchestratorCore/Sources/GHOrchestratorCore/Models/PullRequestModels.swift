@@ -128,6 +128,8 @@ public struct UnresolvedReviewCommentItem: Codable, Equatable, Hashable, Identif
     public let authorLogin: String
     public let bodyText: String
     public let filePath: String
+    public let authorAvatarURL: URL?
+    public let createdAt: Date?
 
     public var id: String {
         url.absoluteString
@@ -137,12 +139,16 @@ public struct UnresolvedReviewCommentItem: Codable, Equatable, Hashable, Identif
         url: URL,
         authorLogin: String,
         bodyText: String,
-        filePath: String
+        filePath: String,
+        authorAvatarURL: URL? = nil,
+        createdAt: Date? = nil
     ) {
         self.url = url
         self.authorLogin = authorLogin
         self.bodyText = bodyText
         self.filePath = filePath
+        self.authorAvatarURL = authorAvatarURL
+        self.createdAt = createdAt
     }
 }
 

@@ -95,12 +95,11 @@ struct SettingsWindowView: View {
                 )
             }
         }
-        .background(SettingsWindowChromeConfigurator())
+        .background(SettingsWindowChromeConfigurator(onVisibilityChange: onSettingsWindowVisibilityChange))
         .ignoresSafeArea()
         .windowMinimizeBehavior(.disabled)
         .windowResizeBehavior(.disabled)
         .onAppear {
-            onSettingsWindowVisibilityChange(true)
             menuVisibilityController.setSettingsWindowActive(appearsActive)
         }
         .onChange(of: appearsActive) { _, newValue in
@@ -108,7 +107,6 @@ struct SettingsWindowView: View {
         }
         .onDisappear {
             menuVisibilityController.setSettingsWindowActive(false)
-            onSettingsWindowVisibilityChange(false)
         }
     }
 
@@ -266,19 +264,37 @@ private struct SettingsDetailPage<Content: View>: View {
 
 /// Moves the traffic lights onto the sidebar by letting content run under a transparent title bar.
 private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
+    let onVisibilityChange: @MainActor (Bool) -> Void
+
     func makeNSView(context: Context) -> NSView {
-        ChromeView()
+        let view = ChromeView()
+        view.onVisibilityChange = onVisibilityChange
+        return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? ChromeView)?.onVisibilityChange = onVisibilityChange
+    }
 
     private final class ChromeView: NSView {
+        var onVisibilityChange: @MainActor (Bool) -> Void = { _ in }
         private var observers: [NSObjectProtocol] = []
+        private var visibilityObservation: NSKeyValueObservation?
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            guard let window else { return }
             observers.forEach(NotificationCenter.default.removeObserver)
+            observers = []
+            visibilityObservation = nil
+            guard let window else {
+                onVisibilityChange(false)
+                return
+            }
+            visibilityObservation = window.observe(\.isVisible, options: [.initial, .new]) { [weak self] window, _ in
+                MainActor.assumeIsolated {
+                    self?.onVisibilityChange(window.isVisible)
+                }
+            }
             // SwiftUI reapplies its own title bar settings after the window appears, so reassert ours.
             observers = [
                 NSWindow.didBecomeKeyNotification,
@@ -286,7 +302,9 @@ private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
                 NSWindow.didResizeNotification
             ].map { name in
                 NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.applyChrome() }
+                    MainActor.assumeIsolated {
+                        self?.applyChrome()
+                    }
                 }
             }
             applyChrome()

@@ -38,17 +38,17 @@ actor StubGitHubHTTPTransport: GitHubHTTPTransport {
 
 /// Answers each request from a handler, so tests stay deterministic when requests run concurrently.
 actor RoutingGitHubHTTPTransport: GitHubHTTPTransport {
-    private let handler: @Sendable (URLRequest) -> Data
+    private let handler: @Sendable (URLRequest) throws -> Data
     private var requests: [URLRequest] = []
 
-    init(handler: @escaping @Sendable (URLRequest) -> Data) {
+    init(handler: @escaping @Sendable (URLRequest) throws -> Data) {
         self.handler = handler
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         requests.append(request)
         let url = request.url!.absoluteString
-        return (handler(request), makeHTTPResponse(url: url, statusCode: 200))
+        return (try handler(request), makeHTTPResponse(url: url, statusCode: 200))
     }
 
     func recordedRequests() -> [URLRequest] {

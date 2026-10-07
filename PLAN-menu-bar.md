@@ -305,7 +305,98 @@
   - Menu-bar badge swaps the template image for a pre-tinted one, chosen from the button's appearance when the dashboard changes, so it can lag a light/dark switch until the next refresh.
   - `ghorchestrator-icon.icon` (Icon Composer source, not referenced by the build) now uses an indigo gradient fill and a single `branch-graph.svg` layer; open it in Icon Composer to confirm the Liquid Glass rendering.
 
+### T30: GitHub-Style Review Comments
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T29`
+- goal: show review comments with author avatars and a compact GitHub-style header/body layout.
+- scope:
+  - carry the API-provided author avatar URL and comment creation date through the core mapping.
+  - render circular avatars, neutral bordered comment cards, author/time headers, and file context.
+  - preserve browser navigation and provide an avatar fallback when images are unavailable.
+- verification:
+  - 2026-10-07: `tuist generate --no-open` and `./script/build_and_run.sh --verify` passed. The app build had zero warnings/errors.
+  - 2026-10-07: `swift test --filter "PullRequestSnapshotServiceTests|ActionsJobsEnrichmentServiceTests"` passed all 19 tests, including avatar/date mapping and missing metadata.
+  - 2026-10-07: full Xcode app suite passed all 99 tests. Existing test warnings remain: one unused loop variable and two SceneStorage accesses outside an app Scene.
+  - 2026-10-07: inspected `/tmp/gho-shots/dashboard-comments.png` and `dashboard-comments-dark.png`; confirmed circular avatar loading/fallback, author/time headers, long username/path handling, complete multiline body text, and semantic light/dark surfaces. `git diff --check` passed.
+- notes:
+  - Native UI automation timed out twice, including selection by the built app's absolute path; live pointer interaction is unverified. Native-hosted fixture renders verify the resulting layout and actual avatar image loading.
+
+### T31: Settings Window Dock Visibility Lifecycle
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T14`, `T19`
+- goal: restore the hidden Dock preference when Settings closes, even if SwiftUI retains its view.
+- scope:
+  - reproduce the retained Settings window lifecycle at the native window boundary.
+  - use actual window visibility/closure to drive the existing Dock override.
+  - preserve the visible-Dock preference and previously completed review comment changes.
+- verification:
+  - Saved `hideDockIcon` is true. Homebrew process PID 75067 is `UIElement`; debug process PID 75609 is `Foreground` with no visible app window in the user's screenshot.
+  - The native retained-window regression failed before the fix: closing Settings left the visibility callback true. Observing `NSWindow.isVisible` now passes close, reopen, order-out, and second-close scenarios while retaining the same hosting view.
+  - `tuist generate --no-open` and all 100 app tests passed. Three rendering fixture warnings report SceneStorage outside a SwiftUI scene; no failed tests.
+  - `./script/build_and_run.sh --verify` passed with no build warnings. The script restarts running copies; the Homebrew app was restored afterward. Fresh debug PID 4759 and Homebrew PID 4781 both report `ApplicationType=UIElement`.
+  - Early reruns reused the already-running translocated debug app and its old code. Stopping that exact debug process before testing provided fresh candidate evidence. Live pointer automation remained unavailable; native AppKit window behavior and running-process activation policy were verified directly.
+- follow-on notes:
+  - Run hosted app tests before launching a separate debug instance with the same bundle identifier, so tests do not attach to stale code. Preserve the completed review-comment changes.
+
+### T32: Dashboard Header Focus Appearance
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T29`
+- goal: remove the rectangular purple focus decoration from the dashboard header while retaining native focus and activation.
+- scope:
+  - use SwiftUI's focus-effect suppression for header controls.
+  - suppress the header focus decoration through the native SwiftUI modifier.
+  - preserve native focus traversal, activation, and accessibility labels.
+- verification:
+  - All 100 app tests passed, including the existing Sort accessibility-label assertion. Three existing SceneStorage rendering fixture warnings remain.
+  - Inspected native key-window light/dark fixtures at `/tmp/gho-shots/dashboard-header-focus.png` and `dashboard-header-focus-dark.png`; the unwanted border is absent and selected-scope styling remains intact.
+  - `./script/build_and_run.sh --verify` (including Tuist generation) passed with no build warnings. Relaunched the debug app and restored the installed Homebrew copy after the script restarted running instances.
+  - Native pointer-driven interaction remains unverified. Native focus is preserved by changing only `focusEffectDisabled()` on the existing header; no focus bindings, action routes, or accessibility labels changed.
+- follow-on notes:
+  - Isolated `DashboardRenderingTests` returns an empty accessibility tree and fails its Sort assertion both with the production fix and with all current-task production changes removed. The full suite passes; investigate fixture accessibility initialization if running this test alone.
+
+### T33: Match Header Logo and Scope Height
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T29`
+- goal: make the square header logo match the segmented control's outer height.
+- scope:
+  - share a 28 pt height between the existing logo and scope control.
+  - preserve header alignment and the completed focus-effect change.
+- verification:
+  - Fresh native light/dark header renders were visually inspected and measured: both logo and scope track are 56 px high at 2x (28 pt). Their top/bottom edges align, and the logo remains square.
+  - All 100 app tests passed after removing temporary host diagnostics. The final renders still measure 56/56 px. Three existing SceneStorage fixture warnings remain.
+  - `./script/build_and_run.sh --verify` (including Tuist generation) passed with no build warnings. Relaunched the final debug build and restored the installed Homebrew copy.
+- follow-on notes:
+  - The first run rendered the older 26/27 pt layout despite source/build success. Stop both app copies before hosted UI rendering and confirm the actual render geometry. A normal app build can remove the embedded test bundle; use a normal test run to regenerate it before testing again.
+
+### T34: Verify and Correct Focused Header Appearance
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T32`, `T33`
+- goal: remove the reported rectangular focus border and verify the logo matches the control with an unselected scope button focused.
+- scope:
+  - reproduce keyboard focus on My PRs while All PRs is selected.
+  - retain the existing native focus-effect suppression; use a resizable, aspect-fit logo symbol inside the shared square frame.
+  - verify visible logo and control heights in that same state, in both appearances.
+- verification:
+  - Native key-window and composited WindowServer light/dark captures show no border, with My PRs receiving the first native key-view focus and All PRs selected. Logo and track both measure 56 px at 2x (28 pt); symbol uses `resizable()` and `scaledToFit()`.
+  - All 100 app tests passed after removing diagnostic probes, with three existing SceneStorage fixture warnings. The rendering fixture now selects the first native key view, checks key-window/responder presence, and restores its prior activation policy.
+  - `./script/build_and_run.sh --verify`, including Tuist generation, passed without build warnings. Only the updated debug copy is running for review; the Homebrew copy was not restarted.
+- follow-on notes:
+  - User feedback supersedes T32's visual conclusion: its key-window fixtures did not explicitly focus the unselected segment. T33 geometry also needs verification in that focused state.
+  - The user cannot identify which identical menu-bar copy showed the old appearance. Keep only the newest debug app running for review; installed Homebrew 0.5.3 remains unchanged. Do not attribute the screenshot to a particular build without its process identity.
+  - A focusRingMaskBounds assertion did not distinguish suppression enabled/disabled in this fixture and was discarded. No new production native-focus workaround was justified by current captures; live user acceptance remains separate from the focused fixture proof.
+
 ## Decision Log
+- 2026-10-07: keep logo sizing simple: one shared 28 pt square/track height, with a resizable aspect-fit branch symbol inside the logo. Run only the updated debug copy during review to remove ambiguity between it and the unchanged Homebrew installation.
+- 2026-10-07: verify header appearance with a genuinely focused, unselected segment; opening a key window alone is insufficient evidence that the native focus decoration is suppressed. Keep the square logo and scope track at the same visible height.
+- 2026-10-07: the header logo and segmented control share a 28 pt height. The logo remains square; the scope control's outer track owns the shared dimension.
+- 2026-10-07: use native `focusEffectDisabled()` on the dashboard header to remove the unwanted rectangular purple focus decoration requested by the user. Keep the existing native focus and activation behavior; selection remains the accent-filled scope segment.
+- 2026-10-07: the Settings Dock override follows the actual native Settings window, rather than the lifetime of SwiftUI's retained view. Closing Settings restores the persisted Dock preference; losing keyboard focus while Settings remains open keeps its Dock affordance.
+- 2026-10-07: review comment cards follow the supplied GitHub reference with 28 pt circular avatars, a quiet author/time header, a separate monospace file path, and primary body text. Use API-provided avatar URLs with native image loading and an initials fallback; keep the existing click-through to the GitHub comment. Do not add reaction or membership controls without their backing behavior.
 - 2026-10-01: the popover header is a single row (design option B): app mark, My/All PRs control, then quiet icon buttons for repository filter, Sort and More. The title and polling-interval note are removed; the update time moves into the footer, and an active repository filter shows a tinted button plus a "Filtered to … · Clear" strip. Sort stays visible as an icon (accessibility label "Sort"), keeping the earlier visible-sorting requirement.
 - 2026-10-01: the dashboard popover now fits its content: the list shrinks to its natural height and scrolls only at the 620 pt maximum. The SwiftUI view reports its preferred height and the AppKit presenter resizes the popover, so sizing stays explicit and testable. This supersedes the fixed 440x620 size from 2026-05-07 for height only.
 - 2026-10-01: add a saved repository order alongside the pull request order: last modified (newest/oldest first, the previous default), name (A–Z/Z–A) on the repository name, and team (A–Z/Z–A) on the owner. It lives in `AppSettings.repositorySortOrder`, is exposed in General Settings and the popover Sort menu, and re-sorts loaded content without a network refresh.

@@ -21,8 +21,10 @@
                     {
                       "url": "https://github.com/cli/cli/pull/13153#discussion_r1001",
                       "bodyText": "This branch should stay on the main actor.",
+                      "createdAt": "2026-04-14T07:00:00Z",
                       "author": {
-                        "login": "octocat"
+                        "login": "octocat",
+                        "avatarUrl": "https://avatars.githubusercontent.com/u/583231?s=56&v=4"
                       }
                     }
                   ]

@@ -57,11 +57,13 @@ struct PullRequestSearchResponseDTO: Decodable {
     struct ReviewCommentDTO: Decodable {
         let url: URL?
         let bodyText: String?
+        let createdAt: Date?
         let author: AuthorDTO?
     }
 
     struct AuthorDTO: Decodable {
         let login: String?
+        let avatarUrl: URL?
     }
 
     struct StatusCheckRollupDTO: Decodable {

@@ -70,6 +70,16 @@ final class PullRequestSnapshotServiceTests: XCTestCase {
             pullRequest.unresolvedReviewComments.map(\.filePath),
             ["Sources/Feature/CallView.swift", "Sources/Core/Store.swift"]
         )
+        XCTAssertEqual(
+            pullRequest.unresolvedReviewComments.first?.authorAvatarURL?.absoluteString,
+            "https://avatars.githubusercontent.com/u/583231?s=56&v=4"
+        )
+        XCTAssertEqual(
+            pullRequest.unresolvedReviewComments.first?.createdAt,
+            ISO8601DateFormatter().date(from: "2026-04-14T07:00:00Z")
+        )
+        XCTAssertNil(pullRequest.unresolvedReviewComments.last?.authorAvatarURL)
+        XCTAssertNil(pullRequest.unresolvedReviewComments.last?.createdAt)
     }
 
     func testFetchRepositorySnapshotsMapsDraftPullRequestFixture() async throws {
@@ -183,17 +193,17 @@ final class PullRequestSnapshotServiceTests: XCTestCase {
             ObservedRepository(owner: "openai", name: "codex"),
             ObservedRepository(owner: "cli", name: "cli")
         ]
-        let service = makeService(
-            results: [
-                .success(
-                    data: fixtureData(named: "no_prs", subdirectory: "PullRequestSearch"),
-                    response: makeHTTPResponse(url: "https://api.github.com/graphql", statusCode: 200)
-                ),
-                .failure(
-                    GitHubAPIClientError.transportFailed(message: "rate limit exceeded")
-                )
-            ]
-        )
+        let response = fixtureData(named: "no_prs", subdirectory: "PullRequestSearch")
+        let transport = RoutingGitHubHTTPTransport { request in
+            let payload = try JSONDecoder().decode(PullRequestGraphQLPayload.self, from: XCTUnwrap(request.httpBody))
+            if payload.variables.searchQuery.hasPrefix("repo:openai/codex ") {
+                return response
+            }
+            throw GitHubAPIClientError.transportFailed(message: "rate limit exceeded")
+        }
+        let service = GHPullRequestSnapshotService(client: URLSessionGitHubAPIClient(
+            transport: transport, credentialStore: StubGitHubCredentialStore()
+        ))
 
         let snapshots = try await service.fetchRepositorySnapshots(for: repositories)
 
@@ -206,16 +216,15 @@ final class PullRequestSnapshotServiceTests: XCTestCase {
             ObservedRepository(owner: "openai", name: "codex"),
             ObservedRepository(owner: "cli", name: "cli")
         ]
-        let service = makeService(
-            results: [
-                .failure(
-                    GitHubAPIClientError.transportFailed(message: "rate limit exceeded")
-                ),
-                .failure(
-                    GitHubAPIClientError.transportFailed(message: "network unavailable")
-                )
-            ]
-        )
+        let transport = RoutingGitHubHTTPTransport { request in
+            let payload = try JSONDecoder().decode(PullRequestGraphQLPayload.self, from: XCTUnwrap(request.httpBody))
+            let message = payload.variables.searchQuery.hasPrefix("repo:openai/codex ")
+                ? "rate limit exceeded" : "network unavailable"
+            throw GitHubAPIClientError.transportFailed(message: message)
+        }
+        let service = GHPullRequestSnapshotService(client: URLSessionGitHubAPIClient(
+            transport: transport, credentialStore: StubGitHubCredentialStore()
+        ))
 
         do {
             _ = try await service.fetchRepositorySnapshots(for: repositories)

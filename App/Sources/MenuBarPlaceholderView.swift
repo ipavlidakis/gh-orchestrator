@@ -112,7 +112,7 @@ struct MenuBarPlaceholderView: View {
     private var headerActions: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                AppMarkView(size: 26)
+                AppMarkView(size: ScopeSegmentedControl.height)
 
                 if showsDashboardFilters {
                     ScopeSegmentedControl(
@@ -152,6 +152,7 @@ struct MenuBarPlaceholderView: View {
                 .padding(.horizontal, 2)
             }
         }
+        .focusEffectDisabled()
     }
 
     private var focusedRepositoryName: String? {
@@ -1248,30 +1249,88 @@ private struct ExpandedUnresolvedCommentsView: View {
                 Button {
                     onOpenURL(comment.url)
                 } label: {
-                    HStack(alignment: .top, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 6) {
-                                Text(comment.authorLogin)
-                                    .font(.caption.weight(.semibold))
-                                
+                    HStack(alignment: .top, spacing: 8) {
+                        AsyncImage(url: comment.authorAvatarURL) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            Text(String(comment.authorLogin.prefix(1)).uppercased())
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .background(Color.primary.opacity(0.08))
+                        }
+                        .frame(width: 28, height: 28)
+                        .clipShape(Circle())
+                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
+                        .accessibilityHidden(true)
+
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack(alignment: .top, spacing: 8) {
+                                ViewThatFits(in: .horizontal) {
+                                    HStack(spacing: 6) {
+                                        commentAuthor(comment)
+                                        commentTime(comment)
+                                    }
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        commentAuthor(comment)
+                                        commentTime(comment)
+                                    }
+                                }
+                                Spacer(minLength: 0)
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.primary.opacity(0.05))
+
+                            Divider()
+
+                            VStack(alignment: .leading, spacing: 8) {
                                 Text(comment.filePath)
-                                    .font(.caption2)
+                                    .font(.system(size: 11.5, design: .monospaced))
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .help(comment.filePath)
+
+                                Text(comment.bodyText)
+                                    .font(.system(size: 12.5))
+                                    .foregroundStyle(.primary)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
-                            
-                            Text(comment.bodyText)
-                                .font(.caption)
-                                .multilineTextAlignment(.leading)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .lineLimit(4)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                        }
                     }
                 }
-                .buttonStyle(.link)
-                .padding(.leading, 14)
+                .buttonStyle(.plain)
+                .help("Open review comment on GitHub")
+                .accessibilityLabel("Comment by \(comment.authorLogin) in \(comment.filePath): \(comment.bodyText)")
+                .accessibilityHint("Opens this review comment on GitHub")
             }
+        }
+    }
+
+    private func commentAuthor(_ comment: UnresolvedReviewCommentItem) -> some View {
+        Text(comment.authorLogin)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.primary)
+    }
+
+    @ViewBuilder
+    private func commentTime(_ comment: UnresolvedReviewCommentItem) -> some View {
+        if let date = comment.createdAt {
+            Text(date, format: .relative(presentation: .named))
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -1379,7 +1438,10 @@ struct AppMarkView: View {
             .frame(width: size, height: size)
             .overlay {
                 Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: size * 0.52, weight: .bold))
+                    .resizable()
+                    .scaledToFit()
+                    .fontWeight(.bold)
+                    .frame(width: size * 0.52, height: size * 0.52)
                     .foregroundStyle(.white)
             }
             .accessibilityHidden(true)
@@ -1433,6 +1495,8 @@ private struct DashboardFooterBar: View {
 }
 
 private struct ScopeSegmentedControl: View {
+    static let height: CGFloat = 28
+
     let scope: PullRequestScope
     let selectedCount: Int?
     let onSelect: (PullRequestScope) -> Void
@@ -1443,6 +1507,7 @@ private struct ScopeSegmentedControl: View {
             segment("All PRs", value: .all)
         }
         .padding(2)
+        .frame(height: Self.height)
         .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 

@@ -68,6 +68,8 @@ public struct UnresolvedReviewCommentSnapshot: Equatable, Identifiable, Sendable
     public let authorLogin: String
     public let bodyText: String
     public let filePath: String
+    public let authorAvatarURL: URL?
+    public let createdAt: Date?
 
     public var id: String {
         url.absoluteString
@@ -77,12 +79,16 @@ public struct UnresolvedReviewCommentSnapshot: Equatable, Identifiable, Sendable
         url: URL,
         authorLogin: String,
         bodyText: String,
-        filePath: String
+        filePath: String,
+        authorAvatarURL: URL? = nil,
+        createdAt: Date? = nil
     ) {
         self.url = url
         self.authorLogin = authorLogin
         self.bodyText = bodyText
         self.filePath = filePath
+        self.authorAvatarURL = authorAvatarURL
+        self.createdAt = createdAt
     }
 }
 

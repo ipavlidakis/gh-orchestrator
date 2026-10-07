@@ -15,8 +15,15 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
             createdAt: Date(timeIntervalSince1970: 1_600_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_700_000_000),
             reviewStatus: .approved,
-            unresolvedReviewThreadCount: 0,
-            unresolvedReviewComments: [],
+            unresolvedReviewThreadCount: 1,
+            unresolvedReviewComments: [UnresolvedReviewCommentSnapshot(
+                url: URL(string: "https://github.com/cli/cli/pull/100#discussion_r1")!,
+                authorLogin: "octocat",
+                bodyText: "Please keep this on the main actor.",
+                filePath: "Sources/Feature.swift",
+                authorAvatarURL: URL(string: "https://avatars.githubusercontent.com/u/583231?s=56&v=4"),
+                createdAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )],
             checkRollupState: .passing,
             checkRuns: [
                 CheckRunSnapshot(
@@ -55,6 +62,8 @@ final class ActionsJobsEnrichmentServiceTests: XCTestCase {
         XCTAssertEqual(workflowRun.name, "Lint")
         XCTAssertEqual(items.first?.authorLogin, "octocat")
         XCTAssertEqual(items.first?.createdAt, snapshot.createdAt)
+        XCTAssertEqual(items.first?.unresolvedReviewComments.first?.authorAvatarURL, snapshot.unresolvedReviewComments.first?.authorAvatarURL)
+        XCTAssertEqual(items.first?.unresolvedReviewComments.first?.createdAt, snapshot.unresolvedReviewComments.first?.createdAt)
         XCTAssertEqual(job.name, "lint")
         XCTAssertEqual(job.createdAt, date("2026-04-14T06:09:30Z"))
         XCTAssertEqual(job.startedAt, date("2026-04-14T06:10:00Z"))

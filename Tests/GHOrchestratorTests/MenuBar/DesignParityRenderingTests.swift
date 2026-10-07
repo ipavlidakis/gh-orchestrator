@@ -36,12 +36,18 @@ final class DesignParityRenderingTests: XCTestCase {
         )
         .frame(width: 440, alignment: .topLeading)
         try await render(popover, size: CGSize(width: 440, height: 570), name: "dashboard-overview")
+        model.pullRequestScope = .all
+        model.state = .loaded([RepositorySection(repository: repository, pullRequests: pulls)])
+        try await render(popover, size: CGSize(width: 440, height: 570), name: "dashboard-header-focus", focusHeader: true)
+        try await render(popover.environment(\.colorScheme, .dark), size: CGSize(width: 440, height: 570), name: "dashboard-header-focus-dark", appearance: .darkAqua, focusHeader: true)
+        model.pullRequestScope = .mine
         model.state = .loaded([RepositorySection(repository: repository, pullRequests: [pulls[0]])])
         model.expandedChecksPullRequestIDs = [pulls[0].id]
         try await render(popover, size: CGSize(width: 440, height: 475), name: "dashboard-pr-details")
         model.state = .loaded([RepositorySection(repository: repository, pullRequests: [pulls[1]])])
         model.expandedCommentPullRequestIDs = [pulls[1].id]
-        try await render(popover, size: CGSize(width: 440, height: 370), name: "dashboard-comments")
+        try await render(popover, size: CGSize(width: 440, height: 620), name: "dashboard-comments")
+        try await render(popover.environment(\.colorScheme, .dark), size: CGSize(width: 440, height: 620), name: "dashboard-comments-dark", appearance: .darkAqua)
 
         let workflow = ActionsWorkflowItem(id: 2, name: "CodeQL", path: ".github/workflows/codeql.yml", state: "active")
         store.settings.actionsInsightsSelection = ActionsInsightsSelection(repositoryID: repository.id, workflowID: workflow.id, workflowName: workflow.name, period: .last7Days)
@@ -143,11 +149,19 @@ final class DesignParityRenderingTests: XCTestCase {
         let failing = PullRequestItem(
             repository: repository, number: 38, title: "Keep favorites in sync across devices",
             url: url(38), isDraft: false, updatedAt: now.addingTimeInterval(-10800),
-            reviewStatus: .changesRequested, unresolvedReviewThreadCount: 1,
+            reviewStatus: .changesRequested, unresolvedReviewThreadCount: 2,
             unresolvedReviewComments: [UnresolvedReviewCommentItem(
-                url: url(38), authorLogin: "sam",
+                url: url(38), authorLogin: "octocat",
                 bodyText: "Could we cover an offline edit before the next sync?",
-                filePath: "Sources/Sync/FavoritesStore.swift"
+                filePath: "Sources/Sync/FavoritesStore.swift",
+                authorAvatarURL: URL(string: "https://avatars.githubusercontent.com/u/583231?s=56&v=4"),
+                createdAt: now.addingTimeInterval(-3600)
+            ), UnresolvedReviewCommentItem(
+                url: URL(string: "https://github.com/x/y/pull/38#discussion_r2")!,
+                authorLogin: "reviewer-with-a-long-github-username",
+                bodyText: "Please preserve the pending local changes while reconnecting.\n\nAn offline edit should still appear after the next sync, even when the remote version changed in the meantime. This final sentence should remain visible without truncation.",
+                filePath: "Sources/Sync/Offline/Recovery/FavoritesReconnectionCoordinator.swift",
+                createdAt: now.addingTimeInterval(-7200)
             )], checkRollupState: .failing
         )
         let ready = PullRequestItem(
@@ -174,15 +188,32 @@ final class DesignParityRenderingTests: XCTestCase {
             .write(to: outputDirectory.appendingPathComponent("\(name).png"))
     }
 
-    private func render<Content: View>(_ content: Content, size: CGSize, name: String) async throws {
+    private func render<Content: View>(_ content: Content, size: CGSize, name: String, appearance: NSAppearance.Name = .aqua, focusHeader: Bool = false) async throws {
         let hostingView = NSHostingView(rootView: content.frame(width: size.width, height: size.height, alignment: .topLeading).background(Color(nsColor: .windowBackgroundColor)))
         let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: .titled, backing: .buffered, defer: false)
-        window.appearance = NSAppearance(named: .aqua)
+        window.appearance = NSAppearance(named: appearance)
         window.contentView = hostingView
-        window.orderFront(nil)
-        defer { window.orderOut(nil) }
+        let previousActivationPolicy = NSApp.activationPolicy()
+        if focusHeader {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            window.orderFront(nil)
+        }
+        defer {
+            window.orderOut(nil)
+            if focusHeader { NSApp.setActivationPolicy(previousActivationPolicy) }
+        }
         try await Task.sleep(for: .milliseconds(300))
         hostingView.layoutSubtreeIfNeeded()
+        if focusHeader {
+            window.makeFirstResponder(nil)
+            window.selectNextKeyView(nil)
+            try await Task.sleep(for: .milliseconds(100))
+            XCTAssertTrue(window.isKeyWindow)
+            XCTAssertNotNil(window.firstResponder as? NSView)
+        }
         window.display()
         let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
         hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)

@@ -87,7 +87,9 @@ public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
                         url: comment.url,
                         authorLogin: comment.authorLogin,
                         bodyText: comment.bodyText,
-                        filePath: comment.filePath
+                        filePath: comment.filePath,
+                        authorAvatarURL: comment.authorAvatarURL,
+                        createdAt: comment.createdAt
                     )
                 },
                 checkRollupState: snapshot.checkRollupState,

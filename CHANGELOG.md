@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.4 (Build 51) - 2026-10-07
+
+- Show review comments with author avatars, timestamps, bordered cards, and full comment text.
+- Restore the saved Dock visibility preference when the Settings window closes.
+- Suppress the dashboard header's rectangular focus decoration and match the logo to the scope control's height with aspect-fit symbol scaling.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.5.3...0.5.4
+
 ## 0.5.3 (Build 50) - 2026-10-04
 
 - Fixed Actions jobs remaining queued after they had completed on GitHub.

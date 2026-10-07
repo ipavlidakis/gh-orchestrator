@@ -162,8 +162,10 @@ extension GHPullRequestSnapshotService {
                   nodes {
                     url
                     bodyText
+                    createdAt
                     author {
                       login
+                      avatarUrl(size: 56)
                     }
                   }
                 }
@@ -307,7 +309,9 @@ extension GHPullRequestSnapshotService {
                         url: url,
                         authorLogin: authorLogin,
                         bodyText: bodyText,
-                        filePath: filePath
+                        filePath: filePath,
+                        authorAvatarURL: comment.author?.avatarUrl,
+                        createdAt: comment.createdAt
                     )
                 }
             }

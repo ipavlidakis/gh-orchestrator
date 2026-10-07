@@ -1472,6 +1472,20 @@
 - notes:
   - 2026-10-04: user explicitly authorized committing, pushing main, and publishing the release across GitHub, Homebrew, and the website where needed.
 
+### T67: Release 0.5.4 (Build 51)
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `PLAN-menu-bar.md:T30`, `T31`, `T32`, `T33`, `T34`
+- goal: push the completed comment, Dock lifecycle, and header changes to main, publish a signed and notarized stable release, and verify the automatic Homebrew update.
+- verification:
+  - 2026-10-07: main and origin/main agree before the release commit. Latest public release is 0.5.3/build 50.
+  - 2026-10-07: all 100 app tests and Tuist/build/launch verification passed on the final source before release preparation. Three existing SceneStorage fixture warnings remain.
+  - 2026-10-07: OCR delegation reviewed all seven selected production files against Swift rules (7/7, 100% coverage), with no blocking findings. Excluded tests, JSON fixture, design and feature-plan changes, and release prose were reviewed manually.
+  - 2026-10-07: release checks exposed two existing FIFO mock assumptions in concurrent repository tests. Reused the routing transport to associate responses with each repository query, keeping both behavioral assertions. All 11 snapshot service tests and all 98 core tests passed after the fixture repair, without warnings.
+  - Signed artifact, publication, and public Homebrew validation pending.
+- notes:
+  - The user explicitly authorized pushing everything to main and making a new Homebrew release. Keep release secrets in the ignored local config; use the existing same-repository tap and publication workflow.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
