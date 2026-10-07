@@ -10,6 +10,45 @@ import GHOrchestratorCore
 
 @MainActor
 final class AppControllerTests: XCTestCase {
+    func testPRDestinationRoutesToReusableWindowAndRestoresDockOnClose() async throws {
+        let store = configuredSettingsStore(hideDockIcon: true)
+        let dock = RecordingDockIconVisibilityController()
+        let auth = MutableAuthController(state: .authenticated(username: "alex"))
+        var browserURLs: [URL] = []
+        let controller = AppController(settingsStore: store, dataSource: MutableDashboardDataSource(),
+            authController: auth, sleeper: CancellingSleeper(),
+            dockIconVisibilityController: dock, applicationIconController: RecordingApplicationIconController(),
+            startAtLoginController: RecordingStartAtLoginController(), notificationDelivery: AppControllerRecordingNotificationDelivery(),
+            softwareUpdateChecker: StubSoftwareUpdateChecker(), softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false, prDetailService: PRViewerFixtureService(), openURL: { browserURLs.append($0) })
+        let url = URL(string: "https://github.com/orbit/nova/pull/42")!
+        controller.openURL(url)
+        XCTAssertEqual(browserURLs, [url])
+        XCTAssertTrue(controller.prViewerWindows.isEmpty)
+        controller.settingsModel.pullRequestOpenDestination = .inApp
+        controller.openURL(url)
+        let viewer = try XCTUnwrap(controller.prViewerWindows.values.first)
+        defer { viewer.close() }
+        XCTAssertTrue(try XCTUnwrap(viewer.window).isVisible)
+        XCTAssertEqual(dock.appliedValues.last, false)
+        controller.openURL(URL(string: "https://github.com/ORBIT/NOVA/pull/42#discussion_r1")!)
+        XCTAssertEqual(controller.prViewerWindows.count, 1)
+        controller.openInBrowser(url)
+        XCTAssertEqual(browserURLs, [url, url])
+        let job = URL(string: "https://github.com/orbit/nova/actions/runs/1")!
+        controller.openURL(job)
+        XCTAssertEqual(browserURLs.last, job)
+        viewer.close()
+        XCTAssertTrue(controller.prViewerWindows.isEmpty)
+        XCTAssertEqual(dock.appliedValues.last, true)
+        controller.openURL(url)
+        let signedInViewer = try XCTUnwrap(controller.prViewerWindows.values.first)
+        auth.state = .signedOut
+        await waitUntil("PR viewer closes after sign out") { controller.prViewerWindows.isEmpty }
+        XCTAssertFalse(try XCTUnwrap(signedInViewer.window).isVisible)
+        XCTAssertTrue(signedInViewer.model.loading.isEmpty)
+    }
+
     func testAppControllerSeedsAndPropagatesAuthenticationStateIntoSettingsAndDashboardModels() async {
         let authController = MutableAuthController(state: .authenticated(username: "octocat"))
         let dataSource = MutableDashboardDataSource()

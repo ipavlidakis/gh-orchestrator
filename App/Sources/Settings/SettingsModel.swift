@@ -115,6 +115,11 @@ final class SettingsModel {
         set { store.settings.pullRequestSortOrder = newValue }
     }
 
+    var pullRequestOpenDestination: PullRequestOpenDestination {
+        get { store.settings.pullRequestOpenDestination }
+        set { store.settings.pullRequestOpenDestination = newValue }
+    }
+
     var repositorySortOrder: RepositorySortOrder {
         get { store.settings.repositorySortOrder }
         set { store.settings.repositorySortOrder = newValue }

@@ -13,6 +13,8 @@ final class AppController {
     let requestLogModel: GitHubRequestLogModel
     let notificationMonitor: RepositoryNotificationMonitor
     let softwareUpdateModel: SoftwareUpdateModel
+    private(set) var prViewerWindows: [PullRequestAddress: PRViewerWindowController] = [:]
+    private let prDetailService: any PullRequestDetailLoading
     private let dockIconVisibilityController: any DockIconVisibilityControlling
     private let applicationIconController: any ApplicationIconControlling
     private let startAtLoginController: any StartAtLoginControlling
@@ -33,6 +35,7 @@ final class AppController {
         softwareUpdateChecker: (any SoftwareUpdateChecking)? = nil,
         softwareUpdateInstaller: (any SoftwareUpdateInstalling)? = nil,
         startsAutomaticUpdateChecks: Bool = true,
+        prDetailService: (any PullRequestDetailLoading)? = nil,
         openURL: @escaping @MainActor (URL) -> Void = { url in
             NSWorkspace.shared.open(url)
         }
@@ -62,6 +65,7 @@ final class AppController {
             apiClient: apiClient,
             credentialStore: credentialStore
         )
+        self.prDetailService = prDetailService ?? PullRequestDetailService(client: apiClient)
         let resolvedDataSource = dataSource ?? LiveDashboardDataSource(client: apiClient)
         let resolvedSoftwareUpdateChecker = softwareUpdateChecker ?? GitHubReleaseUpdateChecker(
             owner: AppMetadata.releaseRepositoryOwner,
@@ -167,6 +171,28 @@ final class AppController {
     }
 
     func openURL(_ url: URL) {
+        if settingsStore.settings.pullRequestOpenDestination == .inApp,
+           let address = PullRequestAddress(url: url) {
+            let viewer: PRViewerWindowController
+            if let existing = prViewerWindows[address] {
+                viewer = existing
+            } else {
+                viewer = PRViewerWindowController(address: address, service: prDetailService,
+                    openBrowser: { [weak self] url in self?.openInBrowser(url) },
+                    onClose: { [weak self] in
+                        self?.prViewerWindows[address] = nil
+                        self?.applyDockIconPreference()
+                    })
+                prViewerWindows[address] = viewer
+            }
+            applyDockIconPreference()
+            viewer.present(url: url)
+            return
+        }
+        openInBrowser(url)
+    }
+
+    func openInBrowser(_ url: URL) {
         openURLAction(url)
         Task { @MainActor [weak self] in
             self?.applyDockIconPreference()
@@ -183,6 +209,7 @@ final class AppController {
                 }
 
                 let state = self.authController.state
+                for viewer in Array(self.prViewerWindows.values) { viewer.close() }
                 self.settingsModel.authenticationState = state
                 self.dashboardModel.setAuthenticationState(state)
                 self.notificationMonitor.setAuthenticationState(state)
@@ -222,7 +249,7 @@ final class AppController {
     }
 
     private func applyDockIconPreference() {
-        let shouldHideDockIcon = settingsStore.settings.hideDockIcon && !isSettingsWindowVisible
+        let shouldHideDockIcon = settingsStore.settings.hideDockIcon && !isSettingsWindowVisible && prViewerWindows.isEmpty
         dockIconVisibilityController.apply(hideDockIcon: shouldHideDockIcon)
 
         guard !shouldHideDockIcon else {

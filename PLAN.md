@@ -36,6 +36,7 @@
 - Core layer owns auth request building, device-code/token polling, credential storage, GraphQL/REST parsing, PR aggregation, and validation helpers.
 
 ## Active Feature Plans
+- [PLAN-pr-viewer.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-pr-viewer.md): native in-app PR summary and conversation viewer.
 - [PLAN-menu-bar.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-menu-bar.md): settings-window app menu commands and top-level menu pruning.
 - [PLAN-notifications.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-notifications.md): per-repository local notification triggers for PR and workflow events.
 - [PLAN-actions-insights.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-actions-insights.md): Settings dashboard for GitHub Actions workflow success and duration trends.
@@ -1547,6 +1548,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-08: The optional In App PR destination opens a native summary/conversation window; Browser remains the default. PLAN-pr-viewer.md owns the paginated viewer and scrolling-performance validation. Code diffs are deferred.
 - 2026-10-07: PLAN-notifications.md:N09 declares `LSUIElement` for the menu-bar app and routes notification links through AppController's existing Dock-policy restoration. Visible Settings and the explicit Dock preference continue to control temporary regular-app activation.
 - 2026-10-02: T64 gives workflow-job notifications a dedicated marketing scene and screenshot. Alerts cover successful and failed PR-attached jobs; customization is by repository, trigger, workflow and job. Keep fictional data, silent playback and installation commands only on the website. Rebalance the introduction to 25 seconds.
 - 2026-10-02: T63 supersedes T62's `website/` Actions deployment. The user chose branch-based Pages publishing from `main` / `/docs`; landing files move into `docs/` alongside preserved README screenshots, and the custom deployment workflow is removed to prevent competing publications.

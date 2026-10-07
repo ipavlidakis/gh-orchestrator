@@ -1,3 +1,10 @@
+public enum PullRequestOpenDestination: String, Codable, CaseIterable, Sendable {
+    case browser
+    case inApp
+
+    public var title: String { self == .browser ? "Browser" : "In App" }
+}
+
 public enum PullRequestSortOrder: String, Codable, CaseIterable, Sendable {
     case title
     case createdNewestFirst
@@ -48,6 +55,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public var observedRepositories: [ObservedRepository]
     public var pullRequestSortOrder: PullRequestSortOrder
+    public var pullRequestOpenDestination: PullRequestOpenDestination
     public var repositorySortOrder: RepositorySortOrder
     public var pollingIntervalSeconds: Int
     public var hideDockIcon: Bool
@@ -63,6 +71,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public init(
         observedRepositories: [ObservedRepository] = [],
         pullRequestSortOrder: PullRequestSortOrder = .title,
+        pullRequestOpenDestination: PullRequestOpenDestination = .browser,
         repositorySortOrder: RepositorySortOrder = .lastModifiedNewestFirst,
         pollingIntervalSeconds: Int = AppSettings.defaultPollingIntervalSeconds,
         hideDockIcon: Bool = AppSettings.defaultHideDockIcon,
@@ -79,6 +88,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
         self.observedRepositories = deduplicatedRepositories
         self.pullRequestSortOrder = pullRequestSortOrder
+        self.pullRequestOpenDestination = pullRequestOpenDestination
         self.repositorySortOrder = repositorySortOrder
         self.pollingIntervalSeconds = Self.clampPollingInterval(pollingIntervalSeconds)
         self.hideDockIcon = hideDockIcon
@@ -98,6 +108,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case observedRepositories
         case pullRequestSortOrder
+        case pullRequestOpenDestination
         case repositorySortOrder
         case pollingIntervalSeconds
         case hideDockIcon
@@ -117,6 +128,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.init(
             observedRepositories: try container.decodeIfPresent([ObservedRepository].self, forKey: .observedRepositories) ?? [],
             pullRequestSortOrder: try container.decodeIfPresent(PullRequestSortOrder.self, forKey: .pullRequestSortOrder) ?? .title,
+            pullRequestOpenDestination: try container.decodeIfPresent(PullRequestOpenDestination.self, forKey: .pullRequestOpenDestination) ?? .browser,
             repositorySortOrder: try container.decodeIfPresent(RepositorySortOrder.self, forKey: .repositorySortOrder) ?? .lastModifiedNewestFirst,
             pollingIntervalSeconds: try container.decodeIfPresent(Int.self, forKey: .pollingIntervalSeconds) ?? Self.defaultPollingIntervalSeconds,
             hideDockIcon: try container.decodeIfPresent(Bool.self, forKey: .hideDockIcon) ?? Self.defaultHideDockIcon,

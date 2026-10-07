@@ -492,6 +492,14 @@ struct GeneralSettingsPane: View {
     var body: some View {
         Group {
             SettingsGroup(title: "App behavior") {
+                SettingsRow(title: "Open PR destination", subtitle: "Where pull requests and review comments open.") {
+                    Picker("Open PR destination", selection: $model.pullRequestOpenDestination) {
+                        ForEach(PullRequestOpenDestination.allCases, id: \.self) { destination in
+                            Text(destination.title).tag(destination)
+                        }
+                    }
+                }
+
                 SettingsRow(title: "Pull request order") {
                     Picker("Pull request order", selection: $model.pullRequestSortOrder) {
                         ForEach(PullRequestSortOrder.allCases, id: \.self) { order in
@@ -513,7 +521,7 @@ struct GeneralSettingsPane: View {
 
                 SettingsRow(
                     title: "Show Dock icon",
-                    subtitle: "Off keeps GHOrchestrator in the menu bar only. It reappears while Settings is open."
+                    subtitle: "Off keeps GHOrchestrator in the menu bar only. Windows temporarily show it."
                 ) {
                     Toggle(
                         "Show Dock icon",
@@ -581,7 +589,7 @@ struct GeneralSettingsPane: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("When the Dock icon is hidden, it reappears while Settings is open so the window stays reachable.")
+                    Text("When the Dock icon is hidden, it reappears while Settings or a PR viewer is open so the windows stay reachable.")
                 }
             }
 

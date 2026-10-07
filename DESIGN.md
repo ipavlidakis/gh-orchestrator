@@ -94,6 +94,14 @@ Owner: `SettingsPlaceholderView.swift` and `Settings/`.
 - **Notifications** use one `SettingsGroup` per repository, led by "Watch this repository", with indented trigger rows below it, disabled when the master switch is off.
 - Section copy is short and states the effect ("Off keeps GHOrchestrator in the menu bar only").
 
+## PR viewer
+- Reference: the three user-supplied 2026-10-08 screenshots. Use their two-column summary/activity composition and rounded conversation cards with the app's semantic colors and SF Symbols.
+- Resizable window: 1180 x 820 initially, 860 x 600 minimum. Compact toolbar with Summary, change counts, Refresh, Copy Link and Open in Browser. No inactive diff tab or simulated editing controls.
+- Main conversation uses a native reusable table: title/metadata, Markdown description, Activity heading, chronological comments/reviews/commits and separate review-thread replies. Sidebar is 280 pt wide with merge status, loaded threads, reviews and checks; each column scrolls independently.
+- Body is 14 pt, title 24 pt semibold, metadata 12 pt secondary. Cards use the shared 12 pt radius and semantic hairline; column padding is 24 pt, card gap 12 pt. Long comments collapse at 320 pt with an explicit Expand/Collapse control; PR descriptions stay complete.
+- Prepare Markdown when data arrives, cache layout by row and width, and reuse visible cells. Avatars use stable initials to avoid network and image-decoding work in the scrolling path. Load activity/threads/replies in bounded pages with visible retry and load-more actions; never silently truncate.
+- Visible viewer windows temporarily keep the Dock icon available, using the existing saved preference when all viewer and Settings windows close.
+
 ## App and Dock icons
 Generated, not hand-edited. Edit `script/generate_icon_assets.swift` and run it from the repo root:
 
