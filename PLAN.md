@@ -1473,7 +1473,7 @@
   - 2026-10-04: user explicitly authorized committing, pushing main, and publishing the release across GitHub, Homebrew, and the website where needed.
 
 ### T67: Release 0.5.4 (Build 51)
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `PLAN-menu-bar.md:T30`, `T31`, `T32`, `T33`, `T34`
 - goal: push the completed comment, Dock lifecycle, and header changes to main, publish a signed and notarized stable release, and verify the automatic Homebrew update.
@@ -1482,7 +1482,10 @@
   - 2026-10-07: all 100 app tests and Tuist/build/launch verification passed on the final source before release preparation. Three existing SceneStorage fixture warnings remain.
   - 2026-10-07: OCR delegation reviewed all seven selected production files against Swift rules (7/7, 100% coverage), with no blocking findings. Excluded tests, JSON fixture, design and feature-plan changes, and release prose were reviewed manually.
   - 2026-10-07: release checks exposed two existing FIFO mock assumptions in concurrent repository tests. Reused the routing transport to associate responses with each repository query, keeping both behavioral assertions. All 11 snapshot service tests and all 98 core tests passed after the fixture repair, without warnings.
-  - Signed artifact, publication, and public Homebrew validation pending.
+  - 2026-10-07: committed/pushed the changes and changelog as `d4fc1b85d046f9217ae8c665bbbfccff942aca7d`; release tag 0.5.4 resolves to that exact commit. Release archive has version 0.5.4/build 51, macOS 15 minimum, x86_64 and arm64, Developer ID signing, and Hardened Runtime.
+  - 2026-10-07: Apple accepted notarization submission `09c94471-a422-4e81-8e49-9840ac1131df`; DMG stapling and ticket validation passed. The script handled the existing local DMG-path Insufficient Context result after validation. Gatekeeper accepted the archived and public-download apps as Notarized Developer ID. Existing category and App Intents archive warnings remain.
+  - 2026-10-07: published https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.5.4 as the latest stable release after verifying both uploaded assets. The local checksum, GitHub DMG digest, and publicly downloaded DMG agree: `656aa3c4e9135bd23c376cf3b3e4dc9dd00ca5841151bcb352a9d850c11b26e8`.
+  - 2026-10-07: Homebrew workflow `37635746349` succeeded and committed cask update `223911a`. The refreshed public tap reports 0.5.4 with the matching SHA-256; cask style, online audit, and Homebrew fetch passed. The public DMG's mounted app passed strict signature and Gatekeeper checks, and its version/build, deployment minimum, and both architectures match the archive.
 - notes:
   - The user explicitly authorized pushing everything to main and making a new Homebrew release. Keep release secrets in the ignored local config; use the existing same-repository tap and publication workflow.
 
