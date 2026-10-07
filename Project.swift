@@ -60,6 +60,7 @@ let project = Project(
                 "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
                 "GitHubOAuthClientID": .string(gitHubOAuthClientID),
                 "LSMinimumSystemVersion": "$(MACOSX_DEPLOYMENT_TARGET)",
+                "LSUIElement": true,
                 "NSHumanReadableCopyright": "Copyright ©. All rights reserved.",
                 "NSPrincipalClass": "NSApplication",
             ]),

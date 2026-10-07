@@ -1,7 +1,9 @@
+import AppKit
 import Foundation
 import Observation
 import Synchronization
 import SwiftUI
+import UserNotifications
 import XCTest
 @testable import GHOrchestrator
 import GHOrchestratorCore
@@ -214,6 +216,66 @@ final class AppControllerTests: XCTestCase {
         }
     }
 
+    func testNotificationClickRestoresDockPreferenceAndPreservesSettingsOverride() async throws {
+        let center = UNUserNotificationCenter.current()
+        let previousDelegate = center.delegate
+        let previousPolicy = NSApp.activationPolicy()
+        defer {
+            center.delegate = previousDelegate
+            NSApp.setActivationPolicy(previousPolicy)
+        }
+
+        let store = configuredSettingsStore(hideDockIcon: true)
+        var openedURLs: [URL] = []
+        let controller = AppController(
+            settingsStore: store,
+            dataSource: MutableDashboardDataSource(),
+            authController: MutableAuthController(state: .signedOut),
+            sleeper: CancellingSleeper(),
+            applicationIconController: RecordingApplicationIconController(),
+            startAtLoginController: RecordingStartAtLoginController(),
+            softwareUpdateChecker: StubSoftwareUpdateChecker(),
+            softwareUpdateInstaller: RecordingSoftwareUpdateInstaller(),
+            startsAutomaticUpdateChecks: false,
+            openURL: { url in
+                NSApp.setActivationPolicy(.regular)
+                openedURLs.append(url)
+            }
+        )
+        await waitUntil("initial hidden Dock policy") {
+            NSApp.activationPolicy() == .accessory
+        }
+
+        let delivery = try XCTUnwrap(center.delegate as? UserNotificationCenterDelivery)
+        let url = URL(string: "https://github.com/openai/codex/actions/runs/1/job/2")!
+        let content = UNMutableNotificationContent()
+        content.userInfo = [LocalNotificationUserInfo.targetURLKey: url.absoluteString]
+        let request = UNNotificationRequest(identifier: "dock-regression", content: content, trigger: nil)
+        let notification = try XCTUnwrap(UNNotification(coder: NotificationResponseDecoder(values: [
+            "request": request,
+            "date": Date()
+        ])))
+        let response = try XCTUnwrap(UNNotificationResponse(coder: NotificationResponseDecoder(values: [
+            "notification": notification,
+            "actionIdentifier": UNNotificationDefaultActionIdentifier
+        ])))
+        for (settingsVisible, hidesDockIcon) in [(false, true), (true, true), (false, false)] {
+            controller.setSettingsWindowVisible(settingsVisible)
+            store.settings.hideDockIcon = hidesDockIcon
+            let expectedPolicy: NSApplication.ActivationPolicy = hidesDockIcon && !settingsVisible ? .accessory : .regular
+            await waitUntil("Dock policy before notification click") {
+                NSApp.activationPolicy() == expectedPolicy
+            }
+            let openedCount = openedURLs.count
+            await delivery.userNotificationCenter(center, didReceive: response)
+            await waitUntil("notification URL and restored Dock policy") {
+                openedURLs.count == openedCount + 1 && NSApp.activationPolicy() == expectedPolicy
+            }
+            XCTAssertEqual(openedURLs.last, url)
+            XCTAssertEqual(NSApp.activationPolicy(), expectedPolicy)
+        }
+    }
+
     func testVisibleDockIconPreferenceReappliesCustomDockIconAtLaunch() async {
         let dockIconController = RecordingDockIconVisibilityController()
         let applicationIconController = RecordingApplicationIconController()
@@ -415,6 +477,21 @@ private final class AppControllerRecordingNotificationDelivery: LocalNotificatio
 
     func deliverPreview(_ event: RepositoryNotificationEvent) async throws {
         previewedEvents.append(event)
+    }
+}
+
+private final class NotificationResponseDecoder: NSCoder {
+    private let values: [String: Any]
+
+    init(values: [String: Any]) {
+        self.values = values
+        super.init()
+    }
+
+    override var allowsKeyedCoding: Bool { true }
+
+    override func decodeObject(forKey key: String) -> Any? {
+        values[key]
     }
 }
 

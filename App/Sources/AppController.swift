@@ -38,8 +38,11 @@ final class AppController {
         }
     ) {
         let resolvedRequestLogModel = requestLogModel ?? GitHubRequestLogModel()
+        let appControllerBox = WeakObjectBox<AppController>()
         let resolvedNotificationDelivery = notificationDelivery ?? UserNotificationCenterDelivery(
-            responseRouter: NotificationResponseRouter(openURL: openURL)
+            responseRouter: NotificationResponseRouter { url in
+                appControllerBox.value?.openURL(url)
+            }
         )
 
         self.settingsStore = settingsStore
@@ -79,7 +82,7 @@ final class AppController {
             installer: resolvedSoftwareUpdateInstaller
         )
 
-        let settingsModelBox = WeakSettingsModelBox<SettingsModel>()
+        let settingsModelBox = WeakObjectBox<SettingsModel>()
 #if DEBUG
         let notificationPreviewAction: (@MainActor (RepositoryNotificationEvent) async throws -> Void)? = { [resolvedNotificationDelivery] event in
             try await resolvedNotificationDelivery.deliverPreview(event)
@@ -127,6 +130,7 @@ final class AppController {
             delivery: resolvedNotificationDelivery,
             authenticationState: resolvedAuthController.state
         )
+        appControllerBox.value = self
 
         observeAuthenticationState()
         observeDockIconPreference()
@@ -260,6 +264,6 @@ final class AppController {
     }
 }
 
-private final class WeakSettingsModelBox<Value: AnyObject> {
+private final class WeakObjectBox<Value: AnyObject> {
     weak var value: Value?
 }

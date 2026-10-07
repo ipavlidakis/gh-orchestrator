@@ -6,9 +6,28 @@
 - Follow the repo-wide rules in `PLAN.md` and `AGENTS.md`.
 
 ## Decision Log
+- 2026-10-07: Notification clicks reuse AppController's browser-opening and Dock-policy restoration path. Declare the menu-bar app as a Launch Services agent so system activation starts without a Dock icon; the existing Settings and explicit Dock preference overrides remain authoritative.
 - 2026-04-17: Notification preview tooling lives in the Notifications settings pane as a Debug-only section and sends synthetic events through the app-owned local notification delivery seam instead of mutating live repository state.
 
 ## Task Board
+
+### N09: Notification Click Dock Visibility
+- status: `done`
+- owner: `codex-main`
+- depends_on: `N01`, `PLAN-menu-bar.md:T31`
+- goal: opening a notification's GitHub URL must not leave an unwanted Dock icon behind.
+- scope:
+  - route notification responses through the existing AppController URL-opening path.
+  - declare the app's default Launch Services agent behavior.
+  - preserve visible Settings and the user's explicit Dock preference.
+- verification:
+  - 2026-10-07: the real UserNotifications delegate/AppKit regression failed on the original routing with `Timed out waiting for notification URL and restored Dock policy`; the URL assertion passed while the policy stayed regular.
+  - 2026-10-07: all 17 focused AppController, notification monitor, and native Settings-window visibility tests passed after the fix, including hidden Dock, visible Settings, and explicit visible-Dock preference scenarios. The existing unused-variable warning in PopoverPerformanceTests remains.
+  - 2026-10-07: `tuist generate --no-open`, `./script/build_and_run.sh --verify`, and `git diff --check` passed. Generated and running bundles contain `LSUIElement=true`; the running binary hash matches the rebuilt app and Launch Services reports `ApplicationType=UIElement`.
+- notes:
+  - Reported by the user with workflow notifications on 2026-10-07; opening and closing Settings currently clears the unwanted icon.
+  - Live Notification Center click acceptance remains pending: both native computer-use attempts timed out. Delegate/AppKit regression evidence does not substitute for that live check.
+  - The installed 0.5.4 copy was restored after initial debug verification, then the fixed debug build was launched again at the user's request. The user accepted the fix and authorized commit, push, and release; publication is tracked in PLAN.md:T69.
 
 ### N08: Debug Notification Preview Panel
 - status: `done`

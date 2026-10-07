@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.5 (Build 52) - 2026-10-08
+
+- Fix notification clicks leaving GHOrchestrator visible in the Dock when the hidden-Dock preference is enabled.
+- Preserve Dock visibility while Settings is open or the Dock icon is explicitly enabled.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.5.4...0.5.5
+
 ## 0.5.4 (Build 51) - 2026-10-07
 
 - Show review comments with author avatars, timestamps, bordered cards, and full comment text.

@@ -1502,6 +1502,18 @@
 - notes:
   - User reported the Pages deployment failure after the 0.5.4 release. Preserve the chosen branch-based publishing setup.
 
+### T69: Release Notification Dock Fix
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `PLAN-notifications.md:N09`, `T67`
+- goal: commit and push the notification-click Dock fix, then publish version 0.5.5/build 52 and verify the automatic Homebrew update.
+- verification:
+  - 2026-10-08: OCR delegation reviewed both selected production files against the Swift rules (2/2, 100% coverage), with no blocking findings. The excluded regression and three Markdown files were reviewed manually.
+  - 2026-10-08: all 101 app tests and 98 core tests passed. Three existing rendering-fixture warnings remain; the core run and preceding build/launch verification had no warnings. Whitespace validation passed, and the configured Developer ID identity and notary authentication were verified.
+  - Pending signed universal archive, notarization, public assets, and Homebrew readback.
+- notes:
+  - The user accepted the local fix and authorized commit, push, and a new release. Reuse the existing release config and same-repository Homebrew publication workflow.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1532,6 +1544,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-07: PLAN-notifications.md:N09 declares `LSUIElement` for the menu-bar app and routes notification links through AppController's existing Dock-policy restoration. Visible Settings and the explicit Dock preference continue to control temporary regular-app activation.
 - 2026-10-02: T64 gives workflow-job notifications a dedicated marketing scene and screenshot. Alerts cover successful and failed PR-attached jobs; customization is by repository, trigger, workflow and job. Keep fictional data, silent playback and installation commands only on the website. Rebalance the introduction to 25 seconds.
 - 2026-10-02: T63 supersedes T62's `website/` Actions deployment. The user chose branch-based Pages publishing from `main` / `/docs`; landing files move into `docs/` alongside preserved README screenshots, and the custom deployment workflow is removed to prevent competing publications.
 - 2026-10-02: T62 adds a static product site in `website/`, with deployment from `main` through GitHub Pages Actions after the user enables that source. The web presentation extends the existing indigo app identity, uses the T61 silent intro and fictional native captures, and includes Homebrew installation plus a creator website link.
