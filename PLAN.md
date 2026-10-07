@@ -1503,14 +1503,17 @@
   - User reported the Pages deployment failure after the 0.5.4 release. Preserve the chosen branch-based publishing setup.
 
 ### T69: Release Notification Dock Fix
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - depends_on: `PLAN-notifications.md:N09`, `T67`
 - goal: commit and push the notification-click Dock fix, then publish version 0.5.5/build 52 and verify the automatic Homebrew update.
 - verification:
   - 2026-10-08: OCR delegation reviewed both selected production files against the Swift rules (2/2, 100% coverage), with no blocking findings. The excluded regression and three Markdown files were reviewed manually.
   - 2026-10-08: all 101 app tests and 98 core tests passed. Three existing rendering-fixture warnings remain; the core run and preceding build/launch verification had no warnings. Whitespace validation passed, and the configured Developer ID identity and notary authentication were verified.
-  - Pending signed universal archive, notarization, public assets, and Homebrew readback.
+  - 2026-10-08: committed and pushed the fix as `983477ecaf0de9880723c4712900e26d0ba0eebe`; tag 0.5.5 resolves to that exact commit. The archive and public-download app contain version 0.5.5/build 52, macOS 15 minimum, `LSUIElement=true`, x86_64 and arm64, Developer ID signing, and Hardened Runtime.
+  - 2026-10-08: Apple accepted notarization submission `fb1d44de-b84b-4b95-9dee-56065c00e467`; DMG stapling and validation passed. Gatekeeper accepted both the archive and publicly downloaded app as Notarized Developer ID. Existing missing-category and local-DMG Insufficient Context warnings remain; the latter is handled after successful notarization and staple validation.
+  - 2026-10-08: published https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.5.5 as the latest stable release after verifying both uploaded asset digests. The local checksum, GitHub digest, publicly downloaded DMG, and cask agree: `e0afe39d89ff26347d3b129023248edba4533fd3a42d189132d589629d4375c5`.
+  - 2026-10-08: Homebrew publication workflow `37693927278` succeeded and pushed cask commit `bbccd09`. The refreshed tap reports 0.5.5 with the matching checksum; cask style, online audit, and Homebrew fetch passed. Integrated the automated cask commit with a fast-forward and detached the public verification DMG.
 - notes:
   - The user accepted the local fix and authorized commit, push, and a new release. Reuse the existing release config and same-repository Homebrew publication workflow.
 
