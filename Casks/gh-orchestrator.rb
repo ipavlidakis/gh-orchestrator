@@ -1,6 +1,6 @@
 cask "gh-orchestrator" do
-  version "0.5.7"
-  sha256 "b94a29c934557f1393168f26c8369995aaa74104b2c4abecd6c890c39d624856"
+  version "0.5.8"
+  sha256 "fb07f271e745a9c6318e64e6eb6b887f509471607015a3a5c89263ccc5d5d4e5"
 
   url "https://github.com/ipavlidakis/gh-orchestrator/releases/download/#{version}/GHOrchestrator-#{version}.dmg"
   name "GHOrchestrator"
