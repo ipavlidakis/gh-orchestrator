@@ -21,6 +21,7 @@ struct PullRequestSearchResponseDTO: Decodable {
         let createdAt: Date?
         let updatedAt: Date?
         let reviewDecision: String?
+        let mergeable: String?
         let reviewThreads: ReviewThreadConnectionDTO?
         let statusCheckRollup: StatusCheckRollupDTO?
 
@@ -34,6 +35,7 @@ struct PullRequestSearchResponseDTO: Decodable {
             case createdAt
             case updatedAt
             case reviewDecision
+            case mergeable
             case reviewThreads
             case statusCheckRollup
         }

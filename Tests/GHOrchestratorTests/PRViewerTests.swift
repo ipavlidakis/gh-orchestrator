@@ -8,6 +8,81 @@ import XCTest
 
 @MainActor
 final class PRViewerTests: XCTestCase {
+    func testConflictSidebarHandlesStatesAndOpensGitHubResolution() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("gho-merge-conflicts-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        print("Merge conflict visual evidence: \(directory.path)")
+        for (state, mergeable, expected) in [
+            ("OPEN", "CONFLICTING", "This branch has conflicts that must be resolved"),
+            ("OPEN", "UNKNOWN", "GitHub is calculating merge status"),
+            ("OPEN", "MERGEABLE", "Can merge without conflicts"),
+            ("CLOSED", "CONFLICTING", "Pull request closed"),
+            ("MERGED", "CONFLICTING", "Pull request merged")
+        ] {
+            let service = PRViewerFixtureService(eventCount: 0, threadCount: 0, mergeable: mergeable, state: state)
+            var browserURLs: [URL] = []
+            let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/orbit/nova/pull/42")!))
+            let controller = PRViewerWindowController(address: address, service: service, openBrowser: { browserURLs.append($0) }, onClose: {})
+            controller.present(url: address.url)
+            let window = try XCTUnwrap(controller.window)
+            window.level = .floating
+            window.setContentSize(NSSize(width: 1180, height: 820))
+            defer { controller.close() }
+            try await wait { controller.model.summary != nil && controller.model.rows.count == 2 }
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            try await Task.sleep(for: .milliseconds(200))
+            func captureSidebar(_ name: String) throws -> [VNRecognizedTextObservation] {
+                let url = directory.appendingPathComponent("merge-sidebar-\(name).png")
+                let screenshot = Process()
+                screenshot.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                screenshot.arguments = ["-x", "-o", "-l", String(window.windowNumber), url.path]
+                try screenshot.run(); screenshot.waitUntilExit()
+                XCTAssertEqual(screenshot.terminationStatus, 0)
+                let request = VNRecognizeTextRequest()
+                request.recognitionLevel = .accurate
+                let sidebarStart = (window.frame.width - 280) / window.frame.width
+                request.regionOfInterest = CGRect(x: sidebarStart, y: 0, width: 1 - sidebarStart, height: 1)
+                try VNImageRequestHandler(url: url).perform([request])
+                return request.results ?? []
+            }
+            var observations = try captureSidebar("\(state)-\(mergeable)")
+            var text = observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+            for _ in 0..<10 where state == "OPEN" && mergeable == "CONFLICTING" && !text.contains("develop") {
+                try await Task.sleep(for: .milliseconds(100))
+                observations = try captureSidebar("\(state)-\(mergeable)")
+                text = observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+            }
+            XCTAssertTrue(text.contains(expected), "Merge status must be visible in the sidebar: \(text)")
+            let resolve = observations.first { $0.topCandidates(1).first?.string == "Resolve conflicts" }
+            if state != "OPEN" || mergeable != "CONFLICTING" {
+                XCTAssertNil(resolve, "Only open conflicting PRs need conflict resolution")
+                continue
+            }
+            XCTAssertTrue(text.contains("develop"), "Guidance must identify the target branch: \(text)")
+            let action = try XCTUnwrap(resolve)
+            let point = NSPoint(x: window.frame.width - 280 + 280 * action.boundingBox.midX, y: window.frame.height * action.boundingBox.midY)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                let event = try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+                NSApp.postEvent(event, atStart: false)
+            }
+            try await wait { !browserURLs.isEmpty }
+            XCTAssertEqual(browserURLs.first?.absoluteString, "https://github.com/orbit/nova/pull/42/conflicts")
+            for (name, width, appearance) in [("light", 1180.0, NSAppearance.Name.aqua), ("dark", 1180.0, .darkAqua), ("compact", 860.0, .aqua)] {
+                window.appearance = NSAppearance(named: appearance)
+                window.setContentSize(NSSize(width: width, height: 820))
+                window.contentView?.layoutSubtreeIfNeeded()
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                try await Task.sleep(for: .milliseconds(200))
+                let captured = try captureSidebar(name).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+                XCTAssertTrue(captured.contains(expected))
+                XCTAssertTrue(captured.contains("Resolve conflicts"))
+            }
+        }
+    }
+
     func testFileConversationAlignsRepliesAndPlacesActionsAfterLastComment() async throws {
         let model = makeModel(service: PRViewerFixtureService())
         model.refresh()
@@ -619,18 +694,20 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
     var threadCount = 1
     var failReaction = false
     var reactionRecorder: PRViewerReactionRecorder? = nil
+    var mergeable = "MERGEABLE"
+    var state = "OPEN"
 
     func summary(_ address: PullRequestAddress, checksAfter: String?) async throws -> PRSummary {
-        try Self.makeSummary(title: title, completedChecksOnly: completedChecksOnly)
+        try Self.makeSummary(title: title, completedChecksOnly: completedChecksOnly, mergeable: mergeable, state: state)
     }
 
-    static func makeSummary(title: String = "Fix audio initialization order during call joins", completedChecksOnly: Bool = false) throws -> PRSummary {
+    static func makeSummary(title: String = "Fix audio initialization order during call joins", completedChecksOnly: Bool = false, mergeable: String = "MERGEABLE", state: String = "OPEN") throws -> PRSummary {
         try decode([
             "id": "PR-42", "locked": false, "title": title, "body": "<!-- HIDDEN_BOT_METADATA -->\n## Goal\nPrepare the audio session **before capture starts**.\n\n## Summary\n- Activate the audio session before capture starts.\n- Preserve cancellation checks.\n- Add focused regression coverage.\n\n## Implementation\n`CallAudioSession` applies the category and activation before microphone changes.\n\n```swift\nawait audioSession.activate()\ntry Task.checkCancellation()\n```\n\n## Validation\nFocused tests and app builds passed. [View the issue](https://github.com/orbit/nova/issues/7).",
             "bodyHTML": "<!-- HIDDEN_BOT_METADATA --><script>window.untrustedRan = true</script><a href=\"javascript:window.untrustedRan=true\">Unsafe link</a><div class=\"markdown-alert markdown-alert-important\"><p class=\"markdown-alert-title\">Important</p><h2>Draft PR not reviewed</h2><ul class=\"contains-task-list\"><li class=\"task-list-item\"><input type=\"checkbox\" disabled> Trigger a manual review</li></ul></div><table><thead><tr><th>Status</th></tr></thead><tbody><tr><td>Draft</td></tr></tbody></table><details><summary>Configuration</summary><pre><code>drafts: true</code></pre></details><p><a href=\"https://github.com/orbit/nova/issues/7\">Issue</a></p>",
-            "state": "OPEN", "isDraft": true, "createdAt": "2026-10-08T00:00:00Z", "author": ["login": "alex", "url": "https://github.com/alex", "avatarUrl": "https://avatars.githubusercontent.com/u/583231?s=56"],
+            "state": state, "isDraft": true, "createdAt": "2026-10-08T00:00:00Z", "author": ["login": "alex", "url": "https://github.com/alex", "avatarUrl": "https://avatars.githubusercontent.com/u/583231?s=56"],
             "headRefName": "fix/audio-initialization", "baseRefName": "develop", "additions": 533, "deletions": 40,
-            "mergeable": "MERGEABLE", "reviewDecision": "REVIEW_REQUIRED",
+            "mergeable": mergeable, "reviewDecision": "REVIEW_REQUIRED",
             "commits": ["totalCount": 2, "nodes": [["commit": ["statusCheckRollup": ["contexts": ["nodes": completedChecksOnly ? (0..<15).map { ["name": "Test Core \($0)", "status": "COMPLETED", "conclusion": "SUCCESS"] } + [["name": "Skipped check", "status": "COMPLETED", "conclusion": "SKIPPED"]] : [
                 ["name": "Test Core (Debug)", "status": "IN_PROGRESS", "detailsUrl": "https://github.com/orbit/nova/actions/runs/1"],
                 ["name": "Test SwiftUI (Debug)", "status": "QUEUED"],

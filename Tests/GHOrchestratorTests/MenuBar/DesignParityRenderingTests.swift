@@ -36,11 +36,20 @@ final class DesignParityRenderingTests: XCTestCase {
         )
         .frame(width: 440, alignment: .topLeading)
         try await render(popover, size: CGSize(width: 440, height: 570), name: "dashboard-overview")
-        model.pullRequestScope = .all
-        model.state = .loaded([RepositorySection(repository: repository, pullRequests: pulls)])
-        try await render(popover, size: CGSize(width: 440, height: 570), name: "dashboard-header-focus", focusHeader: true)
-        try await render(popover.environment(\.colorScheme, .dark), size: CGSize(width: 440, height: 570), name: "dashboard-header-focus-dark", appearance: .darkAqua, focusHeader: true)
-        model.pullRequestScope = .mine
+        let allStorageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: allStorageURL) }
+        let allStore = SettingsStore(storageURL: allStorageURL)
+        allStore.settings = AppSettings(observedRepositories: [repository], dashboardPullRequestScope: .all)
+        let allModel = MenuBarDashboardModel(settingsStore: allStore)
+        allModel.authenticationState = .authenticated(username: "alex")
+        allModel.state = .loaded([RepositorySection(repository: repository, pullRequests: pulls)])
+        let allPopover = MenuBarPlaceholderView(
+            model: allModel, softwareUpdateModel: updates, requestLogModel: log,
+            openSettingsAction: {}, openURLAction: { _ in }, onMenuVisibilityChange: { _ in }
+        )
+        .frame(width: 440, alignment: .topLeading)
+        try await render(allPopover, size: CGSize(width: 440, height: 570), name: "dashboard-header-focus", focusHeader: true)
+        try await render(allPopover.environment(\.colorScheme, .dark), size: CGSize(width: 440, height: 570), name: "dashboard-header-focus-dark", appearance: .darkAqua, focusHeader: true)
         model.state = .loaded([RepositorySection(repository: repository, pullRequests: [pulls[0]])])
         model.expandedChecksPullRequestIDs = [pulls[0].id]
         try await render(popover, size: CGSize(width: 440, height: 475), name: "dashboard-pr-details")
@@ -129,7 +138,7 @@ final class DesignParityRenderingTests: XCTestCase {
             repository: repository, number: 42,
             title: "Add a smoother onboarding flow",
             url: url(42), isDraft: false, updatedAt: now.addingTimeInterval(-660),
-            reviewStatus: .reviewRequired, unresolvedReviewThreadCount: 0, checkRollupState: .pending,
+            reviewStatus: .reviewRequired, mergeable: .unknown, unresolvedReviewThreadCount: 0, checkRollupState: .pending,
             workflowRuns: [
                 WorkflowRunItem(id: 1, name: "App Build", status: "queued", detailsURL: url(1), jobs: [
                     ActionJobItem(id: 11, name: "Release build", status: "queued", createdAt: now.addingTimeInterval(-1680))
@@ -149,7 +158,7 @@ final class DesignParityRenderingTests: XCTestCase {
         let failing = PullRequestItem(
             repository: repository, number: 38, title: "Keep favorites in sync across devices",
             url: url(38), isDraft: false, updatedAt: now.addingTimeInterval(-10800),
-            reviewStatus: .changesRequested, unresolvedReviewThreadCount: 2,
+            reviewStatus: .changesRequested, mergeable: .conflicting, unresolvedReviewThreadCount: 2,
             unresolvedReviewComments: [UnresolvedReviewCommentItem(
                 url: url(38), authorLogin: "octocat",
                 bodyText: "Could we cover an offline edit before the next sync?",
@@ -167,7 +176,7 @@ final class DesignParityRenderingTests: XCTestCase {
         let ready = PullRequestItem(
             repository: repository, number: 35, title: "Polish the empty states",
             url: url(35), isDraft: false, updatedAt: now.addingTimeInterval(-86400),
-            reviewStatus: .approved, unresolvedReviewThreadCount: 0, checkRollupState: .passing
+            reviewStatus: .approved, mergeable: .mergeable, unresolvedReviewThreadCount: 0, checkRollupState: .passing
         )
         return [pending, failing, ready]
     }

@@ -81,6 +81,7 @@ public struct ActionsJobsEnrichmentService: ActionsJobsEnriching {
                 createdAt: snapshot.createdAt,
                 updatedAt: snapshot.updatedAt,
                 reviewStatus: snapshot.reviewStatus,
+                mergeable: snapshot.mergeable,
                 unresolvedReviewThreadCount: snapshot.unresolvedReviewThreadCount,
                 unresolvedReviewComments: snapshot.unresolvedReviewComments.map { comment in
                     UnresolvedReviewCommentItem(

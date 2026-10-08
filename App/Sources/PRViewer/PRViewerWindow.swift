@@ -230,9 +230,20 @@ struct PRViewerWindowView: View {
                 sectionTitle("Merge status")
                 if let summary = model.summary {
                     Label(mergeText(summary), systemImage: mergeSymbol(summary))
-                        .font(.system(size: 13))
-                        .foregroundStyle(summary.mergeable == "CONFLICTING" ? StatusTint.danger.color : summary.mergeable == "MERGEABLE" ? StatusTint.success.color : StatusTint.neutral.color)
-                    Text(summary.isDraft ? "Draft pull request" : summary.state.capitalized)
+                        .font(.system(size: 13, weight: summary.state == "OPEN" && summary.mergeable == "CONFLICTING" ? .semibold : .regular))
+                        .foregroundStyle(summary.state == "CLOSED" ? StatusTint.neutral.color : summary.state == "MERGED" ? StatusTint.success.color : summary.mergeable == "CONFLICTING" ? StatusTint.danger.color : summary.mergeable == "MERGEABLE" ? StatusTint.success.color : StatusTint.neutral.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if summary.state == "OPEN" && summary.mergeable == "CONFLICTING" {
+                        Text("Use GitHub's web editor or the command line to resolve conflicts with \(summary.baseRefName) before continuing.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Resolve conflicts") {
+                            openBrowser(model.address.url.appendingPathComponent("conflicts"))
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                        .help("Open conflict resolution on GitHub")
+                    }
+                    Text(summary.state == "OPEN" && summary.isDraft ? "Draft pull request" : summary.state.capitalized)
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()
@@ -331,12 +342,13 @@ struct PRViewerWindowView: View {
         if summary.state == "CLOSED" { return "Pull request closed" }
         switch summary.mergeable {
         case "MERGEABLE": return "Can merge without conflicts"
-        case "CONFLICTING": return "Merge conflicts need attention"
+        case "CONFLICTING": return "This branch has conflicts that must be resolved"
         default: return "GitHub is calculating merge status"
         }
     }
     private func mergeSymbol(_ summary: PRSummary) -> String {
-        summary.state == "MERGED" || summary.mergeable == "MERGEABLE" ? "checkmark.circle.fill" : summary.mergeable == "CONFLICTING" ? "exclamationmark.triangle" : "clock"
+        if summary.state == "CLOSED" { return "xmark.circle" }
+        return summary.state == "MERGED" || summary.mergeable == "MERGEABLE" ? "checkmark.circle.fill" : summary.mergeable == "CONFLICTING" ? "exclamationmark.triangle.fill" : "clock"
     }
     private func checkTint(_ check: PRCheck) -> StatusTint {
         PRViewerCheckCounts.tint(check)

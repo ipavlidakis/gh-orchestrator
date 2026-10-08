@@ -1,6 +1,7 @@
 # In-app PR Viewer
 
 ## Decision Log
+- 2026-10-08: Per the user's sidebar placement preference, enhance the existing Merge status inspector with a prominent conflict warning, web-editor/command-line guidance and Resolve conflicts action. Keep it visible while the conversation scrolls. Show mergeability separately from draft/review/check status in the menu-bar badges. Unknown means GitHub is calculating, never conflict-free. Resolution opens GitHub's PR conflicts page in the browser. The public API supplies conflict status but no conflicting-file list; use GitHub for those details. Count PRs as ready only after confirmed conflict-free status.
 - 2026-10-08: Use the native unified Settings toolbar to remove excess space above the sidebar list while preserving its glass/window-control integration and hidden title/toggle. Settings ignores the scene toolbar style, so select the native style at the existing window-visibility boundary; compact unified styling separates the controls from the sidebar glass.
 - 2026-10-08: Keep Settings navigation visible without a sidebar toggle or toolbar title bubble. Retain the native split-view surface and window controls.
 - 2026-10-08: Replace the manually drawn Settings rail with NavigationSplitView and a native sidebar List. Let macOS own the sidebar glass, concentric corners and integrated window controls; remove the title-bar mutations that fight that layout. Keep the existing visibility observer for Dock lifecycle.
@@ -20,6 +21,16 @@
 - 2026-10-08: Following the user's approval to try the rendering recommendation, replace the conversation table with one Apple WebKit surface and app-bundled HTML/CSS/JavaScript for viewport virtualization. Fetch GitHub bodyHTML in the existing core queries; retain raw Markdown as a visible fallback. Native window/sidebar/pagination remain. No third-party dependencies; math and diagram enrichment remain an explicitly reported limitation of this trial.
 
 ## Task Board
+### PV11: Surface target-branch conflicts in both PR surfaces
+- status: `done`
+- owner: `codex-main`
+- goal: Fetch and preserve mergeability through the dashboard pipeline, display accessible status chips, and enhance the PR viewer Merge status sidebar with conflict guidance and a browser resolution action.
+- verification: All 106 core tests passed, including conflict-free/conflicting/unknown/missing/future API values through snapshot mapping, Actions enrichment and Codable compatibility. The exact production dashboard GraphQL query succeeded live and returned both MERGEABLE and CONFLICTING PRs. Native dashboard rendering verifies all three badges and excludes conflicting/unknown PRs from the ready count in both appearances.
+- verification: The real native viewer sidebar test passes for open, closed and merged states, target-branch guidance and actual Resolve conflicts mouse activation to the GitHub browser URL. Light/dark/compact foreground captures were inspected: `DerivedData/PRViewerQA/merge-sidebar-{light,dark,compact}.png`. The test uses a unique portable temporary directory; copied evidence remains under DerivedData. Vision coordinates are relative to its sidebar region.
+- verification: Final full app run passed 116 of 117 tests; the sole failure was the pre-existing `DesignParityRenderingTests.swift:214` key-window focus assertion, which passed in isolation. The final sidebar test passed again after the portability review fix. Tuist generation, `./script/build_and_run.sh --verify` and `git diff --check` passed. The development executable was verified running from this checkout.
+- verification: OCR delegation rules and independent review covered all 14 changed files, including the seven excluded tests/design/plan files. No unresolved findings after fixing the screenshot-directory portability issue. Report: `DerivedData/PRViewerQA/merge-conflicts-code-review.md`. The Auto Review CLI was unavailable because its isolated Codex launcher points to a missing executable; native independent review supplied the review gate.
+- notes: Old Codable dashboard data stays compatible and displays unknown when mergeability is absent. The user superseded the conversation-banner placement with the existing Merge status sidebar. Do not infer conflicting filenames from changed files or review threads. No live GitHub mutations or macOS 15 visual testing were performed. Changes remain local and uncommitted.
+
 ### PV10: Remove excess space above the Settings list
 - status: `done`
 - owner: `codex-main`

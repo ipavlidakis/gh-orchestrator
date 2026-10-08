@@ -390,7 +390,20 @@
   - The user cannot identify which identical menu-bar copy showed the old appearance. Keep only the newest debug app running for review; installed Homebrew 0.5.3 remains unchanged. Do not attribute the screenshot to a particular build without its process identity.
   - A focusRingMaskBounds assertion did not distinguish suppression enabled/disabled in this fixture and was discarded. No new production native-focus workaround was justified by current captures; live user acceptance remains separate from the focused fixture proof.
 
+### T35: Persist Dashboard Scope And Repository Filter
+- status: `done`
+- owner: `codex-main`
+- depends_on: `T25`, `T27`
+- goal: retain the menu-bar scope, repository filter and both sorting preferences across popover visibility, foreground/background transitions and app launches.
+- scope:
+  - reuse AppSettings and SettingsStore; restore filters before the first dashboard fetch.
+  - retain backward-compatible defaults for older settings and clear a removed repository filter.
+  - prove the bug before the fix with a disk-backed dashboard lifecycle regression.
+- verification: The disk-backed dashboard lifecycle regression failed before the fix on restored scope, repository focus and the first fetch, then passed afterward. All 106 core tests and 47 focused dashboard/Settings/design-render tests passed; legacy settings retain non-default sort/polling preferences, clearing/removing a repository filter is persisted, and existing sort behavior remains intact. Tuist generation, build/launch verification and git diff --check passed. Delegated source review found no actionable issues.
+- notes: The full app suite passed 117/119 tests with native key-window focus and Settings screencapture failures. The Settings capture failure also reproduced with the pre-fix model/fixture; the final focused design-rendering tests passed. Live popover pointer/relaunch automation timed out even when selecting the exact updated debug app path. The earlier commit/push/release request resumes after this additional fix.
+
 ## Decision Log
+- 2026-10-08: persist the dashboard's My PRs / All PRs scope and focused repository in the existing settings file alongside PR/repository sorting. Restore them before the first refresh; closing the popover or changing app activation must retain them. Removing the focused repository clears only that filter.
 - 2026-10-07: keep logo sizing simple: one shared 28 pt square/track height, with a resizable aspect-fit branch symbol inside the logo. Run only the updated debug copy during review to remove ambiguity between it and the unchanged Homebrew installation.
 - 2026-10-07: verify header appearance with a genuinely focused, unselected segment; opening a key window alone is insufficient evidence that the native focus decoration is suppressed. Keep the square logo and scope track at the same visible height.
 - 2026-10-07: the header logo and segmented control share a 28 pt height. The logo remains square; the scope control's outer track owns the shared dimension.

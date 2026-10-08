@@ -5,6 +5,93 @@ import GHOrchestratorCore
 
 @MainActor
 final class MenuBarDashboardModelTests: XCTestCase {
+    func testDashboardSelectionsSurviveVisibilityChangesAndRelaunch() async throws {
+        let storageURL = makeIsolatedStorageURL()
+        let store = SettingsStore(storageURL: storageURL)
+        store.settings.observedRepositories = [
+            ObservedRepository(owner: "openai", name: "codex"),
+            ObservedRepository(owner: "swiftlang", name: "swift")
+        ]
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: MockDashboardDataSource(sections: []),
+            sleeper: RecordingSleeper()
+        )
+        model.setPullRequestScope(.all)
+        model.setFocusedRepositoryID(" SwiftLang/Swift ")
+        store.settings.pullRequestSortOrder = .createdNewestFirst
+        store.settings.repositorySortOrder = .teamDescending
+
+        model.setMenuVisible(true)
+        model.setMenuVisible(false)
+        model.setAuthenticationState(.authenticated(username: "octocat"))
+        model.setMenuVisible(true)
+        XCTAssertEqual(model.pullRequestScope, .all)
+        XCTAssertEqual(model.focusedRepositoryID, "swiftlang/swift")
+
+        let restoredStore = SettingsStore(storageURL: storageURL)
+        let dataSource = RecordingFilterDashboardDataSource(sections: [])
+        let restoredModel = MenuBarDashboardModel(
+            settingsStore: restoredStore,
+            dataSource: dataSource,
+            sleeper: RecordingSleeper(),
+            authenticationState: .authenticated(username: "octocat")
+        )
+        await dataSource.waitForLoadCount(1)
+        XCTAssertEqual(restoredModel.pullRequestScope, .all)
+        XCTAssertEqual(restoredModel.focusedRepositoryID, "swiftlang/swift")
+        XCTAssertEqual(restoredStore.settings.pullRequestSortOrder, .createdNewestFirst)
+        XCTAssertEqual(restoredStore.settings.repositorySortOrder, .teamDescending)
+        let filters = await dataSource.recordedFilters()
+        XCTAssertEqual(filters.first, DashboardFilter(pullRequestScope: .all, focusedRepositoryID: "swiftlang/swift"))
+
+        restoredModel.setPullRequestScope(.mine)
+        restoredModel.setFocusedRepositoryID(nil)
+        let clearedStore = SettingsStore(storageURL: storageURL)
+        let clearedModel = MenuBarDashboardModel(
+            settingsStore: clearedStore,
+            dataSource: MockDashboardDataSource(sections: []),
+            sleeper: RecordingSleeper()
+        )
+        XCTAssertEqual(clearedModel.pullRequestScope, .mine)
+        XCTAssertNil(clearedModel.focusedRepositoryID)
+        XCTAssertEqual(clearedStore.settings.pullRequestSortOrder, .createdNewestFirst)
+        XCTAssertEqual(clearedStore.settings.repositorySortOrder, .teamDescending)
+    }
+
+    func testRemovingFocusedRepositoryClearsSavedFilter() async throws {
+        let storageURL = makeIsolatedStorageURL()
+        let store = SettingsStore(storageURL: storageURL)
+        store.settings.observedRepositories = [
+            ObservedRepository(owner: "openai", name: "codex"),
+            ObservedRepository(owner: "swiftlang", name: "swift")
+        ]
+        let dataSource = RecordingFilterDashboardDataSource(sections: [])
+        let model = MenuBarDashboardModel(
+            settingsStore: store,
+            dataSource: dataSource,
+            sleeper: RecordingSleeper(),
+            authenticationState: .authenticated(username: "octocat")
+        )
+        await dataSource.waitForLoadCount(1)
+        model.setPullRequestScope(.all)
+        model.setFocusedRepositoryID("swiftlang/swift")
+        await dataSource.waitForLoadCount(2)
+
+        store.settings.observedRepositories.removeAll { $0.normalizedLookupKey == "swiftlang/swift" }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while model.focusedRepositoryID != nil && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertNil(model.focusedRepositoryID)
+        let restoredStore = SettingsStore(storageURL: storageURL)
+        XCTAssertNil(restoredStore.settings.dashboardFocusedRepositoryID)
+        XCTAssertEqual(restoredStore.settings.dashboardPullRequestScope, .all)
+        await dataSource.waitForLoadCount(3)
+        let filters = await dataSource.recordedFilters()
+        XCTAssertEqual(filters.last, DashboardFilter(pullRequestScope: .all))
+    }
+
     func testSortPreferenceImmediatelyReordersLoadedContentWithoutRefresh() {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         let model = MenuBarDashboardModel(settingsStore: store, dataSource: MockDashboardDataSource(sections: []), sleeper: RecordingSleeper())

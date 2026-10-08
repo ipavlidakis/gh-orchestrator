@@ -664,7 +664,6 @@ private struct PullRequestRowView: View {
         if hasExpandableChecks { onToggleChecks() }
     }
 
-    /// Ready/Draft and review chips, shared by the expanded and collapsed layouts.
     @ViewBuilder
     private var stateChips: some View {
         StatusChip(
@@ -677,6 +676,17 @@ private struct PullRequestRowView: View {
             systemImage: reviewSymbol(for: pullRequest.reviewStatus),
             tint: reviewTint(for: pullRequest.reviewStatus)
         )
+        switch pullRequest.mergeable ?? .unknown {
+        case .conflicting:
+            StatusChip(title: "Conflicts", systemImage: "exclamationmark.triangle.fill", tint: .danger)
+                .help("This branch has conflicts with the target branch. Open the PR to resolve them on GitHub.")
+        case .mergeable:
+            StatusChip(title: "No conflicts", systemImage: "checkmark.circle", tint: .success)
+                .help("No merge conflicts with the target branch. Reviews and checks may still be required.")
+        case .unknown:
+            StatusChip(title: "Checking conflicts", systemImage: "clock", tint: .neutral)
+                .help("GitHub is calculating merge conflicts. Refresh to check again.")
+        }
     }
 
     private func reviewTint(for status: ReviewStatus) -> StatusTint {
@@ -1485,7 +1495,7 @@ private struct DashboardFooterBar: View {
         let pullRequests = sections.flatMap(\.pullRequests)
         let failing = pullRequests.filter { $0.checkRollupState == .failing }.count
         let ready = pullRequests.filter {
-            !$0.isDraft && $0.reviewStatus == .approved && $0.checkRollupState == .passing
+            !$0.isDraft && $0.reviewStatus == .approved && $0.checkRollupState == .passing && $0.mergeable == .mergeable
         }.count
         var parts = ["\(pullRequests.count) open"]
         if failing > 0 { parts.append("\(failing) failing") }

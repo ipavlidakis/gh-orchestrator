@@ -7,6 +7,20 @@ import XCTest
 
 @MainActor
 final class DashboardRenderingTests: XCTestCase {
+    func testConflictBadgesAndReadySummaryInBothAppearances() async throws {
+        for scheme in [ColorScheme.light, .dark] {
+            for (state, label) in [(MergeableState.conflicting, "Conflicts"), (.mergeable, "No conflicts"), (.unknown, "Checking conflicts")] {
+                let bitmap = try await renderDashboard(conclusion: "success", scheme: scheme, mergeable: state)
+                let request = VNRecognizeTextRequest()
+                try VNImageRequestHandler(cgImage: XCTUnwrap(bitmap.cgImage), options: [:]).perform([request])
+                let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+                XCTAssertTrue(text.contains(label), "Missing \(label) badge in \(scheme): \(text)")
+                let ready = text.contains("1 ready")
+                XCTAssertEqual(ready, state == .mergeable, "Conflicting or unknown PRs cannot count as ready")
+            }
+        }
+    }
+
     func testSkippedJobRendersWithoutFailureColorInBothAppearances() async throws {
         for scheme in [ColorScheme.light, .dark] {
             let skipped = try await renderDashboard(conclusion: "skipped", scheme: scheme)
@@ -29,7 +43,7 @@ final class DashboardRenderingTests: XCTestCase {
         }
     }
 
-    private func renderDashboard(conclusion: String, scheme: ColorScheme) async throws -> NSBitmapImageRep {
+    private func renderDashboard(conclusion: String, scheme: ColorScheme, mergeable: MergeableState = .mergeable) async throws -> NSBitmapImageRep {
         let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let store = SettingsStore(storageURL: storageURL)
         defer { try? FileManager.default.removeItem(at: storageURL) }
@@ -46,6 +60,7 @@ final class DashboardRenderingTests: XCTestCase {
             isDraft: false,
             updatedAt: .now,
             reviewStatus: .approved,
+            mergeable: mergeable,
             unresolvedReviewThreadCount: 0,
             checkRollupState: .passing,
             workflowRuns: [WorkflowRunItem(
@@ -73,7 +88,8 @@ final class DashboardRenderingTests: XCTestCase {
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 440, height: 620), styleMask: .borderless, backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: scheme == .light ? .aqua : .darkAqua)
         window.contentView = hostingView
-        window.orderFront(nil)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         defer { window.orderOut(nil) }
         try await Task.sleep(for: .milliseconds(100))
         hostingView.layoutSubtreeIfNeeded()
@@ -81,10 +97,15 @@ final class DashboardRenderingTests: XCTestCase {
         let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
         hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
         var labels: Set<String> = []
-        collectAccessibilityLabels(from: hostingView, into: &labels)
+        for _ in 0..<100 {
+            labels = []
+            collectAccessibilityLabels(from: hostingView, into: &labels)
+            if labels.contains("Sort") { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
         lastRenderedAccessibilityLabels = labels
-        if conclusion == "skipped" {
-            let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("gh-orchestrator-dashboard-\(scheme).png")
+        if conclusion == "skipped" || mergeable == .conflicting {
+            let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("gh-orchestrator-dashboard-\(mergeable.rawValue.lowercased())-\(scheme).png")
             try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: outputURL)
             print("Dashboard visual evidence: \(outputURL.path)")
         }

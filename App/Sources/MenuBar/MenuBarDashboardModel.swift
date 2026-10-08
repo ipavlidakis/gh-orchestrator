@@ -41,8 +41,14 @@ final class MenuBarDashboardModel {
     var state: State = .idle
     var authenticationState: GitHubAuthenticationState
     var isMenuVisible = false
-    var pullRequestScope: PullRequestScope = .mine
-    var focusedRepositoryID: String?
+    var pullRequestScope: PullRequestScope {
+        get { settingsStore.settings.dashboardPullRequestScope }
+        set { settingsStore.settings.dashboardPullRequestScope = newValue }
+    }
+    var focusedRepositoryID: String? {
+        get { settingsStore.settings.dashboardFocusedRepositoryID }
+        set { settingsStore.settings.dashboardFocusedRepositoryID = newValue }
+    }
     var collapsedRepositoryIDs = Set<String>()
     var expandedChecksPullRequestIDs = Set<String>()
     var expandedCommentPullRequestIDs = Set<String>()
@@ -101,9 +107,13 @@ final class MenuBarDashboardModel {
 
                 let repositoriesChanged = oldSettings.observedRepositories != newSettings.observedRepositories
                 let pollingIntervalChanged = oldSettings.pollingIntervalSeconds != newSettings.pollingIntervalSeconds
-                let focusedRepositoryChanged = self.reconcileFocusedRepository(with: newSettings)
+                let filtersChanged = oldSettings.dashboardPullRequestScope != newSettings.dashboardPullRequestScope ||
+                    oldSettings.dashboardFocusedRepositoryID != newSettings.dashboardFocusedRepositoryID
+                if self.reconcileFocusedRepository(with: self.settingsStore.settings) {
+                    return
+                }
 
-                if repositoriesChanged || pollingIntervalChanged || focusedRepositoryChanged {
+                if repositoriesChanged || pollingIntervalChanged || filtersChanged {
                     self.refresh()
                     self.restartPolling()
                 }
@@ -142,8 +152,6 @@ final class MenuBarDashboardModel {
         }
 
         self.pullRequestScope = pullRequestScope
-        refresh()
-        restartPolling()
     }
 
     func setFocusedRepositoryID(_ repositoryID: String?) {
@@ -162,8 +170,6 @@ final class MenuBarDashboardModel {
         if let nextRepositoryID {
             collapsedRepositoryIDs.remove(nextRepositoryID)
         }
-        refresh()
-        restartPolling()
     }
 
     func toggleRepositoryCollapsed(repositoryID: String) {

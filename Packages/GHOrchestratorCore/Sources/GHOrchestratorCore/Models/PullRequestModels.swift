@@ -1,5 +1,11 @@
 import Foundation
 
+public enum MergeableState: String, Codable, CaseIterable, Sendable {
+    case conflicting = "CONFLICTING"
+    case mergeable = "MERGEABLE"
+    case unknown = "UNKNOWN"
+}
+
 public enum ReviewStatus: String, Codable, CaseIterable, Sendable {
     case none
     case reviewRequired
@@ -162,6 +168,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
     public let createdAt: Date?
     public let updatedAt: Date
     public let reviewStatus: ReviewStatus
+    public let mergeable: MergeableState?
     public let unresolvedReviewThreadCount: Int
     public let unresolvedReviewComments: [UnresolvedReviewCommentItem]
     public let checkRollupState: CheckRollupState
@@ -182,6 +189,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
         createdAt: Date? = nil,
         updatedAt: Date,
         reviewStatus: ReviewStatus,
+        mergeable: MergeableState? = nil,
         unresolvedReviewThreadCount: Int,
         unresolvedReviewComments: [UnresolvedReviewCommentItem] = [],
         checkRollupState: CheckRollupState,
@@ -197,6 +205,7 @@ public struct PullRequestItem: Codable, Equatable, Hashable, Identifiable, Senda
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.reviewStatus = reviewStatus
+        self.mergeable = mergeable
         self.unresolvedReviewThreadCount = unresolvedReviewThreadCount
         self.unresolvedReviewComments = unresolvedReviewComments
         self.checkRollupState = checkRollupState

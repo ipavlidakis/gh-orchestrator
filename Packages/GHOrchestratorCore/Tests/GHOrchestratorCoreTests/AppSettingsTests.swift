@@ -12,6 +12,12 @@ final class AppSettingsTests: XCTestCase {
 
     func testSortPreferenceRoundTripsAndLegacySettingsDefaultToTitle() throws {
         let decoder = JSONDecoder()
+        let legacySettings = try decoder.decode(AppSettings.self, from: Data(#"{"pullRequestSortOrder":"createdOldestFirst","repositorySortOrder":"teamDescending","pollingIntervalSeconds":120}"#.utf8))
+        XCTAssertEqual(legacySettings.dashboardPullRequestScope, .mine)
+        XCTAssertNil(legacySettings.dashboardFocusedRepositoryID)
+        XCTAssertEqual(legacySettings.pullRequestSortOrder, .createdOldestFirst)
+        XCTAssertEqual(legacySettings.repositorySortOrder, .teamDescending)
+        XCTAssertEqual(legacySettings.pollingIntervalSeconds, 120)
         XCTAssertEqual(try decoder.decode(AppSettings.self, from: Data("{}".utf8)).pullRequestSortOrder, .title)
         XCTAssertEqual(try decoder.decode(AppSettings.self, from: Data("{}".utf8)).repositorySortOrder, .lastModifiedNewestFirst)
         for order in RepositorySortOrder.allCases {

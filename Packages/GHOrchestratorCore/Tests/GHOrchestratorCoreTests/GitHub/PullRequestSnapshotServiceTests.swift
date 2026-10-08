@@ -3,6 +3,34 @@ import XCTest
 @testable import GHOrchestratorCore
 
 final class PullRequestSnapshotServiceTests: XCTestCase {
+    func testMergeabilitySurvivesDashboardMappingAndLegacyDecoding() async throws {
+        let repository = ObservedRepository(owner: "cli", name: "cli")
+        for (raw, expected) in [("CONFLICTING", MergeableState.conflicting), ("MERGEABLE", .mergeable), ("UNKNOWN", .unknown), ("FUTURE_VALUE", .unknown), ("", .unknown)] {
+            let fixture = try XCTUnwrap(JSONSerialization.jsonObject(with: fixtureData(named: "approved_pr", subdirectory: "PullRequestSearch")) as? [String: Any])
+            var data = try XCTUnwrap(fixture["data"] as? [String: Any])
+            var search = try XCTUnwrap(data["search"] as? [String: Any])
+            var nodes = try XCTUnwrap(search["nodes"] as? [[String: Any]])
+            nodes[0]["mergeable"] = raw.isEmpty ? nil : raw
+            nodes[0]["statusCheckRollup"] = ["state": "SUCCESS", "contexts": ["nodes": []]]
+            search["nodes"] = nodes; data["search"] = search
+            let service = makeService(results: [.success(
+                data: try JSONSerialization.data(withJSONObject: ["data": data]),
+                response: makeHTTPResponse(url: "https://api.github.com/graphql", statusCode: 200)
+            )])
+            let snapshots = try await service.fetchRepositorySnapshots(for: [repository])
+            let items = try await ActionsJobsEnrichmentService(client: service.client).buildPullRequestItems(from: snapshots)
+            let item = try XCTUnwrap(items.first)
+            XCTAssertEqual(item.mergeable, expected, "Conflict state must survive snapshot and Actions enrichment: \(raw)")
+            XCTAssertEqual(item.reviewStatus, .approved, "Approval does not imply conflict-free status")
+            XCTAssertEqual(item.checkRollupState, .passing)
+            let encoded = try JSONEncoder().encode(item)
+            XCTAssertEqual(try JSONDecoder().decode(PullRequestItem.self, from: encoded).mergeable, expected)
+            var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+            legacy.removeValue(forKey: "mergeable")
+            XCTAssertNil(try JSONDecoder().decode(PullRequestItem.self, from: JSONSerialization.data(withJSONObject: legacy)).mergeable)
+        }
+    }
+
     func testFetchRepositorySnapshotsReturnsEmptyListForNoPullRequestsFixture() async throws {
         let repository = ObservedRepository(owner: "openai", name: "codex")
         let service = makeService(

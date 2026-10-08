@@ -36,6 +36,7 @@
 - Core layer owns auth request building, device-code/token polling, credential storage, GraphQL/REST parsing, PR aggregation, and validation helpers.
 
 ## Active Feature Plans
+- Target-branch conflict badges in the dashboard and conflict details in the viewer's Merge status sidebar are tracked in `PLAN-pr-viewer.md` (PV11); conflict-free status is required for the dashboard's ready count.
 - [PLAN-pr-viewer.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-pr-viewer.md): native in-app PR summary and conversation viewer, including the current Settings surface/chrome polish increment.
 - [PLAN-menu-bar.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-menu-bar.md): settings-window app menu commands and top-level menu pruning.
 - [PLAN-notifications.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-notifications.md): per-repository local notification triggers for PR and workflow events.
@@ -1526,6 +1527,14 @@
 - verification: Open Code Review delegated review covered all 10 selected production files with no blocking findings; excluded tests and design/plan files were checked manually. Final full app suite passed 115 tests and core suite passed 105 tests. The 2,004-row conversation and 1,000-thread fixtures measured p95 viewport update/forced layout of 4 ms and 3 ms, with at most 7 and 12 mounted rows. Tuist generation and build/launch verification passed. Source/tag `4e7655d3510d4868b33d987590dae3c967d2e132` was pushed to main and published as latest stable [0.5.6 (Build 53)](https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.5.6). The universal macOS 15+ DMG was Developer ID signed, notarized (accepted submission `7947251c-24f3-4ad9-bedd-29faf45986ad`), stapled and validated. Archive and downloaded apps passed strict codesign and Gatekeeper checks, with both x86_64/arm64, version 0.5.6/build 53, LSUIElement=true, and the HTML renderer bundled. Local checksum, uploaded asset digest, downloaded artifact and cask agree: `7ef79b203f7b550a91ea17dda1ce8fe55aa3ddded8b5878987159b1b4f81fdb0`. [Homebrew workflow 37776298258](https://github.com/ipavlidakis/gh-orchestrator/actions/runs/37776298258) passed and pushed cask commit `8565489`; local main fast-forwarded it. The refreshed public tap reports 0.5.6; cask style, online audit and fetch passed.
 - notes: The user accepted the local UI and explicitly authorized commit, push and a new release. Reused the existing local release configuration and repository release/Homebrew scripts; Browser remains the default destination and code diffs remain deferred. Final combined validation exposed UI-harness visibility/timing failures: benchmark windows now stay unoccluded, frame scheduling has a timer fallback, synthetic clicks enter the application event queue, and foreground Settings captures wait for activation to settle. Existing SceneStorage and archive category warnings, plus handled local-DMG Insufficient Context output, remain; older macOS appearance is not visually verified. During publication a draft metadata PATCH lacking tag_name selected a temporary draft tag. The published release was corrected to 0.5.6 with the exact source SHA, the unused empty draft and temporary tag were removed, and the existing Homebrew workflow was dispatched for 0.5.6 after the original temporary-tag run failed. Future draft metadata PATCH requests should retain the intended tag_name explicitly. The source development app was launched locally; the installed app was not upgraded.
 
+### T71: Release Merge Conflicts And Dashboard Persistence
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `PLAN-pr-viewer.md:PV11`, `PLAN-menu-bar.md:T35`, `T70`
+- goal: Commit and push the merge-conflict indicators and additional dashboard-persistence fix, then publish 0.5.7/build 54 with verified signed/notarized universal DMG and automatic Homebrew update.
+- verification: pending
+- notes: The user authorized commit, push and release, then requested the dashboard-persistence fix before those steps. Both increments are verified locally; full app-suite UI-harness limitations are recorded in T35 and PV11. Use the existing release configuration and scripts, preserve tag_name in draft metadata updates, and verify the release/cask checksum after publication.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1556,6 +1565,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-08: the menu-bar dashboard scope and repository filter join its sorting preferences in the existing Application Support settings file. PLAN-menu-bar.md:T35 owns restoration before the first fetch, persistence across app/popover sessions, and clearing a removed repository filter.
 - 2026-10-08: Settings uses a native NavigationSplitView/sidebar List, with system glass and corner geometry instead of custom rail drawing or repeated AppKit chrome overrides. Hide the sidebar toggle/title bubble; preserve native window-control integration with scene styles and a standard macOS 26 toolbar spacer. PLAN-pr-viewer.md:PV09 owns this visual-polish increment.
 - 2026-10-08: The optional In App PR destination opens a native summary/conversation window; Browser remains the default. PLAN-pr-viewer.md owns the paginated viewer and scrolling-performance validation. Code diffs are deferred.
 - 2026-10-07: PLAN-notifications.md:N09 declares `LSUIElement` for the menu-bar app and routes notification links through AppController's existing Dock-policy restoration. Visible Settings and the explicit Dock preference continue to control temporary regular-app activation.

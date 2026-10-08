@@ -153,6 +153,7 @@ extension GHPullRequestSnapshotService {
             createdAt
             updatedAt
             reviewDecision
+            mergeable
             reviewThreads(first: \(limits.reviewThreadLimit)) {
               nodes {
                 isResolved
@@ -334,6 +335,7 @@ extension GHPullRequestSnapshotService {
             createdAt: node.createdAt,
             updatedAt: updatedAt,
             reviewStatus: mapReviewStatus(node.reviewDecision),
+            mergeable: node.mergeable.flatMap(MergeableState.init(rawValue:)) ?? .unknown,
             unresolvedReviewThreadCount: unresolvedCount,
             unresolvedReviewComments: unresolvedComments,
             checkRollupState: mapCheckRollupState(node.statusCheckRollup?.state),

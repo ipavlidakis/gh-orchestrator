@@ -57,6 +57,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var pullRequestSortOrder: PullRequestSortOrder
     public var pullRequestOpenDestination: PullRequestOpenDestination
     public var repositorySortOrder: RepositorySortOrder
+    public var dashboardPullRequestScope: PullRequestScope
+    public var dashboardFocusedRepositoryID: String?
     public var pollingIntervalSeconds: Int
     public var hideDockIcon: Bool
     public var startAtLogin: Bool
@@ -73,6 +75,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         pullRequestSortOrder: PullRequestSortOrder = .title,
         pullRequestOpenDestination: PullRequestOpenDestination = .browser,
         repositorySortOrder: RepositorySortOrder = .lastModifiedNewestFirst,
+        dashboardPullRequestScope: PullRequestScope = .mine,
+        dashboardFocusedRepositoryID: String? = nil,
         pollingIntervalSeconds: Int = AppSettings.defaultPollingIntervalSeconds,
         hideDockIcon: Bool = AppSettings.defaultHideDockIcon,
         startAtLogin: Bool = AppSettings.defaultStartAtLogin,
@@ -90,6 +94,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.pullRequestSortOrder = pullRequestSortOrder
         self.pullRequestOpenDestination = pullRequestOpenDestination
         self.repositorySortOrder = repositorySortOrder
+        self.dashboardPullRequestScope = dashboardPullRequestScope
+        let focusedRepositoryID = dashboardFocusedRepositoryID?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        self.dashboardFocusedRepositoryID = deduplicatedRepositories.contains { $0.normalizedLookupKey == focusedRepositoryID } ? focusedRepositoryID : nil
         self.pollingIntervalSeconds = Self.clampPollingInterval(pollingIntervalSeconds)
         self.hideDockIcon = hideDockIcon
         self.startAtLogin = startAtLogin
@@ -110,6 +117,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case pullRequestSortOrder
         case pullRequestOpenDestination
         case repositorySortOrder
+        case dashboardPullRequestScope
+        case dashboardFocusedRepositoryID
         case pollingIntervalSeconds
         case hideDockIcon
         case startAtLogin
@@ -130,6 +139,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
             pullRequestSortOrder: try container.decodeIfPresent(PullRequestSortOrder.self, forKey: .pullRequestSortOrder) ?? .title,
             pullRequestOpenDestination: try container.decodeIfPresent(PullRequestOpenDestination.self, forKey: .pullRequestOpenDestination) ?? .browser,
             repositorySortOrder: try container.decodeIfPresent(RepositorySortOrder.self, forKey: .repositorySortOrder) ?? .lastModifiedNewestFirst,
+            dashboardPullRequestScope: try container.decodeIfPresent(PullRequestScope.self, forKey: .dashboardPullRequestScope) ?? .mine,
+            dashboardFocusedRepositoryID: try container.decodeIfPresent(String.self, forKey: .dashboardFocusedRepositoryID),
             pollingIntervalSeconds: try container.decodeIfPresent(Int.self, forKey: .pollingIntervalSeconds) ?? Self.defaultPollingIntervalSeconds,
             hideDockIcon: try container.decodeIfPresent(Bool.self, forKey: .hideDockIcon) ?? Self.defaultHideDockIcon,
             startAtLogin: try container.decodeIfPresent(Bool.self, forKey: .startAtLogin) ?? Self.defaultStartAtLogin,

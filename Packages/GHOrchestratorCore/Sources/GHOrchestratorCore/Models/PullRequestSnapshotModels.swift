@@ -20,6 +20,7 @@ public struct PullRequestSnapshotItem: Equatable, Identifiable, Sendable {
     public let createdAt: Date?
     public let updatedAt: Date
     public let reviewStatus: ReviewStatus
+    public let mergeable: MergeableState
     public let unresolvedReviewThreadCount: Int
     public let unresolvedReviewComments: [UnresolvedReviewCommentSnapshot]
     public let checkRollupState: CheckRollupState
@@ -40,6 +41,7 @@ public struct PullRequestSnapshotItem: Equatable, Identifiable, Sendable {
         createdAt: Date? = nil,
         updatedAt: Date,
         reviewStatus: ReviewStatus,
+        mergeable: MergeableState = .unknown,
         unresolvedReviewThreadCount: Int,
         unresolvedReviewComments: [UnresolvedReviewCommentSnapshot],
         checkRollupState: CheckRollupState,
@@ -55,6 +57,7 @@ public struct PullRequestSnapshotItem: Equatable, Identifiable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.reviewStatus = reviewStatus
+        self.mergeable = mergeable
         self.unresolvedReviewThreadCount = unresolvedReviewThreadCount
         self.unresolvedReviewComments = unresolvedReviewComments
         self.checkRollupState = checkRollupState

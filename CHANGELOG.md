@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.7 (Build 54) - 2026-10-08
+
+- Show merge-conflict status alongside review badges in the menu-bar dashboard.
+- Highlight conflicts and the target branch in the PR viewer's Merge status sidebar, with a button to open GitHub's conflict resolver.
+- Remember My PRs / All PRs, the repository filter, and both sort orders across popover openings and app launches.
+- Clear the saved repository filter when its repository is removed from Settings.
+
+**Full Changelog**: https://github.com/ipavlidakis/gh-orchestrator/compare/0.5.6...0.5.7
+
 ## 0.5.5 (Build 52) - 2026-10-08
 
 - Fix notification clicks leaving GHOrchestrator visible in the Dock when the hidden-Dock preference is enabled.
