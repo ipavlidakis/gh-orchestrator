@@ -15,6 +15,8 @@ final class SettingsModel {
     private let workflowListService: (any ActionsWorkflowListing)?
     private let workflowJobListService: (any ActionsWorkflowJobListing)?
     private let actionsInsightsService: (any ActionsInsightsLoading)?
+    private let repositoryListService: (any RepositoryListing)?
+    private let repositorySuggestions: (() -> [ObservedRepository])?
     private let sendNotificationPreviewAction: (@MainActor (RepositoryNotificationEvent) async throws -> Void)?
 
     @ObservationIgnored
@@ -27,15 +29,10 @@ final class SettingsModel {
     private var actionsInsightsTask: Task<Void, Never>?
 
     @ObservationIgnored
+    private var repositoryListTask: Task<Void, Never>?
+
+    @ObservationIgnored
     private var isActionsInsightsPaneVisible = false
-
-    var repositoryText: String {
-        didSet {
-            syncRepositories()
-        }
-    }
-
-    private(set) var repositoryValidationMessages: [String]
 
     var pollingIntervalText: String {
         didSet {
@@ -45,7 +42,17 @@ final class SettingsModel {
 
     private(set) var pollingIntervalValidationMessage: String?
 
-    var authenticationState: GitHubAuthenticationState
+    var authenticationState: GitHubAuthenticationState {
+        didSet {
+            guard authenticationState != oldValue else { return }
+            repositoryListTask?.cancel()
+            repositoryListTask = nil
+            discoveredRepositories = []
+            repositoryListState = .idle
+        }
+    }
+    private(set) var discoveredRepositories: [ObservedRepository] = []
+    private(set) var repositoryListState: SettingsRepositoryListState = .idle
     var notificationAuthorizationStatus: LocalNotificationAuthorizationStatus
     var workflowListStatesByRepositoryID: [String: SettingsWorkflowListState] = [:]
     var workflowJobListStatesByKey: [String: SettingsWorkflowListState] = [:]
@@ -80,6 +87,8 @@ final class SettingsModel {
         workflowListService: (any ActionsWorkflowListing)? = nil,
         workflowJobListService: (any ActionsWorkflowJobListing)? = nil,
         actionsInsightsService: (any ActionsInsightsLoading)? = nil,
+        repositoryListService: (any RepositoryListing)? = nil,
+        repositorySuggestions: (() -> [ObservedRepository])? = nil,
         sendNotificationPreviewAction: (@MainActor (RepositoryNotificationEvent) async throws -> Void)? = nil
     ) {
         self.store = store
@@ -93,9 +102,9 @@ final class SettingsModel {
         self.workflowListService = workflowListService
         self.workflowJobListService = workflowJobListService
         self.actionsInsightsService = actionsInsightsService
+        self.repositoryListService = repositoryListService
+        self.repositorySuggestions = repositorySuggestions
         self.sendNotificationPreviewAction = sendNotificationPreviewAction
-        self.repositoryText = Self.repositoryText(from: store.settings.observedRepositories)
-        self.repositoryValidationMessages = []
         self.pollingIntervalText = String(store.settings.pollingIntervalSeconds)
         self.pollingIntervalValidationMessage = nil
         self.hideDockIcon = store.settings.hideDockIcon
@@ -108,6 +117,7 @@ final class SettingsModel {
         workflowListTasksByRepositoryID.values.forEach { $0.cancel() }
         workflowJobListTasksByKey.values.forEach { $0.cancel() }
         actionsInsightsTask?.cancel()
+        repositoryListTask?.cancel()
     }
 
     var pullRequestSortOrder: PullRequestSortOrder {
@@ -175,6 +185,59 @@ final class SettingsModel {
 
     var observedRepositories: [ObservedRepository] {
         store.settings.observedRepositories
+    }
+
+    func repositories(matching query: String) -> [ObservedRepository] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        var repositories = observedRepositories
+        if !query.isEmpty {
+            repositories += discoveredRepositories
+            if case .authenticated = authenticationState {
+                repositories += repositorySuggestions?() ?? []
+            }
+        }
+        var seen = Set<String>()
+        return repositories.filter {
+            seen.insert($0.normalizedLookupKey).inserted &&
+            (query.isEmpty || $0.fullName.localizedCaseInsensitiveContains(query))
+        }.sorted { $0.fullName.localizedStandardCompare($1.fullName) == .orderedAscending }
+    }
+
+    func loadRepositoryCatalogIfNeeded() {
+        guard repositoryListState == .idle else { return }
+        refreshRepositoryCatalog()
+    }
+
+    func refreshRepositoryCatalog() {
+        repositoryListTask?.cancel()
+        repositoryListTask = nil
+        guard case .authenticated = authenticationState else {
+            repositoryListState = .failed("Sign in to search your GitHub repositories.")
+            return
+        }
+        guard let repositoryListService else {
+            repositoryListState = .failed("Repository search is unavailable.")
+            return
+        }
+        repositoryListState = .loading
+        repositoryListTask = Task { @MainActor [weak self, repositoryListService] in
+            do {
+                let repositories = try await repositoryListService.listRepositories()
+                guard !Task.isCancelled, let self else { return }
+                self.discoveredRepositories = repositories
+                self.repositoryListState = .loaded
+                self.repositoryListTask = nil
+            } catch {
+                guard !Task.isCancelled, let self else { return }
+                self.repositoryListState = .failed(error.localizedDescription)
+                self.repositoryListTask = nil
+            }
+        }
+    }
+
+    func configureRepository(_ repository: ObservedRepository) {
+        guard !observedRepositories.contains(where: { $0.normalizedLookupKey == repository.normalizedLookupKey }) else { return }
+        store.settings.observedRepositories.append(repository)
     }
 
     var actionsInsightsSelectedRepository: ObservedRepository? {
@@ -392,8 +455,6 @@ final class SettingsModel {
     }
 
     func reloadFromStore() {
-        repositoryText = Self.repositoryText(from: store.settings.observedRepositories)
-        repositoryValidationMessages = []
         pollingIntervalText = String(store.settings.pollingIntervalSeconds)
         pollingIntervalValidationMessage = nil
         hideDockIcon = store.settings.hideDockIcon
@@ -453,13 +514,24 @@ final class SettingsModel {
 
     func setActionsInsightsRepositoryID(_ repositoryID: String?) {
         let normalizedRepositoryID = repositoryID.map(RepositoryNotificationSettings.normalizedRepositoryID)
-        updateActionsInsightsSelection { selection in
-            selection.repositoryID = normalizedRepositoryID
-            selection.workflowID = nil
-            selection.workflowName = nil
-            selection.jobName = nil
-            selection.includesAllJobs = false
+        if let normalizedRepositoryID, ObservedRepository(rawValue: normalizedRepositoryID) == nil { return }
+        guard normalizedRepositoryID != store.settings.actionsInsightsSelection.repositoryID else { return }
+        if let normalizedRepositoryID, let repository = ObservedRepository(rawValue: normalizedRepositoryID) {
+            configureRepository(repository)
         }
+        var settings = store.settings
+        var previousSelection = settings.actionsInsightsSelection
+        previousSelection.repositoryID = actionsInsightsSelectedRepository?.normalizedLookupKey
+        if let previousID = previousSelection.repositoryID {
+            settings.actionsInsightsSelectionsByRepositoryID[previousID] = previousSelection
+        }
+        if let normalizedRepositoryID {
+            settings.actionsInsightsSelection = settings.actionsInsightsSelectionsByRepositoryID[normalizedRepositoryID] ?? ActionsInsightsSelection(repositoryID: normalizedRepositoryID)
+            settings.actionsInsightsSelectionsByRepositoryID[normalizedRepositoryID] = settings.actionsInsightsSelection
+        } else {
+            settings.actionsInsightsSelection = ActionsInsightsSelection(period: previousSelection.period)
+        }
+        store.settings = settings
         reloadActionsInsightsAfterSelectionChange()
         loadActionsInsightsDependenciesIfNeeded()
     }
@@ -625,30 +697,6 @@ final class SettingsModel {
         actionsInsightsTask = task
     }
 
-    @discardableResult
-    func addObservedRepository(from rawValue: String) -> Bool {
-        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            repositoryValidationMessages = ["Enter a repository in owner/name format."]
-            return false
-        }
-
-        guard let repository = ObservedRepository(rawValue: trimmed) else {
-            repositoryValidationMessages = ["Invalid repository entry: \(trimmed)"]
-            return false
-        }
-
-        if store.settings.observedRepositories.contains(where: { $0.normalizedLookupKey == repository.normalizedLookupKey }) {
-            repositoryValidationMessages = ["Repository already added: \(repository.fullName)"]
-            return false
-        }
-
-        repositoryValidationMessages = []
-        store.settings.observedRepositories.append(repository)
-        repositoryText = Self.repositoryText(from: store.settings.observedRepositories)
-        return true
-    }
-
     func removeObservedRepositories(withIDs ids: Set<String>) {
         guard !ids.isEmpty else {
             return
@@ -671,14 +719,16 @@ final class SettingsModel {
             return
         }
 
-        repositoryValidationMessages = []
-
+        let previousInsightsRepositoryID = actionsInsightsSelectedRepositoryID
         var updatedSettings = store.settings
         updatedSettings.observedRepositories = updatedRepositories
         updatedSettings.reconcileNotificationSettingsWithObservedRepositories()
         updatedSettings.reconcileActionsInsightsSelectionWithObservedRepositories()
         store.settings = updatedSettings
-        repositoryText = Self.repositoryText(from: updatedRepositories)
+        if actionsInsightsSelectedRepositoryID != previousInsightsRepositoryID {
+            reloadActionsInsightsAfterSelectionChange()
+            loadActionsInsightsDependenciesIfNeeded()
+        }
     }
 
     func repositoryNotificationSettings(
@@ -935,22 +985,6 @@ final class SettingsModel {
         return "\(filters.count) selected"
     }
 
-    private func syncRepositories() {
-        let parseResult = ObservedRepository.parseList(from: repositoryText)
-
-        repositoryValidationMessages = parseResult.invalidEntries.map {
-            "Invalid repository entry: \($0)"
-        }
-
-        if store.settings.observedRepositories != parseResult.repositories {
-            var updatedSettings = store.settings
-            updatedSettings.observedRepositories = parseResult.repositories
-            updatedSettings.reconcileNotificationSettingsWithObservedRepositories()
-            updatedSettings.reconcileActionsInsightsSelectionWithObservedRepositories()
-            store.settings = updatedSettings
-        }
-    }
-
     private func syncPollingInterval() {
         guard !isUpdatingPollingIntervalText else {
             return
@@ -992,7 +1026,11 @@ final class SettingsModel {
         mutate: (inout ActionsInsightsSelection) -> Void
     ) {
         var settings = store.settings
+        settings.actionsInsightsSelection.repositoryID = actionsInsightsSelectedRepository?.normalizedLookupKey
         mutate(&settings.actionsInsightsSelection)
+        if let repositoryID = settings.actionsInsightsSelection.repositoryID {
+            settings.actionsInsightsSelectionsByRepositoryID[repositoryID] = settings.actionsInsightsSelection
+        }
         store.settings = settings
     }
 
@@ -1131,7 +1169,4 @@ final class SettingsModel {
         "\(RepositoryNotificationSettings.normalizedRepositoryID(repositoryID))::\(RepositoryNotificationSettings.normalizedWorkflowName(workflowName))"
     }
 
-    private static func repositoryText(from repositories: [ObservedRepository]) -> String {
-        repositories.map(\.fullName).joined(separator: "\n")
-    }
 }

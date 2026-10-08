@@ -20,7 +20,7 @@ final class SettingsRenderingTests: XCTestCase {
         XCTAssertLessThan(abs(corner.greenComponent - corner.redComponent), 0.05, "The child tint must not escape the rounded corner")
         let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: storageURL) }
-        let model = SettingsModel(store: SettingsStore(storageURL: storageURL), notificationAuthorizationStatus: .authorized)
+        let model = SettingsModel(store: SettingsStore(storageURL: storageURL), authenticationState: .authenticated(username: "example"), notificationAuthorizationStatus: .authorized, repositoryListService: RenderingRepositoryListing())
         let notifications = ScrollView {
             VStack(alignment: .leading, spacing: 20) { NotificationSettingsPane(model: model) }.padding(28)
         }
@@ -59,7 +59,7 @@ final class SettingsRenderingTests: XCTestCase {
         let repository = ObservedRepository(owner: "GetStream", name: "stream-video-swift")
         store.settings.observedRepositories = [repository]
         store.settings.actionsInsightsSelection = ActionsInsightsSelection(repositoryID: repository.id, workflowID: 1, workflowName: "CodeQL")
-        let model = SettingsModel(store: store, authenticationState: .authenticated(username: "example"))
+        let model = SettingsModel(store: store, authenticationState: .authenticated(username: "example"), repositoryListService: RenderingRepositoryListing())
         model.workflowListStatesByRepositoryID[repository.id] = .loaded(["CodeQL"])
         model.workflowItemsByRepositoryID[repository.id] = [ActionsWorkflowItem(id: 1, name: "CodeQL", path: ".github/workflows/codeql.yml", state: "active")]
         let jobListKey = "\(RepositoryNotificationSettings.normalizedRepositoryID(repository.id))::\(RepositoryNotificationSettings.normalizedWorkflowName("CodeQL"))"
@@ -71,14 +71,50 @@ final class SettingsRenderingTests: XCTestCase {
             XCTAssertTrue(generalText.contains("refresh every"))
             XCTAssertTrue(generalText.contains("pull request order"))
             XCTAssertEqual(generalText.components(separatedBy: "seconds").count - 1, 1, "Polling units must appear once, without duplicate field/stepper labels")
-            let insights = Form { ActionsInsightsSettingsPane(model: model) }.formStyle(.grouped)
-            let result = try await render(insights, size: CGSize(width: 570, height: 600), scheme: scheme, name: "insights")
+            let insights = ScrollView { VStack(alignment: .leading, spacing: 20) { ActionsInsightsSettingsPane(model: model) }.padding(28) }
+            let result = try await render(insights, size: CGSize(width: 570, height: 600), scheme: scheme, name: "insights", foreground: true)
             let insightsText = result.text
             XCTAssertTrue(insightsText.contains("getstream/stream-video-swift"), "The selected repository must fit without clipping")
             XCTAssertTrue(insightsText.contains("codeql"), "The selected workflow must remain visible")
-            let selectedRepository = try XCTUnwrap(result.observations.first { $0.topCandidates(1).first?.string.lowercased().contains("getstream/stream-video-swift") == true })
-            let selectedWorkflow = try XCTUnwrap(result.observations.first { $0.topCandidates(1).first?.string.lowercased().hasPrefix("last month") == true && $0.topCandidates(1).first!.string.count < 16 })
-            XCTAssertEqual(selectedWorkflow.boundingBox.maxX, selectedRepository.boundingBox.maxX, accuracy: 0.06, "Picker values must align at the trailing edge regardless of title length")
+            let selectedWorkflow = try XCTUnwrap(result.observations.first { $0.topCandidates(1).first?.string.lowercased() == "codeql" })
+            let selectedPeriod = try XCTUnwrap(result.observations.first { $0.topCandidates(1).first?.string.lowercased().hasPrefix("last month") == true && $0.topCandidates(1).first!.string.count < 16 })
+            XCTAssertEqual(selectedWorkflow.boundingBox.maxX, selectedPeriod.boundingBox.maxX, accuracy: 0.06, "Picker values must align at the trailing edge regardless of title length")
+        }
+    }
+
+    func testConfiguredRepositoriesRemainVisibleWithoutSearching() async throws {
+        let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: storageURL) }
+        let store = SettingsStore(storageURL: storageURL)
+        store.settings.observedRepositories = [ObservedRepository(owner: "orbit", name: "native-app"), ObservedRepository(owner: "orbit", name: "web-client")]
+        let model = SettingsModel(store: store, authenticationState: .authenticated(username: "example"), notificationAuthorizationStatus: .authorized, repositoryListService: RenderingRepositoryListing())
+        for scheme in [ColorScheme.light, .dark] {
+            for (name, pane) in [("configured-notifications", AnyView(NotificationSettingsPane(model: model))), ("configured-insights", AnyView(ActionsInsightsSettingsPane(model: model)))] {
+                let page = ScrollView { VStack(alignment: .leading, spacing: 20) { pane }.padding(28) }
+                let window = NavigationSplitView {
+                    List {
+                        Label("Insights", systemImage: "chart.xyaxis.line")
+                        Label("Notifications", systemImage: "bell.badge")
+                    }
+                    .navigationSplitViewColumnWidth(196)
+                    .toolbar(removing: .sidebarToggle)
+                } detail: {
+                    page
+                }
+                .toolbar(removing: .title)
+                .toolbar {
+                    if #available(macOS 26, *) {
+                        ToolbarSpacer(.flexible)
+                    }
+                }
+                let result = try await render(window, size: CGSize(width: 820, height: 840), scheme: scheme, name: name, foreground: true)
+                XCTAssertTrue(result.text.contains("search repositories"))
+                let search = try XCTUnwrap(result.observations.first { $0.topCandidates(1).first?.string.lowercased().contains("search repositories") == true })
+                XCTAssertGreaterThan(search.boundingBox.minX, 0.25, "Repository search belongs above the detail column in the trailing toolbar")
+                XCTAssertTrue(result.text.contains("orbit/native-app"))
+                XCTAssertTrue(result.text.contains("orbit/web-client"))
+                XCTAssertFalse(result.text.contains("add repositories before"))
+            }
         }
     }
 
@@ -114,5 +150,11 @@ final class SettingsRenderingTests: XCTestCase {
         try VNImageRequestHandler(url: output).perform([request])
         let observations = request.results ?? []
         return (observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased(), observations)
+    }
+}
+
+struct RenderingRepositoryListing: RepositoryListing {
+    func listRepositories() async throws -> [ObservedRepository] {
+        [ObservedRepository(owner: "GetStream", name: "stream-video-swift"), ObservedRepository(owner: "orbit", name: "native-app"), ObservedRepository(owner: "orbit", name: "web-client")]
     }
 }

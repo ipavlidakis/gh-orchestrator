@@ -11,7 +11,7 @@
 - Use only Swift, Tuist, SwiftPM, Apple frameworks, and direct GitHub HTTP APIs; do not depend on the `gh` CLI.
 - Ship a menu-bar-first app using `MenuBarExtra` plus a dedicated Settings window.
 - Authenticate the user via GitHub OAuth device flow launched from the app.
-- Observe only user-configured repositories, then list either the logged-in user's open PRs or all open PRs in those repositories.
+- Discover the logged-in user's authored PRs and requested reviews globally. Discover repositories in Settings for notification and Actions Insights configuration.
 - Group PRs by repository, sort repository sections by their most recent PR update, and sort PRs within each repository by the saved title or creation-date preference.
 - Show PR review state, checks state, unresolved review-thread count, and expandable Actions jobs plus steps.
 - Keep dashboard polling on the configured interval whether the menu window is hidden or visible; opening or closing the menu must not force an immediate refresh.
@@ -23,7 +23,7 @@
 - Access tokens are stored in Keychain, not in `AppSettings`.
 - GitHub scope for v1: `repo`.
 - Persistence: app settings live in an Application Support file (`plist` or `json`), not `UserDefaults`; no database or disk cache.
-- Empty repository list means the app is not configured yet. It does not fall back to all repositories.
+- Repository registration is not required. Notifications remain opt-in per repository; the global PR dashboard works with no configured repositories.
 - Polling interval is configurable, defaults to `60` seconds, and must be clamped to `15...900`.
 - Step links use `job.html_url#step:<stepNumber>:1` and fall back to `job.html_url`.
 - Source builds without OAuth credentials show a not-configured state instead of crashing.
@@ -1535,6 +1535,32 @@
 - verification: Source/tag `ca51301c8af960755fdc4b71d3de5d20ff60448d` was committed and pushed, then published as latest stable [0.5.7 (Build 54)](https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.5.7). All 106 core tests and 47 focused dashboard/Settings/design-render tests passed; Tuist generation, build/launch verification and diff checks passed. The universal arm64/x86_64 macOS 15+ app has version 0.5.7/build 54 and LSUIElement=true. Strict signing and Gatekeeper checks passed. Apple accepted notarization submission `0e07978a-aa83-44c3-8d63-7ca356506fc4`; stapling and validation passed. Local DMG, uploaded GitHub asset digest, public downloaded DMG and published cask match SHA-256 `b94a29c934557f1393168f26c8369995aaa74104b2c4abecd6c890c39d624856`. The public downloaded DMG staple also validated. [Homebrew workflow 37788229142](https://github.com/ipavlidakis/gh-orchestrator/actions/runs/37788229142) succeeded and pushed cask commit `8ff82ca`; both repository and public tap fast-forwarded it. Homebrew cask style, online audit and fetch passed.
 - notes: The user authorized commit, push and release, then requested the dashboard-persistence fix before those steps. Both increments are included. The release metadata PATCH explicitly retained tag_name=0.5.7 and used the exact candidate SHA; the public tag resolves to that SHA. Full app-suite UI-harness limitations remain recorded in T35 and PV11: 117/119 passed, with an intermittent key-window assertion and a Settings capture failure that also reproduced before the persistence fix; the final focused design-rendering run passed. Two existing archive metadata/category warnings remain. Live pointer/relaunch automation timed out; the development app was launched, and the installed app was not upgraded.
 
+### T72: Discover Repositories Within Notifications And Insights
+- status: `done`
+- owner: `codex-main`
+- depends_on: `PLAN-menu-bar.md:T36`
+- goal: remove the Repositories Settings pane and let users search GitHub repositories directly in Notifications and Actions Insights, while keeping configured repositories visible without search.
+- scope:
+  - paginated authenticated repository discovery in the core package, using the existing GitHub API client.
+  - shared searchable selection UI with on-demand workflow details and explicit loading/error states.
+  - preserve existing repository notification preferences and Insights selection in the local settings file; discovery refreshes never replace saved configuration.
+- verification:
+  - 2026-10-08: all 18 focused core settings/repository-discovery tests and all 62 focused app Settings, persistence, notification-monitor, dashboard and rendering tests passed. Regressions for switching Insights repositories, forgetting the selected repository and adding an unwatched repository to an active notification monitor were demonstrated failing before their fixes. Legacy settings migrate, discovery never replaces configured repositories, notification enablement stays opt-in, and Insights filters restore per repository after switching/relaunch.
+  - 2026-10-08: foreground light/dark native split-view captures verified trailing toolbar search and refresh, system glass, configured repository visibility without searching, and readable filter controls. Tuist generation, final `./script/build_and_run.sh --verify`, and whitespace checks passed.
+  - 2026-10-08: Open Code Review delegate preview/rules covered all 9 selected production files against the Swift rules, with no remaining actionable findings: AppController.swift, RepositoryNotificationMonitor.swift, ActionsInsightsSettingsPane.swift, SettingsModel.swift, SettingsPlaceholderView.swift, AppSettings.swift, RepositorySearchSettingsGroup.swift, SettingsRepositoryListState.swift and RepositoryListService.swift. DESIGN.md and PLAN.md were excluded as unsupported extensions; six changed test files were excluded by default path rules. All eight exclusions were inspected manually.
+- notes:
+  - Local implementation only; no app-repository commit, push, PR, or release requested.
+  - Full core suite passed 116/117; the unchanged `ActionsWorkflowJobListServiceTests.testListJobNamesAggregatesRecentWorkflowRunJobs` request-order assertion also failed in 3/5 repetitions at the unchanged baseline HEAD. Its baseline worktree was archived after verification. The full app suite was not run. Two existing SceneStorage rendering-harness warnings remain. One intermediate rendering run exited its test runner early with code 0; subsequent focused and final 62-test runs passed.
+  - Native computer control timed out selecting the running debug app, including an absolute-path retry. Actual foreground test-window visuals and debug app build/launch passed; live pointer search/selection with the app's OAuth token and private organization visibility remain unverified. Older macOS appearance was not visually verified.
+
+### T73: Release Repository Discovery And Global PR Categories
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `T72`, `PLAN-menu-bar.md:T36`
+- goal: commit and push the accepted repository Settings changes, then publish 0.5.8/build 55 and verify the signed/notarized universal DMG, public download and automatic Homebrew update.
+- verification: T72 records the focused tests, visual captures, build/launch and source review; release artifact and public readback checks pending.
+- notes: The user accepted the screenshots and explicitly authorized commit, push and release. Reuse the existing release config and same-repository Homebrew workflow. Keep the previously disclosed core request-order test flake and live OAuth interaction limits visible.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1565,6 +1591,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-08: T72 removes manual repository registration and its Settings pane. Notifications and Actions Insights search an authenticated GitHub repository catalogue, keep saved repositories visible without searching, and retain existing local preferences independently of discovery. Newly discovered repositories are not automatically watched; workflow details load only after configuring/selecting a repository. Search and refresh belong in the native window toolbar, adopting system search behavior and Liquid Glass on macOS 26.
 - 2026-10-08: PLAN-menu-bar.md:T36 replaces repository-scoped Mine/All discovery with global Authored by me / Needs my review categories and a native category menu. Configured repositories remain available for repository-specific settings; global discovery, grouping, sorting and local repository filtering include newly discovered repositories.
 - 2026-10-08: the menu-bar dashboard scope and repository filter join its sorting preferences in the existing Application Support settings file. PLAN-menu-bar.md:T35 owns restoration before the first fetch, persistence across app/popover sessions, and clearing a removed repository filter.
 - 2026-10-08: Settings uses a native NavigationSplitView/sidebar List, with system glass and corner geometry instead of custom rail drawing or repeated AppKit chrome overrides. Hide the sidebar toggle/title bubble; preserve native window-control integration with scene styles and a standard macOS 26 toolbar spacer. PLAN-pr-viewer.md:PV09 owns this visual-polish increment.

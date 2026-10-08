@@ -123,6 +123,8 @@ final class AppController {
             workflowListService: ActionsWorkflowListService(client: apiClient),
             workflowJobListService: ActionsWorkflowJobListService(client: apiClient),
             actionsInsightsService: ActionsInsightsService(client: apiClient),
+            repositoryListService: RepositoryListService(client: apiClient),
+            repositorySuggestions: { [dashboardModel] in dashboardModel.availableRepositories },
             sendNotificationPreviewAction: notificationPreviewAction
         )
         settingsModelBox.value = resolvedSettingsModel

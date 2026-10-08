@@ -7,12 +7,19 @@ struct ActionsInsightsSettingsPane: View {
 
     var body: some View {
         Group {
+            RepositorySearchSettingsGroup(model: model, selectedRepositoryID: model.actionsInsightsSelectedRepositoryID) { repository in
+                model.setActionsInsightsRepositoryID(repository.id)
+            }
+
             SettingsGroup(title: "Filters") {
                 SettingsRow(
                     title: "Repository",
-                    subtitle: "Choose one observed repository."
+                    subtitle: "Select a configured repository above, or search GitHub."
                 ) {
-                    repositoryPicker
+                    Text(model.actionsInsightsSelectedRepository?.fullName ?? "No repository selected")
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(model.actionsInsightsSelectedRepository?.fullName ?? "Search for a repository above.")
                 }
 
                 if model.actionsInsightsSelectedRepository != nil {
@@ -78,28 +85,6 @@ struct ActionsInsightsSettingsPane: View {
         .onDisappear {
             model.actionsInsightsPaneDidDisappear()
         }
-    }
-
-    private var repositoryPicker: some View {
-        Picker(
-            "Repository",
-            selection: Binding(
-                get: { model.actionsInsightsSelectedRepositoryID ?? "" },
-                set: { model.setActionsInsightsRepositoryID($0.isEmpty ? nil : $0) }
-            )
-        ) {
-            if model.observedRepositories.isEmpty {
-                Text("No repositories")
-                    .tag("")
-            } else {
-                ForEach(model.observedRepositories) { repository in
-                    Text(repository.fullName)
-                        .tag(repository.id)
-                }
-            }
-        }
-        .labelsHidden()
-        .disabled(model.observedRepositories.isEmpty)
     }
 
     @ViewBuilder

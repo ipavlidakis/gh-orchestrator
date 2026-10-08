@@ -6,7 +6,6 @@ import SwiftUI
 private enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
     case general
     case github
-    case repositories
     case insights
     case notifications
     case requests
@@ -19,8 +18,6 @@ private enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
             return "General"
         case .github:
             return "GitHub"
-        case .repositories:
-            return "Repositories"
         case .insights:
             return "Insights"
         case .notifications:
@@ -36,8 +33,6 @@ private enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
             return "gearshape"
         case .github:
             return "person.crop.circle.badge.checkmark"
-        case .repositories:
-            return "tray.full"
         case .insights:
             return "chart.xyaxis.line"
         case .notifications:
@@ -73,8 +68,6 @@ struct SettingsWindowView: View {
                     )
                 case .github:
                     GitHubSettingsPane(model: model)
-                case .repositories:
-                    RepositorySettingsPane(model: model)
                 case .insights:
                     ActionsInsightsSettingsPane(model: model)
                 case .notifications:
@@ -89,7 +82,6 @@ struct SettingsWindowView: View {
         .toolbar(removing: .title)
         .toolbar {
             if #available(macOS 26, *) {
-                // Preserve native full-height sidebar chrome after removing every toolbar control.
                 ToolbarSpacer(.flexible)
             }
         }
@@ -754,94 +746,13 @@ struct GitHubSettingsPane: View {
     }
 }
 
-struct RepositorySettingsPane: View {
-    @Bindable var model: SettingsModel
-    @State private var selectedRepositoryIDs = Set<String>()
-
-    var body: some View {
-        Group {
-            SettingsGroup(title: "Observed repositories") {
-                VStack(spacing: 0) {
-                    Group {
-                        if model.observedRepositories.isEmpty {
-                            Text("No Observed Repositories")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            List(selection: $selectedRepositoryIDs) {
-                                ForEach(model.observedRepositories) { repository in
-                                    Text(repository.fullName)
-                                        .font(.system(.body, design: .monospaced))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .contentShape(Rectangle())
-                                        .tag(repository.id)
-                                }
-                            }
-                            .listStyle(.plain)
-                        }
-                    }
-                    .frame(minHeight: 240)
-
-                    HStack(spacing: 8) {
-                        Button {
-                            presentAddRepositoryAlert()
-                        } label: {
-                            Label("Add Repository", systemImage: "plus")
-                                .labelStyle(.iconOnly)
-                                .frame(width: 22, height: 16)
-                        }
-
-                        Button {
-                            model.removeObservedRepositories(withIDs: selectedRepositoryIDs)
-                            selectedRepositoryIDs.removeAll()
-                        } label: {
-                            Label("Remove Repositories", systemImage: "minus")
-                                .labelStyle(.iconOnly)
-                                .frame(width: 22, height: 16)
-                        }
-                        .disabled(selectedRepositoryIDs.isEmpty)
-
-                        Spacer()
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                }
-            } footer: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Add repositories in owner/name format.")
-
-                    if !model.repositoryValidationMessages.isEmpty {
-                        ForEach(model.repositoryValidationMessages, id: \.self) { message in
-                            Label(message, systemImage: "exclamationmark.triangle.fill")
-                                .labelStyle(.titleAndIcon)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func presentAddRepositoryAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Add Repository"
-        alert.informativeText = "Enter the repository in owner/name format."
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Add")
-        alert.addButton(withTitle: "Cancel")
-
-        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
-        textField.placeholderString = "owner/name"
-        alert.accessoryView = textField
-
-        NSApplication.shared.activate(ignoringOtherApps: true)
-
-        if alert.runModal() == .alertFirstButtonReturn {
-            _ = model.addObservedRepository(from: textField.stringValue)
-        }
-    }
-}
-
 struct NotificationSettingsPane: View {
     @Bindable var model: SettingsModel
+    @State private var selectedRepositoryID: String?
+
+    private var selectedRepository: ObservedRepository? {
+        model.observedRepositories.first { $0.id == selectedRepositoryID } ?? model.observedRepositories.first
+    }
 
     var body: some View {
         Group {
@@ -865,21 +776,14 @@ struct NotificationSettingsPane: View {
                 }
             }
 
-            if model.observedRepositories.isEmpty {
-                SettingsGroup(title: "Repository triggers") {
-                    SettingsTextBlock(
-                        title: "No repositories configured",
-                        bodyText: "Add repositories before enabling notification triggers."
-                    )
-                }
-            } else {
-                ForEach(model.observedRepositories) { repository in
-                    SettingsGroup(title: repository.fullName) {
-                        RepositoryNotificationSettingsRows(
-                            repository: repository,
-                            model: model
-                        )
-                    }
+            RepositorySearchSettingsGroup(model: model, selectedRepositoryID: selectedRepository?.id) { repository in
+                model.configureRepository(repository)
+                selectedRepositoryID = repository.id
+            }
+
+            if let repository = selectedRepository {
+                SettingsGroup(title: repository.fullName) {
+                    RepositoryNotificationSettingsRows(repository: repository, model: model)
                 }
 
                 Text("Notification polling checks all open PRs in enabled repositories, independent of the dashboard filter.")
@@ -965,8 +869,10 @@ private struct RepositoryNotificationSettingsRows: View {
             .labelsHidden()
             .toggleStyle(.switch)
         }
-        .task {
-            model.loadWorkflowNamesIfNeeded(repositoryID: repository.id)
+        .task(id: isEnabled ? repository.id : nil) {
+            if isEnabled {
+                model.loadWorkflowNamesIfNeeded(repositoryID: repository.id)
+            }
         }
 
         ForEach(RepositoryNotificationTrigger.allCases, id: \.self) { trigger in

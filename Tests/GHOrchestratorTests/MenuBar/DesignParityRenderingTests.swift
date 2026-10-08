@@ -84,7 +84,7 @@ final class DesignParityRenderingTests: XCTestCase {
 
         let workflow = ActionsWorkflowItem(id: 2, name: "CodeQL", path: ".github/workflows/codeql.yml", state: "active")
         store.settings.actionsInsightsSelection = ActionsInsightsSelection(repositoryID: repository.id, workflowID: workflow.id, workflowName: workflow.name, period: .last7Days)
-        let settingsModel = SettingsModel(store: store, authenticationState: .authenticated(username: "alex"), notificationAuthorizationStatus: .authorized)
+        let settingsModel = SettingsModel(store: store, authenticationState: .authenticated(username: "alex"), notificationAuthorizationStatus: .authorized, repositoryListService: RenderingRepositoryListing())
         settingsModel.setRepositoryNotificationsEnabled(true, repositoryID: repository.id)
         settingsModel.workflowListStatesByRepositoryID[repository.id] = .loaded([workflow.name])
         settingsModel.workflowItemsByRepositoryID[repository.id] = [workflow]
@@ -117,7 +117,6 @@ final class DesignParityRenderingTests: XCTestCase {
             .environment(\.settingsGlassDisabled, true)
         }
         try await render(page(GitHubSettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 420), name: "pane-github")
-        try await render(page(RepositorySettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 420), name: "pane-repositories")
         try await render(page(NotificationSettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 680), name: "settings-notifications")
         try await render(page(ActionsInsightsSettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 1100), name: "settings-insights")
         try await render(page(GitHubRequestUsagePane(requestLogModel: log)), size: CGSize(width: 624, height: 420), name: "pane-requests")

@@ -56,6 +56,25 @@ final class RepositoryNotificationMonitorTests: XCTestCase {
         XCTAssertEqual(delivery.deliveredEvents.map(\.trigger), [.approval])
     }
 
+    func testConfiguringUnwatchedRepositoryPreservesNotificationBaseline() async {
+        let store = configuredStore()
+        let dataSource = SequencedNotificationDataSource(responses: [[section(reviewStatus: .reviewRequired)], [section(reviewStatus: .reviewRequired)], [section(reviewStatus: .approved)]])
+        let sleeper = ResumableNotificationSleeper()
+        let delivery = RecordingNotificationDelivery(status: .authorized)
+        let monitor = RepositoryNotificationMonitor(settingsStore: store, dataSource: dataSource, sleeper: sleeper, delivery: delivery, authenticationState: .authenticated(username: "octocat"))
+        await dataSource.waitForLoadCount(1)
+        await sleeper.finishNextSleep()
+        await dataSource.waitForLoadCount(2)
+
+        SettingsModel(store: store).configureRepository(ObservedRepository(owner: "orbit", name: "insights-only"))
+        await sleeper.finishNextSleep()
+        await dataSource.waitForLoadCount(3)
+        await waitUntil("approval after configuring an unwatched repository") { delivery.deliveredEvents.count == 1 }
+        XCTAssertEqual(delivery.deliveredEvents.map(\.trigger), [.approval])
+        monitor.setAuthenticationState(.signedOut)
+        await sleeper.finishNextSleep()
+    }
+
     func testMonitorSuppressesDeliveryWhenNotificationsAreUnauthorized() async {
         let store = configuredStore()
         let dataSource = SequencedNotificationDataSource(

@@ -93,7 +93,8 @@ Owner: `SettingsPlaceholderView.swift` and `Settings/`.
   - `SettingsRow(title:subtitle:subtitleColor:)`: title left, control right. The control is fixed-size and trailing.
   - `SettingsTextBlock(title:bodyText:)`: padded explanatory text inside a card.
 - **Controls.** Master switches use `.toggleStyle(.switch)`; sub-options use checkboxes. Numeric fields pair a text field with a `Stepper`. Icon-only buttons in a card use equal fixed frames (for example 22 x 16 for add and remove).
-- **Notifications** use one `SettingsGroup` per repository, led by "Watch this repository", with indented trigger rows below it, disabled when the master switch is off.
+- **Repository configuration.** There is no Repositories pane. Notifications and Actions Insights use native toolbar search (`searchable`, toolbar placement) and a labeled refresh action, allowing the system to supply Liquid Glass, grouping and keyboard behavior. Cards contain repository results and loading/error state, with no custom search or refresh chrome. With an empty query, show saved repositories without requiring a search. Discovery never replaces saved configuration. Configure a repository from a result; do not load workflows for every catalogue row.
+- **Notifications** keep configured repositories visible in the shared selection list and show a `SettingsGroup` for the selected repository, led by "Watch this repository", with indented trigger rows below it, disabled when the master switch is off. Workflow details load only for the enabled, selected repository.
 - Section copy is short and states the effect ("Off keeps GHOrchestrator in the menu bar only").
 
 ## PR viewer

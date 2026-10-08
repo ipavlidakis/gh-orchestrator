@@ -183,6 +183,15 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.repositoryNotificationSettings[0].workflowJobNameFiltersByWorkflowName, ["ci": ["build", "test"]])
     }
 
+    func testLegacyInsightsPreferencesMigrateWithoutLosingSelection() throws {
+        let legacy = Data(#"{"observedRepositories":[{"owner":"orbit","name":"app"}],"actionsInsightsSelection":{"repositoryID":"orbit/app","workflowID":11,"workflowName":"CI","jobName":"Test","includesAllJobs":false,"period":"last7Days"}}"#.utf8)
+        let settings = try JSONDecoder().decode(AppSettings.self, from: legacy)
+        XCTAssertEqual(settings.actionsInsightsSelection.workflowID, 11)
+        XCTAssertEqual(settings.actionsInsightsSelectionsByRepositoryID["orbit/app"], settings.actionsInsightsSelection)
+        XCTAssertEqual(settings.observedRepositories.map(\.fullName), ["orbit/app"])
+        XCTAssertEqual(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings)), settings)
+    }
+
     func testNotificationSettingsReconcileAfterRepositoryRemoval() {
         var settings = AppSettings(
             observedRepositories: [

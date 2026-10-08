@@ -112,26 +112,6 @@ final class SettingsModelTests: XCTestCase {
     }
 #endif
 
-    func testInvalidRepositoryInputSurfacesValidationMessagesAndPersistsValidEntries() {
-        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
-        let model = SettingsModel(store: store)
-
-        model.repositoryText = """
-        openai/codex
-        invalid entry
-        swiftlang/swift
-        """
-
-        XCTAssertEqual(
-            store.settings.observedRepositories.map(\.fullName),
-            ["openai/codex", "swiftlang/swift"]
-        )
-        XCTAssertEqual(
-            model.repositoryValidationMessages,
-            ["Invalid repository entry: invalid entry"]
-        )
-    }
-
     func testPollingIntervalPersistenceClampsAndWritesImmediately() {
         let storageURL = makeIsolatedStorageURL()
         let store = SettingsStore(storageURL: storageURL)
@@ -256,27 +236,26 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(reloadedStore.settings.graphQLCheckContextLimit, 1)
     }
 
-    func testAddObservedRepositoryPersistsValidEntry() {
-        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+    func testConfiguringDiscoveredRepositoryPersistsWithoutEnablingNotifications() {
+        let storageURL = makeIsolatedStorageURL()
+        let store = SettingsStore(storageURL: storageURL)
         let model = SettingsModel(store: store)
-
-        let didAdd = model.addObservedRepository(from: "openai/codex")
-
-        XCTAssertTrue(didAdd)
+        model.configureRepository(ObservedRepository(owner: "openai", name: "codex"))
         XCTAssertEqual(store.settings.observedRepositories.map(\.fullName), ["openai/codex"])
-        XCTAssertTrue(model.repositoryValidationMessages.isEmpty)
+        XCTAssertFalse(store.settings.hasEnabledRepositoryNotifications)
+        XCTAssertEqual(SettingsStore(storageURL: storageURL).settings.observedRepositories, store.settings.observedRepositories)
     }
 
-    func testAddObservedRepositoryRejectsInvalidAndDuplicateEntries() {
+    func testConfiguringExistingRepositoryPreservesItsPreferences() {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
-        store.settings.observedRepositories = [ObservedRepository(owner: "openai", name: "codex")]
+        store.settings = AppSettings(
+            observedRepositories: [ObservedRepository(owner: "openai", name: "codex")],
+            repositoryNotificationSettings: [RepositoryNotificationSettings(repositoryID: "openai/codex", enabled: true, workflowNameFilters: ["CI"])]
+        )
         let model = SettingsModel(store: store)
-
-        XCTAssertFalse(model.addObservedRepository(from: "not valid"))
-        XCTAssertEqual(model.repositoryValidationMessages, ["Invalid repository entry: not valid"])
-
-        XCTAssertFalse(model.addObservedRepository(from: "OPENAI/CODEX"))
-        XCTAssertEqual(model.repositoryValidationMessages, ["Repository already added: OPENAI/CODEX"])
+        let original = store.settings
+        model.configureRepository(ObservedRepository(owner: "OPENAI", name: "CODEX"))
+        XCTAssertEqual(store.settings, original)
     }
 
     func testRemoveObservedRepositoriesRemovesSelectedIDs() {
@@ -631,6 +610,72 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(store.settings.actionsInsightsSelection.period, .last90Days)
     }
 
+    func testRepositoryDiscoverySearchAndFailureKeepSavedConfiguration() async {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        let saved = ObservedRepository(owner: "legacy", name: "repository")
+        let discovered = ObservedRepository(owner: "orbit", name: "new-app")
+        store.settings = AppSettings(observedRepositories: [saved], repositoryNotificationSettings: [RepositoryNotificationSettings(repository: saved, enabled: true)])
+        let original = store.settings
+        let model = SettingsModel(store: store, authenticationState: .authenticated(username: "example"), repositoryListService: StubRepositoryListing(responses: [.success([discovered, saved]), .failure(RepositoryDiscoveryFailure())]))
+        model.loadRepositoryCatalogIfNeeded()
+        await waitUntil("repository catalogue") { model.repositoryListState == .loaded }
+        XCTAssertEqual(model.repositories(matching: ""), [saved])
+        XCTAssertEqual(model.repositories(matching: " ORBIT/NEW "), [discovered])
+        XCTAssertEqual(model.repositories(matching: "legacy"), [saved])
+        XCTAssertEqual(store.settings, original)
+
+        model.refreshRepositoryCatalog()
+        await waitUntil("repository refresh failure") {
+            if case .failed = model.repositoryListState { return true }
+            return false
+        }
+        XCTAssertEqual(model.repositories(matching: "new-app"), [discovered])
+        XCTAssertEqual(store.settings, original)
+        model.authenticationState = .signedOut
+        XCTAssertTrue(model.repositories(matching: "new-app").isEmpty)
+        XCTAssertEqual(model.repositories(matching: ""), [saved])
+    }
+
+    func testSwitchingInsightsRepositoriesRestoresTheirPreferencesAfterRelaunch() {
+        let storageURL = makeIsolatedStorageURL()
+        let store = SettingsStore(storageURL: storageURL)
+        let first = ObservedRepository(owner: "orbit", name: "first")
+        let second = ObservedRepository(owner: "orbit", name: "second")
+        let original = ActionsInsightsSelection(repositoryID: first.id, workflowID: 11, workflowName: "CI", jobName: "Test", period: .last7Days)
+        store.settings = AppSettings(observedRepositories: [first, second], actionsInsightsSelection: original)
+        let model = SettingsModel(store: store)
+
+        model.setActionsInsightsRepositoryID(second.id)
+        model.actionsInsightsPeriod = .last90Days
+        model.setActionsInsightsJobName(nil)
+        let secondSelection = store.settings.actionsInsightsSelection
+        model.setActionsInsightsRepositoryID(first.id)
+        XCTAssertEqual(store.settings.actionsInsightsSelection, original)
+
+        let reloaded = SettingsStore(storageURL: storageURL)
+        let relaunched = SettingsModel(store: reloaded)
+        relaunched.setActionsInsightsRepositoryID(second.id)
+        XCTAssertEqual(reloaded.settings.actionsInsightsSelection, secondSelection)
+    }
+
+    func testForgettingSelectedInsightsRepositoryRestoresRemainingPreferences() {
+        let store = SettingsStore(storageURL: makeIsolatedStorageURL())
+        let first = ObservedRepository(owner: "orbit", name: "first")
+        let second = ObservedRepository(owner: "orbit", name: "second")
+        let original = ActionsInsightsSelection(repositoryID: first.id, workflowID: 11, workflowName: "CI", jobName: "Test", period: .last7Days)
+        store.settings = AppSettings(observedRepositories: [first, second], actionsInsightsSelection: original)
+        let model = SettingsModel(store: store)
+        model.setActionsInsightsRepositoryID(second.id)
+        model.actionsInsightsPeriod = .last90Days
+
+        model.removeObservedRepositories(withIDs: [second.id])
+        XCTAssertEqual(model.actionsInsightsSelectedRepositoryID, first.id)
+        XCTAssertEqual(store.settings.actionsInsightsSelection, original)
+        model.setActionsInsightsRepositoryID(first.id)
+        XCTAssertEqual(store.settings.actionsInsightsSelection, original)
+        XCTAssertNil(store.settings.actionsInsightsSelectionsByRepositoryID[second.id])
+    }
+
     private func makeIsolatedStorageURL() -> URL {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("GHOrchestrator.SettingsModelTests.\(UUID().uuidString)", isDirectory: true)
@@ -683,6 +728,16 @@ final class SettingsModelTests: XCTestCase {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.date(from: value)
     }
+}
+
+private struct RepositoryDiscoveryFailure: LocalizedError {
+    var errorDescription: String? { "Repository discovery unavailable" }
+}
+
+private actor StubRepositoryListing: RepositoryListing {
+    var responses: [Result<[ObservedRepository], RepositoryDiscoveryFailure>]
+    init(responses: [Result<[ObservedRepository], RepositoryDiscoveryFailure>]) { self.responses = responses }
+    func listRepositories() async throws -> [ObservedRepository] { try responses.removeFirst().get() }
 }
 
 private final class StubActionsWorkflowListing: ActionsWorkflowListing, @unchecked Sendable {

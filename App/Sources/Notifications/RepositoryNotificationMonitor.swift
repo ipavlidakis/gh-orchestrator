@@ -62,9 +62,11 @@ final class RepositoryNotificationMonitor {
         from oldSettings: AppSettings,
         to newSettings: AppSettings
     ) {
+        let oldNotificationSettings = notificationSettingsSnapshot(oldSettings)
+        let newNotificationSettings = notificationSettingsSnapshot(newSettings)
         let notificationDataShapeChanged =
-            oldSettings.observedRepositories != newSettings.observedRepositories ||
-            oldSettings.repositoryNotificationSettings != newSettings.repositoryNotificationSettings ||
+            oldNotificationSettings.observedRepositories != newNotificationSettings.observedRepositories ||
+            oldNotificationSettings.repositoryNotificationSettings != newNotificationSettings.repositoryNotificationSettings ||
             oldSettings.graphQLSearchResultLimit != newSettings.graphQLSearchResultLimit ||
             oldSettings.graphQLReviewThreadLimit != newSettings.graphQLReviewThreadLimit ||
             oldSettings.graphQLReviewThreadCommentLimit != newSettings.graphQLReviewThreadCommentLimit ||
@@ -127,7 +129,7 @@ final class RepositoryNotificationMonitor {
         refreshTask?.cancel()
         refreshGeneration += 1
         let generation = refreshGeneration
-        let settings = notificationSettingsSnapshot()
+        let settings = notificationSettingsSnapshot(settingsStore.settings)
         let filter = DashboardFilter(pullRequestScope: .all, focusedRepositoryID: nil)
 
         refreshTask = Task { [dataSource] in
@@ -206,11 +208,10 @@ final class RepositoryNotificationMonitor {
             return false
         }
 
-        return notificationSettingsSnapshot().hasEnabledRepositoryNotifications
+        return notificationSettingsSnapshot(settingsStore.settings).hasEnabledRepositoryNotifications
     }
 
-    private func notificationSettingsSnapshot() -> AppSettings {
-        let settings = settingsStore.settings
+    private func notificationSettingsSnapshot(_ settings: AppSettings) -> AppSettings {
         let enabledRepositoryIDs = Set(
             settings.repositoryNotificationSettings
                 .filter(\.enabled)
