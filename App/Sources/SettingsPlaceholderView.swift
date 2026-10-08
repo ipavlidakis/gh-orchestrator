@@ -506,14 +506,14 @@ struct GeneralSettingsPane: View {
 
             SettingsGroup(title: "Dashboard query limits") {
                 SettingsRow(
-                    title: "Pull requests",
-                    subtitle: "Maximum PRs loaded per configured repository."
+                    title: "Pull requests per page",
+                    subtitle: "Number of PRs fetched per page; all matching pages are loaded."
                 ) {
                     HStack(spacing: 8) {
                         Text("\(model.graphQLSearchResultLimit)")
                             .monospacedDigit()
                         Stepper(
-                            "Pull requests",
+                            "Pull requests per page",
                             value: Binding(
                                 get: { model.graphQLSearchResultLimit },
                                 set: { model.graphQLSearchResultLimit = $0 }

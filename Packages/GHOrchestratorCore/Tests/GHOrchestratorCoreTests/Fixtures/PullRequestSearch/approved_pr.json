@@ -1,9 +1,12 @@
 {
   "data": {
     "search": {
+      "issueCount": 1,
+      "pageInfo": { "hasNextPage": false, "endCursor": null },
       "nodes": [
         {
           "__typename": "PullRequest",
+          "repository": { "nameWithOwner": "cli/cli" },
           "number": 13152,
           "title": "chore(deps): update release workflow",
           "url": "https://github.com/cli/cli/pull/13152",

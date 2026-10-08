@@ -49,12 +49,8 @@ struct LiveDashboardDataSource: DashboardDataSource {
         for settings: AppSettings,
         filter: DashboardFilter
     ) async throws -> [RepositorySection] {
-        let repositories = repositories(
-            from: settings,
-            focusedRepositoryID: filter.focusedRepositoryID
-        )
         let snapshots = try await snapshotService.fetchRepositorySnapshots(
-            for: repositories,
+            for: settings.observedRepositories,
             scope: filter.pullRequestScope,
             queryLimits: PullRequestSnapshotQueryLimits(
                 searchResultLimit: settings.graphQLSearchResultLimit,
@@ -65,7 +61,7 @@ struct LiveDashboardDataSource: DashboardDataSource {
         )
         let items = try await actionsService.buildPullRequestItems(from: snapshots)
         return aggregationService.makeSections(
-            observedRepositories: repositories,
+            observedRepositories: settings.observedRepositories,
             pullRequests: items,
             sortOrder: settings.pullRequestSortOrder,
             repositorySortOrder: settings.repositorySortOrder
@@ -80,20 +76,5 @@ struct LiveDashboardDataSource: DashboardDataSource {
             repository: repository,
             jobID: jobID
         )
-    }
-
-    private func repositories(
-        from settings: AppSettings,
-        focusedRepositoryID: String?
-    ) -> [ObservedRepository] {
-        guard let focusedRepositoryID else {
-            return settings.observedRepositories
-        }
-
-        let focusedRepositories = settings.observedRepositories.filter {
-            $0.normalizedLookupKey == focusedRepositoryID
-        }
-
-        return focusedRepositories.isEmpty ? settings.observedRepositories : focusedRepositories
     }
 }

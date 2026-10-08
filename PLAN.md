@@ -1565,6 +1565,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-08: PLAN-menu-bar.md:T36 replaces repository-scoped Mine/All discovery with global Authored by me / Needs my review categories and a native category menu. Configured repositories remain available for repository-specific settings; global discovery, grouping, sorting and local repository filtering include newly discovered repositories.
 - 2026-10-08: the menu-bar dashboard scope and repository filter join its sorting preferences in the existing Application Support settings file. PLAN-menu-bar.md:T35 owns restoration before the first fetch, persistence across app/popover sessions, and clearing a removed repository filter.
 - 2026-10-08: Settings uses a native NavigationSplitView/sidebar List, with system glass and corner geometry instead of custom rail drawing or repeated AppKit chrome overrides. Hide the sidebar toggle/title bubble; preserve native window-control integration with scene styles and a standard macOS 26 toolbar spacer. PLAN-pr-viewer.md:PV09 owns this visual-polish increment.
 - 2026-10-08: The optional In App PR destination opens a native summary/conversation window; Browser remains the default. PLAN-pr-viewer.md owns the paginated viewer and scrolling-performance validation. Code diffs are deferred.

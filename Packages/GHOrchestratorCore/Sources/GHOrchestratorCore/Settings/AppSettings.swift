@@ -96,7 +96,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.repositorySortOrder = repositorySortOrder
         self.dashboardPullRequestScope = dashboardPullRequestScope
         let focusedRepositoryID = dashboardFocusedRepositoryID?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        self.dashboardFocusedRepositoryID = deduplicatedRepositories.contains { $0.normalizedLookupKey == focusedRepositoryID } ? focusedRepositoryID : nil
+        self.dashboardFocusedRepositoryID = focusedRepositoryID.flatMap { ObservedRepository(rawValue: $0)?.normalizedLookupKey }
         self.pollingIntervalSeconds = Self.clampPollingInterval(pollingIntervalSeconds)
         self.hideDockIcon = hideDockIcon
         self.startAtLogin = startAtLogin
@@ -133,13 +133,14 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let savedScope = try container.decodeIfPresent(PullRequestScope.self, forKey: .dashboardPullRequestScope) ?? .mine
 
         self.init(
             observedRepositories: try container.decodeIfPresent([ObservedRepository].self, forKey: .observedRepositories) ?? [],
             pullRequestSortOrder: try container.decodeIfPresent(PullRequestSortOrder.self, forKey: .pullRequestSortOrder) ?? .title,
             pullRequestOpenDestination: try container.decodeIfPresent(PullRequestOpenDestination.self, forKey: .pullRequestOpenDestination) ?? .browser,
             repositorySortOrder: try container.decodeIfPresent(RepositorySortOrder.self, forKey: .repositorySortOrder) ?? .lastModifiedNewestFirst,
-            dashboardPullRequestScope: try container.decodeIfPresent(PullRequestScope.self, forKey: .dashboardPullRequestScope) ?? .mine,
+            dashboardPullRequestScope: savedScope == .all ? .reviewRequested : savedScope,
             dashboardFocusedRepositoryID: try container.decodeIfPresent(String.self, forKey: .dashboardFocusedRepositoryID),
             pollingIntervalSeconds: try container.decodeIfPresent(Int.self, forKey: .pollingIntervalSeconds) ?? Self.defaultPollingIntervalSeconds,
             hideDockIcon: try container.decodeIfPresent(Bool.self, forKey: .hideDockIcon) ?? Self.defaultHideDockIcon,

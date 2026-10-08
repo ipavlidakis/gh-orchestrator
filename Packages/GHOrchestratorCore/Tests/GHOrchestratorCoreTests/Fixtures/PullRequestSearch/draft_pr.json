@@ -1,9 +1,12 @@
 {
   "data": {
     "search": {
+      "issueCount": 1,
+      "pageInfo": { "hasNextPage": false, "endCursor": null },
       "nodes": [
         {
           "__typename": "PullRequest",
+          "repository": { "nameWithOwner": "cli/cli" },
           "number": 13154,
           "title": "wip: restructure sync layer",
           "url": "https://github.com/cli/cli/pull/13154",

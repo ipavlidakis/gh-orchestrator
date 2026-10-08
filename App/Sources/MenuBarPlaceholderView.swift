@@ -112,10 +112,10 @@ struct MenuBarPlaceholderView: View {
     private var headerActions: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                AppMarkView(size: ScopeSegmentedControl.height)
+                AppMarkView(size: PullRequestCategoryPicker.height)
 
                 if showsDashboardFilters {
-                    ScopeSegmentedControl(
+                    PullRequestCategoryPicker(
                         scope: model.pullRequestScope,
                         selectedCount: loadedPullRequestCount,
                         onSelect: { model.setPullRequestScope($0) }
@@ -179,7 +179,7 @@ struct MenuBarPlaceholderView: View {
 
             Divider()
 
-            ForEach(model.settingsStore.settings.observedRepositories) { repository in
+            ForEach(model.availableRepositories) { repository in
                 repositoryFocusButton(
                     title: repository.fullName,
                     repositoryID: repository.normalizedLookupKey
@@ -295,12 +295,12 @@ struct MenuBarPlaceholderView: View {
             return false
         }
         
-        return !model.settingsStore.settings.observedRepositories.isEmpty
+        return true
     }
     
     private var repositoryFocusTitle: String {
         guard let focusedRepositoryID = model.focusedRepositoryID,
-              let repository = model.settingsStore.settings.observedRepositories.first(where: {
+              let repository = model.availableRepositories.first(where: {
                   $0.normalizedLookupKey == focusedRepositoryID
               })
         else {
@@ -367,7 +367,6 @@ struct MenuBarPlaceholderView: View {
                 .notConfigured,
                 .signedOut,
                 .authorizing,
-                .noRepositoriesConfigured,
                 .authFailure(_),
                 .commandFailure(_):
             return false
@@ -401,13 +400,7 @@ struct MenuBarPlaceholderView: View {
         case .empty:
             StateMessageView(
                 title: "No open pull requests",
-                message: "No matching pull requests were found in the configured repositories."
-            )
-            
-        case .noRepositoriesConfigured:
-            StateMessageView(
-                title: "Configure repositories",
-                message: "Add one or more `owner/repo` entries in Settings to populate the dashboard."
+                message: "No open pull requests match this category and repository filter."
             )
             
         case .authFailure(let message):
@@ -425,7 +418,7 @@ struct MenuBarPlaceholderView: View {
                     ForEach(sections) { section in
                         RepositorySectionView(
                             section: section,
-                            showsAuthor: model.pullRequestScope == .all,
+                            showsAuthor: model.pullRequestScope == .reviewRequested,
                             isCollapsed: model.collapsedRepositoryIDs.contains(section.repository.normalizedLookupKey),
                             expandedChecksIDs: model.expandedChecksPullRequestIDs,
                             expandedCommentIDs: model.expandedCommentPullRequestIDs,
@@ -1504,7 +1497,7 @@ private struct DashboardFooterBar: View {
     }
 }
 
-private struct ScopeSegmentedControl: View {
+private struct PullRequestCategoryPicker: View {
     static let height: CGFloat = 28
 
     let scope: PullRequestScope
@@ -1512,40 +1505,26 @@ private struct ScopeSegmentedControl: View {
     let onSelect: (PullRequestScope) -> Void
 
     var body: some View {
-        HStack(spacing: 2) {
-            segment("My PRs", value: .mine)
-            segment("All PRs", value: .all)
+        Picker("Pull request category", selection: Binding(get: { scope }, set: onSelect)) {
+            category("Authored by me", value: .mine)
+            category("Needs my review", value: .reviewRequested)
         }
-        .padding(2)
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
         .frame(height: Self.height)
-        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .accessibilityLabel("Pull request category")
     }
 
-    private func segment(_ title: String, value: PullRequestScope) -> some View {
-        let isSelected = scope == value
-        return Button {
-            onSelect(value)
-        } label: {
-            HStack(spacing: 5) {
-                Text(title).fontWeight(isSelected ? .semibold : .regular)
-                if isSelected, let selectedCount {
-                    Text(selectedCount, format: .number)
-                        .opacity(0.85)
-                }
+    private func category(_ title: String, value: PullRequestScope) -> some View {
+        Group {
+            if scope == value, let selectedCount {
+                Text("\(title) (\(selectedCount.formatted()))")
+            } else {
+                Text(title)
             }
-            .font(.system(size: 12.5))
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-            .background {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.accentColor)
-                }
-            }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .tag(value)
     }
 }
 

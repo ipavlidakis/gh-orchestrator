@@ -12,7 +12,6 @@ final class MenuBarDashboardModel {
         case signedOut
         case authorizing
         case empty
-        case noRepositoriesConfigured
         case authFailure(String)
         case commandFailure(String)
         case loaded([RepositorySection])
@@ -68,24 +67,43 @@ final class MenuBarDashboardModel {
     var contentState: State {
         let visibleState = isRefreshing ? stateBeforeLoading : state
         guard case .loaded(let sections) = visibleState else { return visibleState }
+        let filtered = sections.filter {
+            focusedRepositoryID == nil || $0.repository.normalizedLookupKey == focusedRepositoryID
+        }
+        guard !filtered.isEmpty else { return .empty }
         return .loaded(RepositorySectionAggregationService().makeSections(
-            observedRepositories: sections.map(\.repository),
-            pullRequests: sections.flatMap(\.pullRequests),
+            observedRepositories: filtered.map(\.repository),
+            pullRequests: filtered.flatMap(\.pullRequests),
             sortOrder: settingsStore.settings.pullRequestSortOrder,
             repositorySortOrder: settingsStore.settings.repositorySortOrder
         ))
     }
 
+    var availableRepositories: [ObservedRepository] {
+        let visibleState = isRefreshing ? stateBeforeLoading : state
+        var repositories = settingsStore.settings.observedRepositories
+        if case .loaded(let sections) = visibleState {
+            repositories += sections.map(\.repository)
+        }
+        if let focusedRepositoryID, let repository = ObservedRepository(rawValue: focusedRepositoryID) {
+            repositories.append(repository)
+        }
+        var seen = Set<String>()
+        return repositories.filter { seen.insert($0.normalizedLookupKey).inserted }
+            .sorted { $0.fullName.localizedStandardCompare($1.fullName) == .orderedAscending }
+    }
+
     /// Pull requests that need the user's attention: failing checks or requested changes.
     var attentionCount: Int {
-        guard case .loaded(let sections) = state else { return 0 }
+        guard case .loaded(let sections) = contentState else { return 0 }
         return sections.flatMap(\.pullRequests).filter {
             $0.checkRollupState == .failing || $0.reviewStatus == .changesRequested
         }.count
     }
 
     var areDashboardFiltersDisabled: Bool {
-        refreshWarningMessage != nil
+        if case .commandFailure = state { return false }
+        return refreshWarningMessage != nil
     }
 
     init(
@@ -107,13 +125,18 @@ final class MenuBarDashboardModel {
 
                 let repositoriesChanged = oldSettings.observedRepositories != newSettings.observedRepositories
                 let pollingIntervalChanged = oldSettings.pollingIntervalSeconds != newSettings.pollingIntervalSeconds
-                let filtersChanged = oldSettings.dashboardPullRequestScope != newSettings.dashboardPullRequestScope ||
-                    oldSettings.dashboardFocusedRepositoryID != newSettings.dashboardFocusedRepositoryID
-                if self.reconcileFocusedRepository(with: self.settingsStore.settings) {
-                    return
+                let categoryChanged = oldSettings.dashboardPullRequestScope != newSettings.dashboardPullRequestScope
+                if let focused = self.focusedRepositoryID,
+                   oldSettings.observedRepositories.contains(where: { $0.normalizedLookupKey == focused }),
+                   !newSettings.observedRepositories.contains(where: { $0.normalizedLookupKey == focused }) {
+                    self.focusedRepositoryID = nil
                 }
-
-                if repositoriesChanged || pollingIntervalChanged || filtersChanged {
+                if categoryChanged {
+                    self.state = .idle
+                    self.stateBeforeLoading = .idle
+                    self.refreshWarningMessage = nil
+                }
+                if repositoriesChanged || pollingIntervalChanged || categoryChanged {
                     self.refresh()
                     self.restartPolling()
                 }
@@ -157,7 +180,7 @@ final class MenuBarDashboardModel {
     func setFocusedRepositoryID(_ repositoryID: String?) {
         let normalizedRepositoryID = normalizedRepositoryID(repositoryID)
         let nextRepositoryID = normalizedRepositoryID.flatMap { repositoryID in
-            settingsStore.settings.observedRepositories.contains {
+            availableRepositories.contains {
                 $0.normalizedLookupKey == repositoryID
             } ? repositoryID : nil
         }
@@ -187,7 +210,6 @@ final class MenuBarDashboardModel {
 
     func refresh() {
         let settings = settingsStore.settings
-        reconcileFocusedRepository(with: settings)
         let filter = DashboardFilter(
             pullRequestScope: pullRequestScope,
             focusedRepositoryID: focusedRepositoryID
@@ -216,12 +238,6 @@ final class MenuBarDashboardModel {
             return
         case .authenticated:
             break
-        }
-
-        guard !settings.observedRepositories.isEmpty else {
-            refreshWarningMessage = nil
-            state = .noRepositoriesConfigured
-            return
         }
 
         if case .loading = state {
@@ -347,20 +363,6 @@ final class MenuBarDashboardModel {
 
         let normalized = repositoryID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return normalized.isEmpty ? nil : normalized
-    }
-
-    @discardableResult
-    private func reconcileFocusedRepository(with settings: AppSettings) -> Bool {
-        guard let focusedRepositoryID else {
-            return false
-        }
-
-        guard settings.observedRepositories.contains(where: { $0.normalizedLookupKey == focusedRepositoryID }) else {
-            self.focusedRepositoryID = nil
-            return true
-        }
-
-        return false
     }
 
     private func applyLoadedSections(_ sections: [RepositorySection]) {

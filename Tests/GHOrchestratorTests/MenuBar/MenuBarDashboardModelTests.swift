@@ -5,6 +5,59 @@ import GHOrchestratorCore
 
 @MainActor
 final class MenuBarDashboardModelTests: XCTestCase {
+    func testDiscoveredRepositoriesFilterLocallyAndRestoreFocusWithSortPreferences() async throws {
+        let first = ObservedRepository(owner: "openai", name: "codex")
+        let second = ObservedRepository(owner: "cli", name: "cli")
+        let sections = [
+            RepositorySection(repository: first, pullRequests: [pullRequest(number: 4)]),
+            RepositorySection(repository: second, pullRequests: [pullRequest(number: 11, repository: second), pullRequest(number: 2, repository: second)])
+        ]
+        let storageURL = makeIsolatedStorageURL()
+        let store = SettingsStore(storageURL: storageURL)
+        let dataSource = RecordingFilterDashboardDataSource(sections: sections)
+        let model = MenuBarDashboardModel(settingsStore: store, dataSource: dataSource, sleeper: RecordingSleeper(), authenticationState: .authenticated(username: "octocat"))
+        await waitForLoadedState(on: model)
+        XCTAssertEqual(model.availableRepositories, [second, first])
+        store.settings.repositorySortOrder = .nameDescending
+        guard case .loaded(let allSections) = model.contentState else { return XCTFail("Global results must load without configured repositories") }
+        XCTAssertEqual(allSections.map(\.repository), [first, second])
+
+        model.setFocusedRepositoryID(" CLI/CLI ")
+        guard case .loaded(let filtered) = model.contentState else { return XCTFail("A discovered repository must be filterable") }
+        XCTAssertEqual(filtered.map(\.repository), [second])
+        XCTAssertEqual(filtered.first?.pullRequests.map(\.number), [2, 11])
+        store.settings.pullRequestSortOrder = .createdNewestFirst
+        guard case .loaded(let sorted) = model.contentState else { return XCTFail("Sorting must preserve the repository filter") }
+        XCTAssertEqual(sorted.first?.pullRequests.map(\.number), [11, 2])
+        let loads = await dataSource.recordedFilters()
+        XCTAssertEqual(loads.count, 1, "Filtering and sorting loaded results must not issue another API request")
+
+        let restoredStore = SettingsStore(storageURL: storageURL)
+        let restoredSource = RecordingFilterDashboardDataSource(sections: sections)
+        let restored = MenuBarDashboardModel(settingsStore: restoredStore, dataSource: restoredSource, sleeper: RecordingSleeper(), authenticationState: .authenticated(username: "octocat"))
+        await waitForLoadedState(on: restored)
+        XCTAssertEqual(restored.focusedRepositoryID, second.id)
+        XCTAssertEqual(restoredStore.settings.pullRequestSortOrder, .createdNewestFirst)
+        restored.setPullRequestScope(.reviewRequested)
+        await restoredSource.waitForLoadCount(2)
+        await waitForLoadedState(on: restored)
+        XCTAssertEqual(restored.focusedRepositoryID, second.id)
+        restored.setFocusedRepositoryID(nil)
+        guard case .loaded(let cleared) = restored.contentState else { return XCTFail("Clearing focus must restore all repository groups") }
+        XCTAssertEqual(cleared.map(\.repository), [first, second])
+    }
+
+    func testFailedCategorySwitchDoesNotShowPreviousCategoryUnderNewLabel() async throws {
+        let sections = [RepositorySection(repository: ObservedRepository(owner: "openai", name: "codex"), pullRequests: [pullRequest(number: 1)])]
+        let source = FailingAfterFirstLoadDashboardDataSource(firstSections: sections, errorMessage: "network unavailable")
+        let model = MenuBarDashboardModel(settingsStore: SettingsStore(storageURL: makeIsolatedStorageURL()), dataSource: source, sleeper: RecordingSleeper(), authenticationState: .authenticated(username: "octocat"))
+        await waitForLoadedState(on: model)
+        model.setPullRequestScope(.reviewRequested)
+        await waitForCommandFailure(on: model)
+        XCTAssertEqual(model.contentState, .commandFailure("network unavailable"))
+        XCTAssertFalse(model.areDashboardFiltersDisabled, "A failed category must allow the user to choose another category")
+    }
+
     func testDashboardSelectionsSurviveVisibilityChangesAndRelaunch() async throws {
         let storageURL = makeIsolatedStorageURL()
         let store = SettingsStore(storageURL: storageURL)
@@ -17,7 +70,7 @@ final class MenuBarDashboardModelTests: XCTestCase {
             dataSource: MockDashboardDataSource(sections: []),
             sleeper: RecordingSleeper()
         )
-        model.setPullRequestScope(.all)
+        model.setPullRequestScope(.reviewRequested)
         model.setFocusedRepositoryID(" SwiftLang/Swift ")
         store.settings.pullRequestSortOrder = .createdNewestFirst
         store.settings.repositorySortOrder = .teamDescending
@@ -26,7 +79,7 @@ final class MenuBarDashboardModelTests: XCTestCase {
         model.setMenuVisible(false)
         model.setAuthenticationState(.authenticated(username: "octocat"))
         model.setMenuVisible(true)
-        XCTAssertEqual(model.pullRequestScope, .all)
+        XCTAssertEqual(model.pullRequestScope, .reviewRequested)
         XCTAssertEqual(model.focusedRepositoryID, "swiftlang/swift")
 
         let restoredStore = SettingsStore(storageURL: storageURL)
@@ -38,12 +91,12 @@ final class MenuBarDashboardModelTests: XCTestCase {
             authenticationState: .authenticated(username: "octocat")
         )
         await dataSource.waitForLoadCount(1)
-        XCTAssertEqual(restoredModel.pullRequestScope, .all)
+        XCTAssertEqual(restoredModel.pullRequestScope, .reviewRequested)
         XCTAssertEqual(restoredModel.focusedRepositoryID, "swiftlang/swift")
         XCTAssertEqual(restoredStore.settings.pullRequestSortOrder, .createdNewestFirst)
         XCTAssertEqual(restoredStore.settings.repositorySortOrder, .teamDescending)
         let filters = await dataSource.recordedFilters()
-        XCTAssertEqual(filters.first, DashboardFilter(pullRequestScope: .all, focusedRepositoryID: "swiftlang/swift"))
+        XCTAssertEqual(filters.first, DashboardFilter(pullRequestScope: .reviewRequested, focusedRepositoryID: "swiftlang/swift"))
 
         restoredModel.setPullRequestScope(.mine)
         restoredModel.setFocusedRepositoryID(nil)
@@ -74,7 +127,7 @@ final class MenuBarDashboardModelTests: XCTestCase {
             authenticationState: .authenticated(username: "octocat")
         )
         await dataSource.waitForLoadCount(1)
-        model.setPullRequestScope(.all)
+        model.setPullRequestScope(.reviewRequested)
         model.setFocusedRepositoryID("swiftlang/swift")
         await dataSource.waitForLoadCount(2)
 
@@ -86,10 +139,10 @@ final class MenuBarDashboardModelTests: XCTestCase {
         XCTAssertNil(model.focusedRepositoryID)
         let restoredStore = SettingsStore(storageURL: storageURL)
         XCTAssertNil(restoredStore.settings.dashboardFocusedRepositoryID)
-        XCTAssertEqual(restoredStore.settings.dashboardPullRequestScope, .all)
+        XCTAssertEqual(restoredStore.settings.dashboardPullRequestScope, .reviewRequested)
         await dataSource.waitForLoadCount(3)
         let filters = await dataSource.recordedFilters()
-        XCTAssertEqual(filters.last, DashboardFilter(pullRequestScope: .all))
+        XCTAssertEqual(filters.last, DashboardFilter(pullRequestScope: .reviewRequested))
     }
 
     func testSortPreferenceImmediatelyReordersLoadedContentWithoutRefresh() {
@@ -136,15 +189,17 @@ final class MenuBarDashboardModelTests: XCTestCase {
         XCTAssertEqual(model.authenticationState, .authenticated(username: "octocat"))
     }
 
-    func testEmptyRepositoryListShowsNoRepositoriesConfiguredWhenAuthenticated() {
+    func testEmptyRepositoryListStillLoadsGlobalCategoryWhenAuthenticated() async throws {
+        let sections = [RepositorySection(repository: ObservedRepository(owner: "openai", name: "codex"), pullRequests: [pullRequest(number: 1)])]
         let model = MenuBarDashboardModel(
             settingsStore: SettingsStore(storageURL: makeIsolatedStorageURL()),
-            dataSource: MockDashboardDataSource(sections: []),
+            dataSource: MockDashboardDataSource(sections: sections),
             sleeper: RecordingSleeper(),
             authenticationState: .authenticated(username: "octocat")
         )
 
-        XCTAssertEqual(model.state, .noRepositoriesConfigured)
+        await waitForLoadedState(on: model)
+        XCTAssertEqual(model.state, .loaded(sections))
     }
 
     func testPollingUsesConfiguredIntervalAndRestartsWhenSettingsChange() async throws {
@@ -272,7 +327,7 @@ final class MenuBarDashboardModelTests: XCTestCase {
         XCTAssertTrue(model.isMenuVisible)
     }
 
-    func testChangingDashboardFiltersRefreshesWithScopeAndFocusedRepository() async throws {
+    func testCategoryRefreshesWhileRepositoryFocusFiltersLocally() async throws {
         let store = SettingsStore(storageURL: makeIsolatedStorageURL())
         store.settings = AppSettings(
             observedRepositories: [
@@ -291,18 +346,16 @@ final class MenuBarDashboardModelTests: XCTestCase {
 
         await dataSource.waitForLoadCount(1)
 
-        model.setPullRequestScope(.all)
+        model.setPullRequestScope(.reviewRequested)
         await dataSource.waitForLoadCount(2)
 
         model.toggleRepositoryCollapsed(repositoryID: "swiftlang/swift")
         XCTAssertEqual(model.collapsedRepositoryIDs, ["swiftlang/swift"])
 
         model.setFocusedRepositoryID(" swiftlang/swift ")
-        await dataSource.waitForLoadCount(3)
-
         let filters = await dataSource.recordedFilters()
-        XCTAssertEqual(filters.map(\.pullRequestScope), [.mine, .all, .all])
-        XCTAssertEqual(filters.map(\.focusedRepositoryID), [nil, nil, "swiftlang/swift"])
+        XCTAssertEqual(filters.map(\.pullRequestScope), [.mine, .reviewRequested])
+        XCTAssertEqual(filters.map(\.focusedRepositoryID), [nil, nil])
         XCTAssertEqual(model.focusedRepositoryID, "swiftlang/swift")
         XCTAssertTrue(model.collapsedRepositoryIDs.isEmpty)
     }
@@ -513,7 +566,7 @@ final class MenuBarDashboardModelTests: XCTestCase {
         if case .commandFailure(let message) = failingModel.state {
             XCTAssertTrue(message.contains("synthetic failure"))
             XCTAssertEqual(failingModel.refreshWarningMessage, "synthetic failure")
-            XCTAssertTrue(failingModel.areDashboardFiltersDisabled)
+            XCTAssertFalse(failingModel.areDashboardFiltersDisabled, "A failed global category must allow another category to be selected")
         } else {
             XCTFail("Expected command failure state")
         }
@@ -687,12 +740,12 @@ final class MenuBarDashboardModelTests: XCTestCase {
     }
 }
 
-private func pullRequest(number: Int) -> PullRequestItem {
+private func pullRequest(number: Int, repository: ObservedRepository = ObservedRepository(owner: "openai", name: "codex")) -> PullRequestItem {
     PullRequestItem(
-        repository: ObservedRepository(owner: "openai", name: "codex"),
+        repository: repository,
         number: number,
         title: "PR #\(number)",
-        url: URL(string: "https://github.com/openai/codex/pull/\(number)")!,
+        url: URL(string: "https://github.com/\(repository.fullName)/pull/\(number)")!,
         isDraft: false,
         updatedAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(number)),
         reviewStatus: .approved,

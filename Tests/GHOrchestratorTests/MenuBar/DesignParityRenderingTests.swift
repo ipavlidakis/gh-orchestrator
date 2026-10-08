@@ -9,6 +9,30 @@ import XCTest
 final class DesignParityRenderingTests: XCTestCase {
     private let outputDirectory = URL(fileURLWithPath: "/tmp/gho-shots", isDirectory: true)
 
+    func testRenderGlobalCategoriesAndDiscoveredRepositoryFilter() async throws {
+        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        let repository = ObservedRepository(owner: "orbit-labs", name: "nova-app")
+        let other = ObservedRepository(owner: "another-team", name: "tooling")
+        for scope in [PullRequestScope.mine, .reviewRequested] {
+            let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: storageURL) }
+            let store = SettingsStore(storageURL: storageURL)
+            store.settings = AppSettings(dashboardPullRequestScope: scope)
+            let updates = SoftwareUpdateModel(store: store, checker: GitHubReleaseUpdateChecker(), installer: DMGSoftwareUpdateInstaller())
+            let model = MenuBarDashboardModel(settingsStore: store)
+            model.authenticationState = .authenticated(username: "alex")
+            model.state = .loaded([
+                RepositorySection(repository: repository, pullRequests: fixturePullRequests(repository: repository)),
+                RepositorySection(repository: other, pullRequests: [fixturePullRequests(repository: other)[0]])
+            ])
+            let view = MenuBarPlaceholderView(model: model, softwareUpdateModel: updates, openSettingsAction: {}, openURLAction: { _ in }, onMenuVisibilityChange: { _ in })
+                .frame(width: 440, alignment: .topLeading)
+            try await render(view, size: CGSize(width: 440, height: 620), name: "global-\(scope.rawValue)")
+            model.setFocusedRepositoryID(repository.id)
+            try await render(view.environment(\.colorScheme, .dark), size: CGSize(width: 440, height: 620), name: "global-\(scope.rawValue)-filtered-dark", appearance: .darkAqua)
+        }
+    }
+
     func testRenderPopoverAndSettingsForDesignReview() async throws {
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -39,7 +63,7 @@ final class DesignParityRenderingTests: XCTestCase {
         let allStorageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: allStorageURL) }
         let allStore = SettingsStore(storageURL: allStorageURL)
-        allStore.settings = AppSettings(observedRepositories: [repository], dashboardPullRequestScope: .all)
+        allStore.settings = AppSettings(observedRepositories: [repository], dashboardPullRequestScope: .reviewRequested)
         let allModel = MenuBarDashboardModel(settingsStore: allStore)
         allModel.authenticationState = .authenticated(username: "alex")
         allModel.state = .loaded([RepositorySection(repository: repository, pullRequests: pulls)])

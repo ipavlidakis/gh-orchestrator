@@ -2,6 +2,17 @@ import XCTest
 @testable import GHOrchestratorCore
 
 final class AppSettingsTests: XCTestCase {
+    func testLegacyAllCategoryMigratesWithoutLosingOtherPreferences() throws {
+        let data = Data(#"{"dashboardPullRequestScope":"all","dashboardFocusedRepositoryID":"Outside/Repo","pullRequestSortOrder":"createdOldestFirst","repositorySortOrder":"teamDescending"}"#.utf8)
+        let settings = try JSONDecoder().decode(AppSettings.self, from: data)
+        XCTAssertEqual(settings.dashboardPullRequestScope, .reviewRequested)
+        XCTAssertEqual(settings.dashboardFocusedRepositoryID, "outside/repo")
+        XCTAssertEqual(settings.pullRequestSortOrder, .createdOldestFirst)
+        XCTAssertEqual(settings.repositorySortOrder, .teamDescending)
+        let restored = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(restored, settings)
+    }
+
     func testPRDestinationDefaultsForLegacySettingsAndRoundTrips() throws {
         XCTAssertEqual(try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8)).pullRequestOpenDestination, .browser)
         for destination in PullRequestOpenDestination.allCases {

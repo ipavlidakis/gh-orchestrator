@@ -9,10 +9,22 @@ struct PullRequestSearchResponseDTO: Decodable {
 
     struct SearchResultDTO: Decodable {
         let nodes: [SearchNodeDTO]
+        let issueCount: Int
+        let pageInfo: SearchPageInfoDTO
+    }
+
+    struct SearchPageInfoDTO: Decodable {
+        let hasNextPage: Bool
+        let endCursor: String?
+    }
+
+    struct RepositoryDTO: Decodable {
+        let nameWithOwner: String
     }
 
     struct SearchNodeDTO: Decodable {
         let typename: String
+        let repository: RepositoryDTO?
         let number: Int?
         let title: String?
         let url: URL?
@@ -27,6 +39,7 @@ struct PullRequestSearchResponseDTO: Decodable {
 
         enum CodingKeys: String, CodingKey {
             case typename = "__typename"
+            case repository
             case number
             case title
             case url

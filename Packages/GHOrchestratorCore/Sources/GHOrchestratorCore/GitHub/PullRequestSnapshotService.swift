@@ -2,6 +2,8 @@ import Foundation
 
 public enum PullRequestScope: String, Codable, CaseIterable, Sendable {
     case mine
+    case reviewRequested
+    // Background notifications include all PRs in their configured repositories.
     case all
 }
 
@@ -58,17 +60,17 @@ public struct PullRequestSnapshotQueryLimits: Equatable, Sendable {
 }
 
 public enum PullRequestSnapshotServiceError: Error, Equatable, Sendable {
-    case repositoryRequestFailed(repository: ObservedRepository, message: String)
-    case invalidResponse(repository: ObservedRepository, message: String)
+    case requestFailed(message: String)
+    case invalidResponse(message: String)
 }
 
 extension PullRequestSnapshotServiceError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-        case .repositoryRequestFailed(let repository, let message):
-            return "Failed to load pull requests for \(repository.fullName): \(message)"
-        case .invalidResponse(let repository, let message):
-            return "Received an invalid pull request response for \(repository.fullName): \(message)"
+        case .requestFailed(let message):
+            return "Failed to load pull requests: \(message)"
+        case .invalidResponse(let message):
+            return "Received an invalid pull request response: \(message)"
         }
     }
 }
@@ -85,64 +87,53 @@ public struct GHPullRequestSnapshotService: PullRequestSnapshotFetching {
         scope: PullRequestScope = .mine,
         queryLimits: PullRequestSnapshotQueryLimits = .default
     ) async throws -> [RepositoryPullRequestSnapshot] {
-        guard !repositories.isEmpty else {
-            return []
-        }
+        if scope == .all && repositories.isEmpty { return [] }
+        var items: [PullRequestSnapshotItem] = []
+        var seenIDs = Set<String>()
+        var seenCursors = Set<String>()
+        var cursor: String?
 
-        return try await withThrowingTaskGroup(of: (Int, Result<RepositoryPullRequestSnapshot, Error>).self) { group in
-            for (index, repository) in repositories.enumerated() {
-                group.addTask {
-                    let snapshot: Result<RepositoryPullRequestSnapshot, Error>
-                    do {
-                        let repoSnapshot = try await self.fetchRepositorySnapshot(
-                            for: repository,
-                            scope: scope,
-                            queryLimits: queryLimits
-                        )
-                        snapshot = .success(repoSnapshot)
-                    } catch {
-                        snapshot = .failure(error)
-                    }
-
-                    return (index, snapshot)
+        repeat {
+            try Task.checkCancellation()
+            let page = try await fetchSearchPage(repositories: repositories, scope: scope, cursor: cursor, queryLimits: queryLimits)
+            guard page.issueCount <= 1_000 else {
+                throw PullRequestSnapshotServiceError.requestFailed(message: "This category exceeds GitHub's 1,000-result search limit (\(page.issueCount) matches).")
+            }
+            for node in page.nodes where node.typename == "PullRequest" {
+                guard let fullName = node.repository?.nameWithOwner,
+                      let discovered = ObservedRepository(rawValue: fullName) else {
+                    throw PullRequestSnapshotServiceError.invalidResponse(message: "Missing or invalid repository in GraphQL pull request response")
+                }
+                let repository = repositories.first { $0.normalizedLookupKey == discovered.normalizedLookupKey } ?? discovered
+                if let item = try mapNode(node, repository: repository), seenIDs.insert(item.id).inserted {
+                    items.append(item)
                 }
             }
-
-            var orderedResults: [(Int, RepositoryPullRequestSnapshot)] = []
-            var errors: [(Int, Error)] = []
-
-            for try await result in group {
-                switch result.1 {
-                case .success(let snapshot):
-                    orderedResults.append((result.0, snapshot))
-                case .failure(let error):
-                    errors.append((result.0, error))
-                }
+            guard page.pageInfo.hasNextPage else { break }
+            guard let nextCursor = page.pageInfo.endCursor, !nextCursor.isEmpty,
+                  seenCursors.insert(nextCursor).inserted else {
+                throw PullRequestSnapshotServiceError.invalidResponse(message: "Missing or repeated search pagination cursor")
             }
+            cursor = nextCursor
+        } while true
 
-            guard !orderedResults.isEmpty else {
-                guard let (_, firstError) = errors.min(by: { $0.0 < $1.0 }) else {
-                    return []
-                }
-
-                throw firstError
-            }
-
-            return orderedResults
-                .sorted { $0.0 < $1.0 }
-                .map(\.1)
-        }
+        return Dictionary(grouping: items, by: \.repository.normalizedLookupKey).values.map { items in
+            RepositoryPullRequestSnapshot(repository: items[0].repository, pullRequests: items)
+        }.sorted { $0.repository.normalizedLookupKey < $1.repository.normalizedLookupKey }
     }
 }
 
 extension GHPullRequestSnapshotService {
     static func searchQuery(limits: PullRequestSnapshotQueryLimits = .default) -> String {
         """
-    query($searchQuery: String!) {
-      search(query: $searchQuery, type: ISSUE, first: \(limits.searchResultLimit)) {
+    query($searchQuery: String!, $cursor: String) {
+      search(query: $searchQuery, type: ISSUE, first: \(limits.searchResultLimit), after: $cursor) {
+        issueCount
+        pageInfo { hasNextPage endCursor }
         nodes {
           __typename
           ... on PullRequest {
+            repository { nameWithOwner }
             number
             title
             url
@@ -213,56 +204,46 @@ extension GHPullRequestSnapshotService {
     """
     }
 
-    func fetchRepositorySnapshot(
-        for repository: ObservedRepository,
+    private func fetchSearchPage(
+        repositories: [ObservedRepository],
         scope: PullRequestScope,
+        cursor: String?,
         queryLimits: PullRequestSnapshotQueryLimits
-    ) async throws -> RepositoryPullRequestSnapshot {
+    ) async throws -> PullRequestSearchResponseDTO.SearchResultDTO {
         do {
             let response: PullRequestSearchResponseDTO.SearchDataDTO = try await client.graphQL(
                 query: Self.searchQuery(limits: queryLimits),
-                variables: SearchQueryVariables(searchQuery: searchQuery(for: repository, scope: scope))
+                variables: SearchQueryVariables(searchQuery: searchQuery(scope: scope, repositories: repositories), cursor: cursor)
             )
-            let items = try response.search.nodes.compactMap { node in
-                try mapNode(node, repository: repository)
-            }
-
-            return RepositoryPullRequestSnapshot(repository: repository, pullRequests: items)
+            return response.search
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as GitHubAPIClientError {
             switch error {
             case .invalidResponse(let message):
                 throw PullRequestSnapshotServiceError.invalidResponse(
-                    repository: repository,
                     message: message
                 )
             default:
-                throw PullRequestSnapshotServiceError.repositoryRequestFailed(
-                    repository: repository,
+                throw PullRequestSnapshotServiceError.requestFailed(
                     message: error.displayMessage
                 )
             }
         } catch {
-            throw PullRequestSnapshotServiceError.repositoryRequestFailed(
-                repository: repository,
+            throw PullRequestSnapshotServiceError.requestFailed(
                 message: error.localizedDescription
             )
         }
     }
 
-    func searchQuery(for repository: ObservedRepository, scope: PullRequestScope) -> String {
-        var qualifiers = [
-            "repo:\(repository.fullName)",
-            "is:pr",
-            "is:open"
-        ]
-
-        if scope == .mine {
-            qualifiers.append("author:@me")
+    func searchQuery(scope: PullRequestScope, repositories: [ObservedRepository]) -> String {
+        let qualifiers: String
+        switch scope {
+        case .mine: qualifiers = "author:@me"
+        case .reviewRequested: qualifiers = "review-requested:@me"
+        case .all: qualifiers = repositories.map { "repo:\($0.fullName)" }.joined(separator: " ")
         }
-
-        qualifiers.append("archived:false")
-
-        return qualifiers.joined(separator: " ")
+        return "is:pr is:open \(qualifiers) archived:false sort:updated-desc"
     }
 
     private func mapNode(
@@ -281,7 +262,6 @@ extension GHPullRequestSnapshotService {
             let updatedAt = node.updatedAt
         else {
             throw PullRequestSnapshotServiceError.invalidResponse(
-                repository: repository,
                 message: "Missing required pull request fields in GraphQL response"
             )
         }
@@ -423,4 +403,5 @@ extension GHPullRequestSnapshotService {
 
 private struct SearchQueryVariables: Encodable, Sendable {
     let searchQuery: String
+    let cursor: String?
 }
