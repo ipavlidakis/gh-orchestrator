@@ -1,103 +1,115 @@
-import AppKit
+import Foundation
 import GHOrchestratorCore
 
-// Attributed strings are immutable after preparation and only read by the table on the main actor.
-struct PRViewerRow: @unchecked Sendable {
+struct PRViewerRow: Encodable, Sendable {
     let id: String
+    let kind: String
     let title: String
     let subtitle: String
-    let body: NSAttributedString
+    let time: String
+    let body: String
+    let bodyHTML: String?
     let url: URL?
+    let author: PRActor?
     let isSummary: Bool
+    let header: Header?
     let threadID: String?
+    let hasMoreReplies: Bool
+    let canReply: Bool
+    let canResolve: Bool
+    let isResolved: Bool
+    var parentID: String? = nil
+    var badgeResolved = false
+    var childCount = 0
+    var filePath: String? = nil
+    var isThreadEnd = false
+    var canReact = false
+    var reactionGroups: [PRReactionGroup] = []
+    var isReacting = false
+    var defaultExpanded = false
 
-    static func prepare(address: PullRequestAddress, summary: PRSummary?, activity: [PRActivity], threads: [PRThread]) -> [Self] {
+    struct Header: Encodable, Sendable {
+        let status: String
+        let repository: String
+        let number: Int
+        let head: String
+        let base: String
+        let commitCount: Int?
+    }
+
+    static func prepare(address: PullRequestAddress, summary: PRSummary?, activity: [PRActivity], threads: [PRThread], loading: Set<String> = []) -> [Self] {
         var rows: [Self] = []
         if let summary {
-            rows.append(Self(id: "summary", title: summary.title,
-                             subtitle: "\(summary.isDraft ? "Draft" : summary.state.capitalized)  ·  \(address.repository.fullName) #\(address.number)\n\(summary.author?.login ?? "Deleted user")  ·  \(summary.headRefName) → \(summary.baseRefName)",
-                             body: PRMarkdown.render(summary.body), url: address.url, isSummary: true, threadID: nil))
+            let status = summary.state == "MERGED" ? "Merged" : summary.state == "CLOSED" ? "Closed" : summary.isDraft ? "Draft" : "Ready for review"
+            rows.append(Self(id: "summary", kind: "summary", title: summary.title, subtitle: "", time: "", body: summary.body, bodyHTML: summary.bodyHTML, url: address.url, author: summary.author, isSummary: true,
+                             header: Header(status: status, repository: address.repository.fullName, number: address.number, head: summary.headRefName, base: summary.baseRefName, commitCount: summary.commits.totalCount),
+                             threadID: nil, hasMoreReplies: false, canReply: false, canResolve: false, isResolved: false))
         }
-        rows.append(Self(id: "activity-heading", title: "Activity", subtitle: "", body: NSAttributedString(), url: nil, isSummary: true, threadID: nil))
-        var events: [(Date, Self)] = []
+        rows.append(Self(id: "activity-heading", kind: "heading", title: "Activity", subtitle: "", time: "", body: "", bodyHTML: nil, url: nil, author: nil, isSummary: true, header: nil, threadID: nil, hasMoreReplies: false, canReply: false, canResolve: false, isResolved: false))
+        let relative = RelativeDateTimeFormatter()
+        relative.unitsStyle = .short
+        let now = Date()
+        var events: [(Date, [Self])] = []
+        let reviews = Set(activity.filter { $0.kind == "PullRequestReview" }.map(\.id))
+        let groups = Dictionary(grouping: threads.filter { $0.comments.nodes.first?.pullRequestReview != nil }) {
+            $0.comments.nodes.first!.pullRequestReview!.id
+        }
+        let reviewCommentCounts = Dictionary(grouping: threads.flatMap(\.comments.nodes).compactMap { $0.pullRequestReview?.id }, by: { $0 }).mapValues(\.count)
+        func threadRows(_ thread: PRThread, reviewID: String?) -> [Self] {
+            guard let root = thread.comments.nodes.first else { return [] }
+            let context = "\(thread.path)\(thread.line.map { ":\($0)" } ?? "") · \(thread.isResolved ? "Resolved" : "Open thread")\(thread.isOutdated ? " · Outdated" : "")"
+            return thread.comments.nodes.enumerated().map { index, comment in
+                let first = index == 0
+                let last = index == thread.comments.nodes.count - 1
+                var row = Self(id: comment.id, kind: first ? "thread" : "reply", title: comment.author?.login ?? "Deleted user", subtitle: context, time: relative.localizedString(for: comment.createdAt, relativeTo: now), body: comment.body, bodyHTML: comment.bodyHTML, url: comment.url, author: comment.author, isSummary: false, header: nil, threadID: thread.id, hasMoreReplies: last && thread.comments.pageInfo.hasNextPage, canReply: last && thread.viewerCanReply == true, canResolve: last && (thread.isResolved ? thread.viewerCanUnresolve : thread.viewerCanResolve) == true, isResolved: thread.isResolved)
+                row.parentID = index == 0 ? reviewID : root.id
+                row.badgeResolved = index == 0 && (thread.isResolved || thread.isOutdated)
+                row.defaultExpanded = !thread.isResolved && !thread.isOutdated
+                row.childCount = index == 0 ? thread.comments.nodes.count - 1 : 0
+                row.filePath = "\(thread.path)\(thread.line.map { ":\($0)" } ?? "")"
+                row.isThreadEnd = last
+                row.canReact = comment.viewerCanReact == true
+                row.reactionGroups = comment.reactionGroups ?? []
+                row.isReacting = loading.contains("Reaction:\(comment.id)")
+                return row
+            }
+        }
         for item in activity {
             if Task.isCancelled { return [] }
-            let name = item.author?.login ?? (item.kind == "PullRequestCommit" ? "Commit" : "Deleted user")
             let event: String
             switch item.kind {
-            case "PullRequestReview": event = (item.state ?? "Reviewed").replacingOccurrences(of: "_", with: " ").capitalized
+            case "PullRequestReview": event = item.state == "APPROVED" ? "approved these changes" : item.state == "CHANGES_REQUESTED" ? "requested changes" : "reviewed"
             case "PullRequestCommit": event = "Committed"
-            case "MergedEvent": event = "Merged this pull request"
-            case "ClosedEvent": event = "Closed this pull request"
-            case "ReopenedEvent": event = "Reopened this pull request"
-            case "ReadyForReviewEvent": event = "Marked ready for review"
-            case "ConvertToDraftEvent": event = "Converted to draft"
+            case "MergedEvent": event = "merged this pull request"
+            case "ClosedEvent": event = "closed this pull request"
+            case "ReopenedEvent": event = "reopened this pull request"
+            case "ReadyForReviewEvent": event = "marked ready for review"
+            case "ConvertToDraftEvent": event = "converted to draft"
             default: event = "Commented"
             }
-            events.append((item.createdAt, Self(id: item.id, title: name, subtitle: "\(event)  ·  \(item.createdAt.formatted(date: .abbreviated, time: .shortened))", body: PRMarkdown.render(item.body), url: item.url, isSummary: false, threadID: nil)))
+            let kind = item.kind == "PullRequestCommit" ? "commit" : item.kind == "PullRequestReview" ? "review" : item.kind == "IssueComment" ? "comment" : "event"
+            var row = Self(id: item.id, kind: kind, title: item.author?.login ?? (kind == "commit" ? "Commit" : "Deleted user"), subtitle: event, time: relative.localizedString(for: item.createdAt, relativeTo: now), body: item.body, bodyHTML: item.bodyHTML, url: item.url, author: item.author, isSummary: false, header: nil, threadID: nil, hasMoreReplies: false, canReply: false, canResolve: false, isResolved: false)
+            row.canReact = item.viewerCanReact == true
+            row.reactionGroups = item.reactionGroups ?? []
+            row.isReacting = loading.contains("Reaction:\(item.id)")
+            let children = (groups[item.id] ?? []).sorted {
+                let left = $0.comments.nodes.first!.createdAt, right = $1.comments.nodes.first!.createdAt
+                return left == right ? $0.id < $1.id : left < right
+            }
+            if kind == "review" {
+                row.childCount = children.count
+                row.badgeResolved = !children.isEmpty && item.reviewCommentCount == reviewCommentCounts[item.id] && children.allSatisfy { $0.isResolved || $0.isOutdated }
+            }
+            row.defaultExpanded = kind == "comment" || (kind == "review" && !row.badgeResolved)
+            events.append((item.createdAt, [row] + children.flatMap { threadRows($0, reviewID: item.id) }))
         }
         for thread in threads {
-            for (index, comment) in thread.comments.nodes.enumerated() {
-                if Task.isCancelled { return [] }
-                let context = "\(thread.path)\(thread.line.map { ":\($0)" } ?? "")  ·  \(thread.isResolved ? "Resolved" : "Open thread")\(thread.isOutdated ? "  ·  Outdated" : "")"
-                events.append((comment.createdAt, Self(id: comment.id, title: comment.author?.login ?? "Deleted user", subtitle: "\(context)\n\(comment.createdAt.formatted(date: .abbreviated, time: .shortened))", body: PRMarkdown.render(comment.body), url: comment.url, isSummary: false, threadID: index == thread.comments.nodes.count - 1 && thread.comments.pageInfo.hasNextPage ? thread.id : nil)))
-            }
+            if Task.isCancelled { return [] }
+            guard let root = thread.comments.nodes.first, !reviews.contains(root.pullRequestReview?.id ?? "") else { continue }
+            events.append((root.createdAt, threadRows(thread, reviewID: nil)))
         }
-        rows += events.sorted { $0.0 == $1.0 ? $0.1.id < $1.1.id : $0.0 < $1.0 }.map(\.1)
+        events.sort { $0.0 == $1.0 ? $0.1[0].id < $1.1[0].id : $0.0 < $1.0 }
+        rows += events.flatMap(\.1)
         return rows
-    }
-}
-
-enum PRMarkdown {
-    static func render(_ markdown: String) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        var inCode = false
-        for raw in markdown.components(separatedBy: "\n") {
-            if Task.isCancelled { break }
-            if raw.hasPrefix("```") { inCode.toggle(); continue }
-            var line = raw
-            let heading = inCode ? 0 : line.prefix(while: { $0 == "#" }).count
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.lineSpacing = 4
-            paragraph.paragraphSpacing = heading > 0 ? 10 : 5
-            var font = NSFont.systemFont(ofSize: 14)
-            if heading > 0 && heading <= 6 && line.dropFirst(heading).first == " " {
-                line = String(line.dropFirst(heading + 1))
-                font = .systemFont(ofSize: heading == 1 ? 22 : 18, weight: .semibold)
-            } else if inCode || line.hasPrefix("|") {
-                font = .monospacedSystemFont(ofSize: 12.5, weight: .regular)
-            } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
-                line = "• " + line.dropFirst(2)
-                paragraph.headIndent = 16
-            } else if line.hasPrefix("> ") {
-                line = "│ " + line.dropFirst(2)
-                paragraph.headIndent = 16
-            }
-            let parsed = inCode ? nil : try? AttributedString(markdown: line, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))
-            let text = parsed.map(NSAttributedString.init) ?? NSAttributedString(string: line)
-            let styled = NSMutableAttributedString(attributedString: text)
-            let range = NSRange(location: 0, length: styled.length)
-            styled.addAttributes([.font: font, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph], range: range)
-            if inCode { styled.addAttribute(.backgroundColor, value: NSColor.quaternaryLabelColor, range: range) }
-            if let parsed {
-                var offset = 0
-                for run in parsed.runs {
-                    let content = String(parsed.characters[run.range])
-                    let r = NSRange(location: offset, length: content.utf16.count)
-                    offset += r.length
-                    if run.inlinePresentationIntent?.contains(.code) == true {
-                        styled.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular), range: r)
-                    } else if run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true {
-                        styled.addAttribute(.font, value: NSFont.systemFont(ofSize: font.pointSize, weight: .semibold), range: r)
-                    } else if run.inlinePresentationIntent?.contains(.emphasized) == true {
-                        let descriptor = font.fontDescriptor.withSymbolicTraits(.italic)
-                        styled.addAttribute(.font, value: NSFont(descriptor: descriptor, size: font.pointSize) ?? font, range: r)
-                    }
-                }
-            }
-            result.append(styled)
-            result.append(NSAttributedString(string: "\n", attributes: [.font: font, .paragraphStyle: paragraph]))
-        }
-        return NSAttributedString(attributedString: result)
     }
 }

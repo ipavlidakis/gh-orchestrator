@@ -36,7 +36,7 @@
 - Core layer owns auth request building, device-code/token polling, credential storage, GraphQL/REST parsing, PR aggregation, and validation helpers.
 
 ## Active Feature Plans
-- [PLAN-pr-viewer.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-pr-viewer.md): native in-app PR summary and conversation viewer.
+- [PLAN-pr-viewer.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-pr-viewer.md): native in-app PR summary and conversation viewer, including the current Settings surface/chrome polish increment.
 - [PLAN-menu-bar.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-menu-bar.md): settings-window app menu commands and top-level menu pruning.
 - [PLAN-notifications.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-notifications.md): per-repository local notification triggers for PR and workflow events.
 - [PLAN-actions-insights.md](/Users/ipavlidakis/workspace/gh-orchestrator/PLAN-actions-insights.md): Settings dashboard for GitHub Actions workflow success and duration trends.
@@ -1518,6 +1518,14 @@
 - notes:
   - The user accepted the local fix and authorized commit, push, and a new release. Reuse the existing release config and same-repository Homebrew publication workflow.
 
+### T70: Release In-App PR Conversations and Settings Polish
+- status: `in_progress`
+- owner: `codex-main`
+- depends_on: `PLAN-pr-viewer.md:PV01` through `PV10`, `T69`
+- goal: Commit and push the accepted PR viewer/content/actions and Settings improvements, then publish version 0.5.6/build 53 and verify its signed notarized assets and automatic Homebrew publication.
+- verification: Open Code Review delegated review covered all 10 selected production files with no blocking findings; excluded tests and design/plan files were checked manually. Final full app suite passed 115 tests and core suite passed 105 tests. The 2,004-row conversation and 1,000-thread fixtures measured p95 viewport update/forced layout of 4 ms and 3 ms, with at most 7 and 12 mounted rows. Tuist generation passed. Release packaging, public asset verification and Homebrew readback are pending.
+- notes: The user accepted the local UI and explicitly authorized commit, push and a new release. Reuse the existing local release configuration and repository release/Homebrew scripts; preserve Browser as the default destination and defer code diffs. Final combined validation exposed UI-harness visibility/timing failures: benchmark windows now stay unoccluded, frame scheduling has a timer fallback, synthetic clicks enter the application event queue, and foreground Settings captures wait for activation to settle. Existing SceneStorage test-host warnings remain; older macOS appearance is not visually verified.
+
 ## Suggested Parallel Pickup Order
 ### Historical v1 phase
 - Agent 1: `T01`
@@ -1548,6 +1556,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-08: Settings uses a native NavigationSplitView/sidebar List, with system glass and corner geometry instead of custom rail drawing or repeated AppKit chrome overrides. Hide the sidebar toggle/title bubble; preserve native window-control integration with scene styles and a standard macOS 26 toolbar spacer. PLAN-pr-viewer.md:PV09 owns this visual-polish increment.
 - 2026-10-08: The optional In App PR destination opens a native summary/conversation window; Browser remains the default. PLAN-pr-viewer.md owns the paginated viewer and scrolling-performance validation. Code diffs are deferred.
 - 2026-10-07: PLAN-notifications.md:N09 declares `LSUIElement` for the menu-bar app and routes notification links through AppController's existing Dock-policy restoration. Visible Settings and the explicit Dock preference continue to control temporary regular-app activation.
 - 2026-10-02: T64 gives workflow-job notifications a dedicated marketing scene and screenshot. Alerts cover successful and failed PR-attached jobs; customization is by repository, trigger, workflow and job. Keep fictional data, silent playback and installation commands only on the website. Rebalance the introduction to 25 seconds.

@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-__NONCE__'; style-src 'unsafe-inline'; img-src https: data:; media-src https:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--background); color: var(--text); font: 14px/1.55 -apple-system, BlinkMacSystemFont, sans-serif; overflow-anchor: none; }
+#conversation { position: relative; width: 100%; }
+article { position: absolute; left: 24px; right: 24px; padding: 16px 24px; border: .5px solid var(--border); border-radius: 12px; background: var(--card); }
+article.summary { background: transparent; border-color: transparent; }
+header { display: flex; align-items: center; gap: 12px; }
+h1, h2, h3, h4, h5, h6 { line-height: 1.3; }
+header h1, header h2 { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.summary header h1 { font-size: 24px; }
+.heading header h2 { font-size: 22px; }
+.avatar { flex: 0 0 28px; height: 28px; border-radius: 50%; background: var(--code); text-align: center; line-height: 28px; font-size: 11px; font-weight: 600; }
+.metadata { margin: 8px 0 12px; color: var(--secondary); font-size: 12px; white-space: pre-line; overflow-wrap: anywhere; }
+.markdown-body { overflow-wrap: anywhere; }
+
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child { margin-bottom: 0; }
+.markdown-body p, .markdown-body ul, .markdown-body ol, .markdown-body blockquote, .markdown-body pre, .markdown-body table, .markdown-body details { margin: 0 0 16px; }
+.markdown-body h1 { font-size: 24px; }
+.markdown-body h2 { font-size: 20px; }
+.markdown-body h3 { font-size: 17px; }
+.markdown-body h4, .markdown-body h5, .markdown-body h6 { font-size: 14px; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3 { margin: 24px 0 12px; }
+.markdown-body ul, .markdown-body ol { padding-left: 26px; }
+.markdown-body li + li { margin-top: 4px; }
+.markdown-body li > p { margin: 8px 0; }
+.markdown-body li > ul, .markdown-body li > ol { margin-bottom: 0; }
+a { color: var(--link); text-decoration: underline; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+code { border-radius: 4px; padding: 2px 4px; background: var(--code); }
+kbd { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px; }
+pre { padding: 12px; border-radius: 8px; overflow-x: auto; white-space: pre; background: var(--code); }
+pre code { padding: 0; background: transparent; white-space: inherit; }
+.raw-markdown { white-space: pre-wrap; }
+blockquote { padding: 0 16px; border-left: 3px solid var(--border); color: var(--secondary); }
+table { display: block; width: max-content; max-width: 100%; overflow-x: auto; border-collapse: collapse; border-spacing: 0; }
+th, td { padding: 8px 12px; border: .5px solid var(--border); text-align: left; }
+th { font-weight: 600; }
+tr:nth-child(2n) { background: var(--code); }
+img, video { max-width: 100%; height: auto; }
+img.emoji { width: 1.2em; height: 1.2em; vertical-align: -0.2em; }
+g-emoji { font-family: 'Apple Color Emoji', sans-serif; }
+audio { max-width: 100%; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
+summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+[align="right"] { text-align: right; }
+[align="center"] { text-align: center; }
+.task-list-item { list-style-type: none; }
+.task-list-item input { margin: 0 6px 0 -20px; }
+.markdown-alert { border-left: 3px solid var(--blue); padding: 8px 16px; margin-bottom: 16px; }
+.markdown-alert-title { color: var(--blue); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.markdown-alert-important { border-color: var(--purple); }
+.markdown-alert-important .markdown-alert-title { color: var(--purple); }
+.markdown-alert-tip { border-color: var(--green); }
+.markdown-alert-tip .markdown-alert-title { color: var(--green); }
+.markdown-alert-warning { border-color: var(--orange); }
+.markdown-alert-warning .markdown-alert-title { color: var(--orange); }
+.markdown-alert-caution { border-color: var(--red); }
+.markdown-alert-caution .markdown-alert-title { color: var(--red); }
+svg.octicon { display: inline-block; fill: currentColor; flex-shrink: 0; }
+.pl-c { color: var(--secondary); }
+.pl-k, .pl-smi, .pl-ent { color: var(--red); }
+.pl-s, .pl-pds, .pl-v { color: var(--blue); }
+.pl-en, .pl-c1, .pl-bu { color: var(--purple); }
+footer { display: flex; align-items: center; gap: 16px; margin-top: 12px; color: var(--secondary); font-size: 12px; }
+footer a, footer button { color: inherit; font: inherit; }
+button { border: 0; background: transparent; padding: 4px 0; cursor: pointer; }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; border-radius: 3px; }
+.expand { margin-left: auto; }
+.enrichment-note { margin: 12px 0 0; font-size: 12px; color: var(--secondary); }
+[hidden] { display: none !important; }
+
+article.card { padding: 0 0 0 36px; border: 0; background: transparent; border-radius: 0; }
+.comment-card { border: .5px solid var(--border); border-radius: 8px; background: var(--card); overflow: hidden; }
+.card > .avatar { position: absolute; top: 0; left: 0; }
+.comment-card > header { padding: 8px; gap: 6px; flex-wrap: wrap; background: var(--rail); border-bottom: .5px solid var(--border); font-size: 11.5px; }
+.comment-card > header .author { font-size: 12px; font-weight: 600; color: var(--text); }
+.comment-card > .metadata { margin: 8px; font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.comment-card > .markdown-body { padding: 8px; font-size: 12.5px; }
+.comment-card > footer { padding: 0 8px 8px; margin-top: 4px; gap: 12px; flex-wrap: wrap; }
+.comment-card > .enrichment-note { padding: 0 8px; }
+.avatar { display: block; position: relative; width: 28px; overflow: visible; color: var(--secondary); text-decoration: none; border: .5px solid var(--border); }
+.avatar img { width: 28px; height: 28px; object-fit: cover; position: absolute; inset: 0; }
+.author { font-weight: 600; }
+.pr-subtitle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 16px 0 8px; font-size: 13px; color: var(--secondary); }
+.pr-subtitle .author { color: var(--text); }
+.status { display: inline-flex; align-items: center; gap: 6px; background: var(--status-neutral); color: var(--background); border-radius: 999px; padding: 5px 12px; margin-right: 6px; font-weight: 600; white-space: nowrap; }
+.status.ready { background: var(--status-success); }
+.status.merged { background: var(--purple); color: white; }
+.status.closed { background: var(--status-danger); }
+.branch { color: var(--link); background: var(--branch); padding: 2px 6px; border-radius: 5px; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; max-width: 100%; }
+.pr-repository { font-size: 12px; color: var(--secondary); margin-bottom: 24px; }
+.pr-number { color: var(--secondary); font-weight: 400; white-space: nowrap; }
+article.timeline { border: 0; border-radius: 0; background: transparent; padding: 8px 0; display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.timeline::before, .card::before { content: ""; position: absolute; top: -12px; bottom: -12px; left: 14px; width: 2px; background: var(--border); }
+.timeline-symbol { position: relative; width: 28px; height: 28px; flex: 0 0 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--background); color: var(--secondary); }
+.timeline .avatar { width: 20px; height: 20px; flex-basis: 20px; line-height: 20px; font-size: 9px; }
+.timeline .avatar img { width: 20px; height: 20px; }
+.timeline-message { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-message a { color: var(--text); }
+.timeline.commit .timeline-message, .commit-sha { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.timeline time { white-space: nowrap; color: var(--secondary); font-size: 11.5px; }
+.commit-sha { color: var(--secondary); white-space: nowrap; }
+.icon { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.5; }
+
+.disclosure { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; z-index: 0; }
+.disclosure-title { position: relative; min-width: 0; flex: 1; pointer-events: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.disclosure-title a { pointer-events: auto; }
+.disclosure-header { position: relative; cursor: pointer; min-height: 40px; }
+.disclosure-header > a, .disclosure-header > .avatar { z-index: 1; }
+.disclosure-header > time, .chevron, .child-count { position: relative; pointer-events: none; }
+.chevron { width: 7px; height: 7px; flex: 0 0 7px; border-right: 1.5px solid var(--secondary); border-bottom: 1.5px solid var(--secondary); transform: rotate(-45deg); margin: 0 4px; }
+.expanded .chevron { transform: rotate(45deg); }
+.child-count { color: var(--secondary); font-size: 11px; white-space: nowrap; }
+.avatar img { border-radius: 50%; }
+.resolved-badge { position: absolute; z-index: 2; right: -3px; bottom: -3px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--background); background: var(--status-success); color: var(--background); font: 600 9px/10px -apple-system, sans-serif; }
+article.review .comment-card { background: transparent; border: 0; }
+article.review .comment-card > header { background: transparent; border: 0; }
+article.timeline { display: block; padding: 0; }
+.timeline > header { gap: 8px; }
+.timeline > .markdown-body, .timeline > footer { margin-left: 36px; }
+article.thread .disclosure-title { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+article.conversation-part .comment-card { border-radius: 0; border-top: 0; }
+article.conversation-part .thread-start { border-top: .5px solid var(--border); border-radius: 8px 8px 0 0; }
+article.conversation-part .thread-end { border-radius: 0 0 8px 8px; }
+article.conversation-part .thread-start.thread-end { border-radius: 8px; }
+.conversation-part .comment-author { display: flex; gap: 8px; padding: 16px 12px 8px; align-items: center; font-size: 12px; }
+.comment-author .author { color: var(--text); }
+.comment-author .comment-date { color: var(--secondary); font-size: 11.5px; }
+.conversation-part .markdown-body { padding: 0 12px 8px 48px; }
+.external-link { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex: 0 0 24px; margin-left: auto; color: var(--secondary); text-decoration: none; border-radius: 5px; }
+.external-link:hover { background: var(--rail); color: var(--text); }
+.thread-state { position: relative; color: var(--secondary); font-size: 11px; pointer-events: none; white-space: nowrap; }
+.comment-card > footer.thread-actions { margin: 0; padding: 12px; border-top: .5px solid var(--border); background: var(--rail); }
+.thread-actions .reply { flex: 1; padding: 8px 12px; text-align: left; border: .5px solid var(--border); border-radius: 6px; background: var(--card); }
+.thread-actions .resolve { padding: 6px 12px; border: .5px solid var(--border); border-radius: 6px; }
+.thread-actions .resolve { color: var(--text); }
+.reactions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 4px 8px 12px; font-size: 12px; }
+.conversation-part .reactions { padding-left: 48px; }
+.reaction { min-width: 30px; min-height: 28px; padding: 3px 8px; border: .5px solid var(--border); border-radius: 999px; color: var(--text); }
+.reaction[aria-pressed=true] { background: var(--branch); border-color: var(--link); }
+button:disabled { cursor: default; opacity: .55; }
+.reaction-picker { display: flex; gap: 4px; flex-wrap: wrap; flex-basis: 100%; }
+</style>
+</head>
+<body>
+<main id="conversation" aria-label="Pull request summary and activity"></main>
+<script nonce="__NONCE__">
+(function () {
+    "use strict";
+    const canvas = document.getElementById("conversation");
+    const mounted = new Map(), heights = new Map(), expanded = new Set();
+    let allRows = [], byID = new Map(), depths = new Map(), rows = [], indices = new Map(), offsets = [12], frame = 0, measurementFrame = 0, width = 0;
+    const pendingHeights = new Map();
+
+    function post(message) { window.webkit.messageHandlers.prViewer.postMessage(message); }
+    function same(a, b) {
+        return a && b && JSON.stringify(a) === JSON.stringify(b);
+    }
+    function estimate(row) {
+        if (row.id === "activity-heading") return 64;
+        if (!row.isSummary && row.kind !== "reply" && !expanded.has(row.id)) return 40;
+        if (row.kind === "commit" || row.kind === "event") return 100;
+        return row.isSummary ? 520 : Math.min(460, 140 + (row.bodyHTML || row.body || "").length / 4);
+    }
+    function rebuild() {
+        // ponytail: rebuild prefix heights per measurement batch; use a Fenwick tree if much larger loaded pages make this costly.
+        offsets = [12];
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i], joined = row.threadID && !row.isThreadEnd && (row.kind === "reply" || expanded.has(row.id));
+            offsets.push(offsets[i] + (heights.get(row.id) || estimate(row)) + (joined ? 0 : 12));
+        }
+        canvas.style.height = (offsets[offsets.length - 1] + 12) + "px";
+        for (const [id, node] of mounted) node.style.top = offsets[indices.get(id)] + "px";
+    }
+    function visibleRows() {
+        const visible = new Map();
+        rows = allRows.filter(function (row) {
+            const show = !row.parentID || (visible.get(row.parentID) && expanded.has(row.parentID));
+            visible.set(row.id, show);
+            return show;
+        });
+        indices = new Map(rows.map(function (row, index) { return [row.id, index]; }));
+        for (const [id, node] of mounted) if (!indices.has(id)) {
+            observer.unobserve(node); node.remove(); mounted.delete(id);
+        }
+        rebuild();
+    }
+    function toggle(id) {
+        const saved = anchor(), node = mounted.get(id);
+        const hadFocus = node && node.contains(document.activeElement);
+        if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
+        heights.delete(id); pendingHeights.delete(id);
+        if (node) { observer.unobserve(node); node.remove(); mounted.delete(id); }
+        visibleRows(); restore(saved); render();
+        if (hadFocus) mounted.get(id)?.querySelector(".disclosure")?.focus({ preventScroll: true });
+    }
+    function indexAt(y) {
+        let low = 0, high = rows.length;
+        while (low < high) {
+            const mid = (low + high) >> 1;
+            if (offsets[mid + 1] <= y) low = mid + 1; else high = mid;
+        }
+        return Math.min(low, Math.max(0, rows.length - 1));
+    }
+    function anchor() {
+        const i = indexAt(window.scrollY + 12);
+        return rows[i] ? { id: rows[i].id, delta: window.scrollY - offsets[i] } : null;
+    }
+    function restore(saved) {
+        if (saved && indices.has(saved.id)) window.scrollTo(0, Math.max(0, offsets[indices.get(saved.id)] + saved.delta));
+    }
+    function schedule() {
+        if (!frame) frame = requestAnimationFrame(function () { frame = 0; render(); });
+    }
+    function sanitize(html) {
+        const template = document.createElement("template");
+        template.innerHTML = html;
+        template.content.querySelectorAll("script,style,link,meta,base,iframe,object,embed,form,button,textarea,select").forEach(function (node) { node.remove(); });
+        const comments = document.createTreeWalker(template.content, NodeFilter.SHOW_COMMENT);
+        const hidden = [];
+        while (comments.nextNode()) hidden.push(comments.currentNode);
+        hidden.forEach(function (node) { node.remove(); });
+        for (const element of template.content.querySelectorAll("*")) {
+            for (const attr of Array.from(element.attributes)) {
+                const name = attr.name.toLowerCase();
+                if (name.startsWith("on") || name.startsWith("data-") || ["style", "srcdoc", "autoplay", "formaction", "nonce"].includes(name)) {
+                    element.removeAttribute(attr.name);
+                } else if (["href", "src", "poster", "xlink:href"].includes(name)) {
+                    try {
+                        const url = new URL(attr.value, document.baseURI);
+                        const imageData = element.tagName === "IMG" && name === "src" && /^data:image\//i.test(attr.value);
+                        if (!["https:", "http:", "mailto:"].includes(url.protocol) && !imageData) element.removeAttribute(attr.name);
+                    } catch (_) { element.removeAttribute(attr.name); }
+                }
+            }
+            if (element.tagName === "INPUT") { element.disabled = true; if (element.type !== "checkbox") element.remove(); }
+            if (element.tagName === "IMG") { element.loading = "lazy"; element.decoding = "async"; }
+        }
+        return template.content;
+    }
+    function element(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+    function button(title, className, action) {
+        const node = element("button", className, title);
+        node.type = "button";
+        node.addEventListener("click", action);
+        return node;
+    }
+    function link(title, url, className) {
+        const node = element(url ? "a" : "span", className, title);
+        if (url) node.href = url;
+        return node;
+    }
+    function icon(commit) {
+        const wrapper = element("span", "timeline-symbol");
+        wrapper.innerHTML = commit
+            ? '<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8h4m6 0h4"/><circle cx="8" cy="8" r="3"/></svg>'
+            : '<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4v8m8-8v3c0 3-8 1-8 5"/><circle cx="4" cy="2.5" r="1.5"/><circle cx="4" cy="13.5" r="1.5"/><circle cx="12" cy="2.5" r="1.5"/></svg>';
+        return wrapper;
+    }
+    function avatar(row) {
+        const author = row.author || {};
+        const node = link("", author.url, "avatar");
+        node.append(element("span", "", row.title.slice(0, 1).toUpperCase()));
+        node.setAttribute("aria-label", row.title + "'s profile");
+        if (author.avatarUrl && author.avatarUrl.startsWith("https://")) {
+            const image = element("img");
+            image.alt = ""; image.width = 28; image.height = 28;
+            image.loading = "lazy"; image.decoding = "async";
+            image.addEventListener("error", function () { image.remove(); });
+            image.src = author.avatarUrl;
+            node.append(image);
+        }
+        if (row.badgeResolved) {
+            node.append(element("span", "resolved-badge", "✓"));
+            node.setAttribute("aria-label", row.title + "'s profile, all conversations resolved or outdated");
+        }
+        return node;
+    }
+    function externalLink(row) {
+        const external = link("", row.url, "external-link");
+        external.title = "Open on GitHub"; external.setAttribute("aria-label", "Open on GitHub"); external.dataset.external = "true";
+        external.innerHTML = '<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M9 2h5v5m0-5L7 9M7 3H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9"/></svg>';
+        return external;
+    }
+    function makeRow(row) {
+        if (row.kind === "thread" || row.kind === "reply") return makeThreadComment(row);
+        const compact = row.kind === "commit" || row.kind === "event";
+        const node = element("article", compact ? "timeline " + row.kind : row.isSummary ? "summary" : "card");
+        if (row.id === "activity-heading") node.classList.add("heading");
+        if (expanded.has(row.id)) node.classList.add("expanded");
+        node.dataset.rowId = row.id;
+        node.classList.add(row.kind);
+        node.style.left = (24 + (depths.get(row.id) || 0) * 24) + "px";
+        const container = row.isSummary || compact ? node : element("div", "comment-card");
+        const header = element("header");
+        if (row.isSummary) {
+            const title = element(row.id === "summary" ? "h1" : "h2", "", row.title);
+            if (row.header) title.append(document.createTextNode(" "), link("#" + row.header.number, row.url, "pr-number"));
+            header.append(title);
+        } else {
+            if (compact) header.append(icon(row.kind === "commit"), avatar(row));
+            else node.append(avatar(row));
+            header.classList.add("disclosure-header");
+            const disclosure = button("", "disclosure", function () { toggle(row.id); });
+            disclosure.setAttribute("aria-expanded", String(expanded.has(row.id)));
+            disclosure.setAttribute("aria-label", row.kind === "commit" ? row.body : row.title + " " + row.subtitle);
+            disclosure.setAttribute("aria-controls", "content-" + row.id);
+            const title = element("div", "disclosure-title");
+            if (row.kind === "commit") {
+                title.classList.add("timeline-message");
+                title.textContent = row.body;
+                title.title = row.body;
+            } else if (row.kind === "thread") {
+                title.append(link(row.title, row.author && row.author.url, "author"), document.createTextNode(" · " + row.subtitle));
+                title.title = row.subtitle;
+            } else {
+                title.append(link(row.title, row.author && row.author.url, "author"));
+                if (row.kind !== "reply") title.append(document.createTextNode(" · " + row.subtitle));
+            }
+            header.append(disclosure, element("span", "chevron"), title);
+            if (row.childCount) header.append(element("span", "child-count", row.childCount + (row.kind === "review" ? (row.childCount === 1 ? " conversation" : " conversations") : (row.childCount === 1 ? " reply" : " replies"))));
+            if (row.kind === "commit") header.append(link(row.id.slice(0, 7), row.url, "commit-sha"));
+            header.append(element("time", "comment-time", row.time));
+        }
+        if (row.url && !compact) header.append(externalLink(row));
+        container.append(header);
+        if (row.header) {
+            const metadata = element("div", "pr-subtitle"), info = row.header;
+            const status = element("span", "status " + (info.status === "Ready for review" ? "ready" : info.status.toLowerCase()), info.status);
+            const symbol = icon(false).firstChild;
+            status.prepend(symbol);
+            metadata.append(status, link(row.author ? row.author.login : "Deleted user", row.author && row.author.url, "author"));
+            metadata.append(document.createTextNode(info.commitCount == null ? " wants to merge into " : " wants to merge " + info.commitCount + (info.commitCount === 1 ? " commit into " : " commits into ")));
+            metadata.append(element("span", "branch", info.base), document.createTextNode(" from "), element("span", "branch", info.head));
+            container.append(metadata, element("div", "pr-repository", info.repository));
+        }
+        const body = element("div", "markdown-body");
+        body.id = "content-" + row.id;
+        body.hidden = (!row.isSummary && !expanded.has(row.id)) || (row.kind === "review" && !row.body && !row.bodyHTML);
+        if (!body.hidden && row.bodyHTML !== undefined && row.bodyHTML !== null) body.append(sanitize(row.bodyHTML));
+        else if (!body.hidden && row.body) body.append(element("pre", "raw-markdown", row.body));
+        container.append(body);
+        if (!body.hidden && !row.isSummary && row.kind !== "review") appendReactions(container, row);
+        if (body.querySelector("math-renderer,.js-render-needs-enrichment")) container.append(element("p", "enrichment-note", "Math and diagrams can be viewed on GitHub."));
+        if (container !== node) node.append(container);
+        return node;
+    }
+
+    const reactionTypes = { THUMBS_UP: ["👍", "Thumbs up"], THUMBS_DOWN: ["👎", "Thumbs down"], LAUGH: ["😄", "Laugh"], HOORAY: ["🎉", "Hooray"], CONFUSED: ["😕", "Confused"], HEART: ["❤️", "Heart"], ROCKET: ["🚀", "Rocket"], EYES: ["👀", "Eyes"] };
+    function appendReactions(container, row) {
+        const groups = (row.reactionGroups || []).filter(group => reactionTypes[group.content] && group.reactors.totalCount > 0);
+        if (!row.canReact && !groups.length) return;
+        const toolbar = element("div", "reactions");
+        toolbar.tabIndex = -1;
+        toolbar.setAttribute("role", "group"); toolbar.setAttribute("aria-label", "Comment reactions");
+        function reaction(content, count) {
+            const [emoji, label] = reactionTypes[content], selected = (row.reactionGroups || []).some(group => group.content === content && group.viewerHasReacted);
+            const control = button(emoji + (count == null ? "" : " " + count), "reaction", function () {
+                toolbar.focus({preventScroll: true});
+                toolbar.querySelectorAll("button").forEach(button => { button.disabled = true; });
+                post({kind: "reaction", id: row.id, content});
+            });
+            control.setAttribute("aria-label", (selected ? "Remove " : "Add ") + label + " reaction" + (count == null ? "" : ", " + count));
+            control.setAttribute("aria-pressed", String(selected)); control.title = label;
+            control.disabled = !row.canReact || row.isReacting;
+            return control;
+        }
+        for (const group of groups) toolbar.append(reaction(group.content, group.reactors.totalCount));
+        if (row.canReact) {
+            const picker = element("div", "reaction-picker"); picker.hidden = true;
+            for (const content of Object.keys(reactionTypes)) picker.append(reaction(content));
+            const add = button("", "reaction add-reaction", function () {
+                picker.hidden = !picker.hidden; add.setAttribute("aria-expanded", String(!picker.hidden));
+                if (!picker.hidden) picker.querySelector("button").focus();
+            });
+            add.innerHTML = '<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M5 9c1 3 5 3 6 0M5.5 5.5h.5m4 0h.5"/></svg>';
+            add.setAttribute("aria-label", "Add reaction"); add.setAttribute("aria-expanded", "false"); add.disabled = row.isReacting;
+            toolbar.addEventListener("keydown", function (event) {
+                if (event.key === "Escape") { picker.hidden = true; add.setAttribute("aria-expanded", "false"); add.focus(); event.stopPropagation(); }
+            });
+            toolbar.append(add, picker);
+        }
+        container.append(toolbar);
+    }
+
+    function makeThreadComment(row) {
+        const first = row.kind === "thread", open = !first || expanded.has(row.id);
+        const node = element("article", "card conversation-part " + row.kind + (open ? " expanded" : ""));
+        node.dataset.rowId = row.id;
+        const depth = depths.get(first ? row.id : row.parentID) || 0;
+        node.style.left = (24 + depth * 24) + "px";
+        const container = element("div", "comment-card" + (first ? " thread-start" : "") + ((!open || row.isThreadEnd) ? " thread-end" : ""));
+        if (first) {
+            if (!open) node.append(avatar(row));
+            const header = element("header", "disclosure-header");
+            const disclosure = button("", "disclosure", () => toggle(row.id));
+            disclosure.setAttribute("aria-expanded", String(open)); disclosure.setAttribute("aria-label", row.title + " " + row.subtitle); disclosure.setAttribute("aria-controls", "content-" + row.id);
+            const title = element("div", "disclosure-title", row.filePath); title.title = row.filePath;
+            header.append(disclosure, element("span", "chevron"), title, element("span", "thread-state", row.badgeResolved ? (row.isResolved ? "Resolved" : "Outdated") : "Open"));
+            if (row.childCount) header.append(element("span", "child-count", row.childCount + (row.childCount === 1 ? " reply" : " replies")));
+            container.append(header);
+        }
+        const body = element("div", "markdown-body"); body.id = "content-" + row.id; body.hidden = !open;
+        if (open) {
+            const author = element("div", "comment-author");
+            const date = link(row.time, row.url, "comment-date"); date.dataset.external = "true";
+            author.append(avatar(row), link(row.title, row.author && row.author.url, "author"), date);
+            if (row.url) author.append(externalLink(row));
+            container.append(author);
+            if (row.bodyHTML != null) body.append(sanitize(row.bodyHTML)); else if (row.body) body.append(element("pre", "raw-markdown", row.body));
+        }
+        container.append(body);
+        if (open) {
+            if (body.querySelector("math-renderer,.js-render-needs-enrichment")) container.append(element("p", "enrichment-note", "Math and diagrams can be viewed on GitHub."));
+            appendReactions(container, row);
+            if (row.isThreadEnd) {
+                const footer = element("footer", "thread-actions");
+                if (row.hasMoreReplies) footer.append(button("Load more replies", "", () => post({kind: "replies", id: row.threadID})));
+                if (row.canReply) footer.append(button("Reply…", "reply", () => post({kind: "reply", id: row.threadID})));
+                if (row.canResolve) footer.append(button(row.isResolved ? "Unresolve conversation" : "Resolve conversation", "resolve", () => post({kind: "resolve", id: row.threadID})));
+                if (footer.childNodes.length) container.append(footer);
+            }
+        }
+        node.append(container); return node;
+    }
+    const observer = new ResizeObserver(function (entries) {
+        for (const entry of entries) {
+            const node = entry.target;
+            if (!node.isConnected) continue;
+            const id = node.dataset.rowId;
+            const box = entry.borderBoxSize && entry.borderBoxSize[0];
+            pendingHeights.set(id, Math.ceil(box ? box.blockSize : node.getBoundingClientRect().height));
+        }
+        if (!measurementFrame) measurementFrame = requestAnimationFrame(function () {
+            measurementFrame = 0;
+            const saved = anchor();
+            let changed = false;
+            for (const [id, height] of pendingHeights) {
+                if (indices.has(id) && height > 0 && heights.get(id) !== height) { heights.set(id, height); changed = true; }
+            }
+            pendingHeights.clear();
+            if (changed) { rebuild(); restore(saved); schedule(); }
+        });
+    });
+    function render() {
+        if (!rows.length) return;
+        const start = indexAt(Math.max(0, window.scrollY - 600));
+        const end = Math.min(rows.length - 1, indexAt(window.scrollY + window.innerHeight + 600));
+        const focused = document.activeElement && document.activeElement.closest("article");
+        for (const [id, node] of mounted) {
+            const index = indices.get(id);
+            if ((index < start || index > end) && node !== focused) { observer.unobserve(node); node.remove(); mounted.delete(id); }
+        }
+        for (let i = start; i <= end; i++) {
+            const row = rows[i];
+            if (!mounted.has(row.id)) {
+                const node = makeRow(row);
+                node.style.top = offsets[i] + "px";
+                // Keep DOM order chronological for keyboard navigation and accessibility.
+                let before = null;
+                for (const child of canvas.children) if (indices.get(child.dataset.rowId) > i) { before = child; break; }
+                canvas.insertBefore(node, before);
+                mounted.set(row.id, node);
+                observer.observe(node);
+            }
+        }
+    }
+    window.prConversation = {
+        setRows: function (next) {
+            const saved = anchor(), previous = new Map(allRows.map(function (row) { return [row.id, row]; })), previousDepths = depths;
+            const reactionFocus = document.activeElement?.closest(".reactions")?.closest("article")?.dataset.rowId;
+            allRows = next;
+            byID = new Map(allRows.map(function (row) { return [row.id, row]; }));
+            for (const row of allRows) {
+                const before = previous.get(row.id);
+                if (!before || before.defaultExpanded !== row.defaultExpanded) {
+                    if (row.defaultExpanded) expanded.add(row.id);
+                    else expanded.delete(row.id);
+                }
+            }
+            depths = new Map();
+            for (const row of allRows) depths.set(row.id, row.parentID ? (depths.get(row.parentID) || 0) + 1 : 0);
+            const changed = new Set(allRows.filter(row => !same(previous.get(row.id), row) || previousDepths.get(row.id) !== depths.get(row.id)).map(row => row.id));
+            for (const id of heights.keys()) if (!byID.has(id) || changed.has(id)) heights.delete(id);
+            for (const id of pendingHeights.keys()) if (!byID.has(id) || changed.has(id)) pendingHeights.delete(id);
+            for (const id of expanded) if (!byID.has(id)) expanded.delete(id);
+            for (const [id, node] of mounted) if (!byID.has(id) || changed.has(id)) {
+                observer.unobserve(node); node.remove(); mounted.delete(id);
+            }
+            // A later activity page can supply the review for an already open conversation.
+            for (const row of allRows) {
+                const before = previous.get(row.id);
+                if (!before || before.parentID === row.parentID || (!expanded.has(row.id) && saved?.id !== row.id)) continue;
+                let parent = byID.get(row.parentID);
+                while (parent) {
+                    expanded.add(parent.id); heights.delete(parent.id);
+                    const node = mounted.get(parent.id);
+                    if (node) { observer.unobserve(node); node.remove(); mounted.delete(parent.id); }
+                    parent = byID.get(parent.parentID);
+                }
+            }
+            visibleRows(); restore(saved); render();
+            if (reactionFocus) {
+                const toolbar = mounted.get(reactionFocus)?.querySelector(".reactions");
+                (toolbar?.querySelector(".add-reaction:not(:disabled)") || toolbar)?.focus({preventScroll: true});
+            }
+        },
+        setTheme: function (colors, dark) {
+            for (const [key, value] of Object.entries(colors)) document.documentElement.style.setProperty("--" + key, value);
+            document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        },
+        focus: function (id) {
+            if (!byID.has(id)) return;
+            let row = byID.get(id), changed = false;
+            while (row) {
+                if (!row.isSummary && !expanded.has(row.id)) {
+                    expanded.add(row.id); heights.delete(row.id); changed = true;
+                    const node = mounted.get(row.id);
+                    if (node) { observer.unobserve(node); node.remove(); mounted.delete(row.id); }
+                }
+                row = byID.get(row.parentID);
+            }
+            if (changed) visibleRows();
+            window.scrollTo(0, Math.max(0, offsets[indices.get(id)] - 12));
+            render();
+            let measured = false;
+            for (const [rowID, node] of mounted) {
+                const height = node.getBoundingClientRect().height;
+                if (height > 0 && heights.get(rowID) !== height) {
+                    heights.set(rowID, height); pendingHeights.delete(rowID); measured = true;
+                }
+            }
+            if (measured) {
+                rebuild();
+                window.scrollTo(0, Math.max(0, offsets[indices.get(id)] - 12));
+                render();
+            }
+        }
+    };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", function () {
+        if (width === canvas.clientWidth) return;
+        const saved = anchor();
+        width = canvas.clientWidth;
+        heights.clear(); pendingHeights.clear();
+        rebuild(); restore(saved); schedule();
+    });
+    document.addEventListener("click", function (event) {
+        for (const toolbar of document.querySelectorAll(".reactions")) if (!toolbar.contains(event.target)) {
+            const picker = toolbar.querySelector(".reaction-picker"), add = toolbar.querySelector(".add-reaction");
+            if (picker) picker.hidden = true;
+            if (add) add.setAttribute("aria-expanded", "false");
+        }
+        const link = event.target.closest("a");
+        if (!link) return;
+        event.preventDefault();
+        const raw = link.getAttribute("href") || "";
+        if (raw.startsWith("#")) {
+            let id;
+            try { id = decodeURIComponent(raw.slice(1)); } catch (_) { id = raw.slice(1); }
+            const row = link.closest("article"), target = row && Array.from(row.querySelectorAll("[id]")).find(function (node) { return node.id === id; });
+            if (target) {
+
+                requestAnimationFrame(function () { requestAnimationFrame(function () { target.scrollIntoView({ block: "nearest" }); }); });
+                return;
+            }
+        }
+        if (["https:", "http:", "mailto:"].includes(link.protocol)) post({ kind: link.dataset.external === "true" ? "browser" : "link", url: link.href });
+    });
+})();
+</script>
+</body>
+</html>

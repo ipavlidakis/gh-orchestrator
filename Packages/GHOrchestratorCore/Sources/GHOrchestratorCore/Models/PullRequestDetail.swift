@@ -19,9 +19,10 @@ public struct PullRequestAddress: Hashable, Sendable {
     }
 }
 
-public struct PRActor: Decodable, Equatable, Sendable {
+public struct PRActor: Codable, Equatable, Sendable {
     public let login: String
     public let avatarUrl: URL?
+    public let url: URL?
 }
 
 public struct PRPageInfo: Decodable, Equatable, Sendable {
@@ -52,18 +53,54 @@ public struct PRConnection<Node: Decodable & Sendable>: Decodable, Sendable {
 public struct PRComment: Decodable, Identifiable, Equatable, Sendable {
     public let id: String
     public let body: String
+    public let bodyHTML: String?
     public let url: URL
     public let createdAt: Date
     public let author: PRActor?
+    public let pullRequestReview: ReviewReference?
+    public var viewerCanReact: Bool?
+    public var reactionGroups: [PRReactionGroup]?
+
+    public struct ReviewReference: Decodable, Equatable, Sendable {
+        public let id: String
+    }
+}
+
+public enum PRReactionContent: String, Codable, CaseIterable, Sendable {
+    case thumbsUp = "THUMBS_UP", thumbsDown = "THUMBS_DOWN", laugh = "LAUGH", hooray = "HOORAY"
+    case confused = "CONFUSED", heart = "HEART", rocket = "ROCKET", eyes = "EYES"
+}
+
+public struct PRReactionGroup: Codable, Equatable, Sendable {
+    public let content: PRReactionContent
+    public let viewerHasReacted: Bool
+    public let reactors: Reactors
+    public struct Reactors: Codable, Equatable, Sendable { public let totalCount: Int }
+}
+
+public struct PRReactionSubject: Decodable, Sendable {
+    public let id: String
+    public let viewerCanReact: Bool
+    public let reactionGroups: [PRReactionGroup]
 }
 
 public struct PRThread: Decodable, Identifiable, Sendable {
     public let id: String
     public let path: String
     public let line: Int?
-    public let isResolved: Bool
+    public var isResolved: Bool
     public let isOutdated: Bool
+    public let viewerCanReply: Bool?
+    public var viewerCanResolve: Bool?
+    public var viewerCanUnresolve: Bool?
     public var comments: PRConnection<PRComment>
+}
+
+public struct PRThreadResolution: Decodable, Sendable {
+    public let id: String
+    public let isResolved: Bool
+    public let viewerCanResolve: Bool
+    public let viewerCanUnresolve: Bool
 }
 
 public struct PRCheck: Decodable, Identifiable, Sendable {
@@ -84,8 +121,11 @@ public struct PRCheck: Decodable, Identifiable, Sendable {
 }
 
 public struct PRSummary: Decodable, Sendable {
+    public let id: String?
+    public let locked: Bool?
     public let title: String
     public let body: String
+    public let bodyHTML: String?
     public let state: String
     public let isDraft: Bool
     public let author: PRActor?
@@ -99,6 +139,7 @@ public struct PRSummary: Decodable, Sendable {
     public let commits: CommitConnection
 
     public struct CommitConnection: Decodable, Sendable {
+        public let totalCount: Int?
         public let nodes: [CommitNode]
     }
     public struct CommitNode: Decodable, Sendable {
@@ -118,34 +159,56 @@ public struct PRActivity: Decodable, Identifiable, Equatable, Sendable {
     public let id: String
     public let kind: String
     public let body: String
+    public let bodyHTML: String?
     public let url: URL?
     public let createdAt: Date
     public let author: PRActor?
     public let state: String?
+    public let reviewCommentCount: Int?
+    public var viewerCanReact: Bool?
+    public var reactionGroups: [PRReactionGroup]?
 
-    private enum CodingKeys: String, CodingKey { case id, __typename, body, url, createdAt, submittedAt, author, actor, state, commit }
+    private enum CodingKeys: String, CodingKey { case id, __typename, body, bodyHTML, url, createdAt, submittedAt, author, actor, state, commit, comments, viewerCanReact, reactionGroups }
+    private struct ReviewComments: Decodable { let totalCount: Int }
     private struct Commit: Decodable {
         let oid: String
         let messageHeadline: String
         let committedDate: Date
         let url: URL
+        let author: GitActor?
+    }
+    private struct GitActor: Decodable {
+        let name: String?
+        let avatarUrl: URL?
+        let user: PRActor?
     }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         kind = try c.decode(String.self, forKey: .__typename)
+        bodyHTML = try c.decodeIfPresent(String.self, forKey: .bodyHTML)
         if let commit = try c.decodeIfPresent(Commit.self, forKey: .commit) {
             id = commit.oid
             body = commit.messageHeadline
             createdAt = commit.committedDate
             url = commit.url
+            author = commit.author?.user ?? commit.author?.name.map { PRActor(login: $0, avatarUrl: commit.author?.avatarUrl, url: nil) }
         } else {
             id = try c.decode(String.self, forKey: .id)
             body = try c.decodeIfPresent(String.self, forKey: .body) ?? ""
             createdAt = try c.decodeIfPresent(Date.self, forKey: .submittedAt) ?? c.decode(Date.self, forKey: .createdAt)
             url = try c.decodeIfPresent(URL.self, forKey: .url)
+            author = try c.decodeIfPresent(PRActor.self, forKey: .author) ?? c.decodeIfPresent(PRActor.self, forKey: .actor)
         }
-        author = try c.decodeIfPresent(PRActor.self, forKey: .author) ?? c.decodeIfPresent(PRActor.self, forKey: .actor)
         state = try c.decodeIfPresent(String.self, forKey: .state)
+        reviewCommentCount = try c.decodeIfPresent(ReviewComments.self, forKey: .comments)?.totalCount
+        viewerCanReact = try c.decodeIfPresent(Bool.self, forKey: .viewerCanReact)
+        reactionGroups = try c.decodeIfPresent([PRReactionGroup].self, forKey: .reactionGroups)
+    }
+
+    public init(comment: PRComment) {
+        id = comment.id; kind = "IssueComment"; body = comment.body; bodyHTML = comment.bodyHTML
+        url = comment.url; createdAt = comment.createdAt; author = comment.author; state = nil; reviewCommentCount = nil
+        viewerCanReact = comment.viewerCanReact; reactionGroups = comment.reactionGroups
     }
 }

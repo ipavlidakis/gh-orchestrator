@@ -59,9 +59,11 @@ struct SettingsWindowView: View {
     @Environment(\.appearsActive) private var appearsActive
 
     var body: some View {
-        HStack(spacing: 0) {
+        NavigationSplitView(columnVisibility: .constant(.all)) {
             SettingsSidebar(selection: selectedPaneBinding)
-
+                .navigationSplitViewColumnWidth(min: 196, ideal: 212, max: 240)
+                .toolbar(removing: .sidebarToggle)
+        } detail: {
             SettingsDetailPage(title: selectedPane.title) {
                 switch selectedPane {
                 case .general:
@@ -83,20 +85,15 @@ struct SettingsWindowView: View {
             }
         }
         .frame(width: 820)
-        .frame(minHeight: 620, idealHeight: 620, maxHeight: .infinity)
-        .background {
-            // A soft accent wash gives the glass sidebar, title and cards something to refract.
-            ZStack {
-                Color(nsColor: .windowBackgroundColor)
-                LinearGradient(
-                    colors: [Color.accentColor.opacity(0.22), Color.accentColor.opacity(0.04)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+        .frame(minHeight: 560, idealHeight: 620, maxHeight: .infinity)
+        .toolbar(removing: .title)
+        .toolbar {
+            if #available(macOS 26, *) {
+                // Preserve native full-height sidebar chrome after removing every toolbar control.
+                ToolbarSpacer(.flexible)
             }
         }
-        .background(SettingsWindowChromeConfigurator(onVisibilityChange: onSettingsWindowVisibilityChange))
-        .ignoresSafeArea()
+        .background(SettingsWindowVisibilityObserver(onVisibilityChange: onSettingsWindowVisibilityChange))
         .windowMinimizeBehavior(.disabled)
         .windowResizeBehavior(.disabled)
         .onAppear {
@@ -122,169 +119,67 @@ struct SettingsWindowView: View {
     }
 }
 
-/// Left rail: window controls sit on top of it, then the panes, then the app mark.
-/// On macOS 26 it floats as a Liquid Glass panel; earlier systems get a flat tinted rail.
 private struct SettingsSidebar: View {
     @Binding var selection: SettingsPane?
 
     var body: some View {
-        SettingsGlassGate {
-            if #available(macOS 26, *) {
-                rail
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .padding(8)
-                    .frame(width: 212)
-                    .frame(maxHeight: .infinity, alignment: .topLeading)
-            }
-        } flat: {
-            rail
-                .background(Color.primary.opacity(0.05))
-                .overlay(alignment: .trailing) {
-                    Rectangle().fill(.separator).frame(width: 0.5)
-                }
-        }
-    }
-
-    private var rail: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        List(selection: $selection) {
             ForEach(SettingsPane.allCases) { pane in
-                SettingsSidebarRow(pane: pane, isSelected: selection == pane) {
-                    selection = pane
-                }
+                Label(pane.title, systemImage: pane.systemImage)
+                    .tag(pane)
             }
-
-            Spacer(minLength: 0)
-
+        }
+        .listStyle(.sidebar)
+        .safeAreaInset(edge: .bottom) {
             HStack(spacing: 8) {
                 AppMarkView(size: 22)
                 Text(AppMetadata.menuBarTitle)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 52)
-        .padding(.bottom, 14)
-        .frame(width: 196)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
-private struct SettingsSidebarRow: View {
-    let pane: SettingsPane
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
-                Image(systemName: pane.systemImage)
-                    .frame(width: 16)
-                Text(pane.title)
-                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.accentColor)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .focusEffectDisabled()
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
-/// Floating title above a scrolling stack of grouped cards. On macOS 26 the title is a glass pill
-/// and every card is glass, grouped in one container so they render together.
 private struct SettingsDetailPage<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
 
     var body: some View {
-        SettingsGlassGate {
-            if #available(macOS 26, *) {
-                glassPage
-            }
-        } flat: {
-            flatPage
-        }
-    }
-
-    @available(macOS 26, *)
-    private var glassPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 content
             }
-            .buttonStyle(.glass)
             .padding(.horizontal, 28)
-            .padding(.top, 60)
-            .padding(.bottom, 24)
+            .padding(.vertical, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .overlay(alignment: .top) {
-            Text(title)
-                .font(.system(size: 15, weight: .semibold))
-                .padding(.horizontal, 18)
-                .padding(.vertical, 7)
-                .glassEffect(.regular, in: Capsule())
-                .padding(.top, 14)
-                .accessibilityAddTraits(.isHeader)
-        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var flatPage: some View {
-        VStack(spacing: 0) {
-            Text(title)
-                .font(.system(size: 15, weight: .semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    content
-                }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle(title)
     }
 }
 
-/// Moves the traffic lights onto the sidebar by letting content run under a transparent title bar.
-private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
+private struct SettingsWindowVisibilityObserver: NSViewRepresentable {
     let onVisibilityChange: @MainActor (Bool) -> Void
 
     func makeNSView(context: Context) -> NSView {
-        let view = ChromeView()
+        let view = VisibilityView()
         view.onVisibilityChange = onVisibilityChange
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? ChromeView)?.onVisibilityChange = onVisibilityChange
+        (nsView as? VisibilityView)?.onVisibilityChange = onVisibilityChange
     }
 
-    private final class ChromeView: NSView {
+    private final class VisibilityView: NSView {
         var onVisibilityChange: @MainActor (Bool) -> Void = { _ in }
-        private var observers: [NSObjectProtocol] = []
         private var visibilityObservation: NSKeyValueObservation?
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            observers.forEach(NotificationCenter.default.removeObserver)
-            observers = []
             visibilityObservation = nil
             guard let window else {
                 onVisibilityChange(false)
@@ -292,40 +187,13 @@ private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
             }
             visibilityObservation = window.observe(\.isVisible, options: [.initial, .new]) { [weak self] window, _ in
                 MainActor.assumeIsolated {
+                    if window.isVisible {
+                        // Settings ignores the scene toolbar style and installs the taller Preferences style.
+                        window.toolbarStyle = .unified
+                    }
                     self?.onVisibilityChange(window.isVisible)
                 }
             }
-            // SwiftUI reapplies its own title bar settings after the window appears, so reassert ours.
-            observers = [
-                NSWindow.didBecomeKeyNotification,
-                NSWindow.didUpdateNotification,
-                NSWindow.didResizeNotification
-            ].map { name in
-                NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
-                    MainActor.assumeIsolated {
-                        self?.applyChrome()
-                    }
-                }
-            }
-            applyChrome()
-            // With the title bar folded into the content, the window is exactly the design size.
-            DispatchQueue.main.async { [weak window] in
-                window?.setContentSize(NSSize(width: 820, height: 620))
-            }
-        }
-
-        private func applyChrome() {
-            guard let window else { return }
-            if !window.styleMask.contains(.fullSizeContentView) { window.styleMask.insert(.fullSizeContentView) }
-            if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
-            if window.titleVisibility != .hidden { window.titleVisibility = .hidden }
-            if window.titlebarSeparatorStyle != .none { window.titlebarSeparatorStyle = .none }
-            if !window.isMovableByWindowBackground { window.isMovableByWindowBackground = true }
-            if window.backgroundColor != .windowBackgroundColor { window.backgroundColor = .windowBackgroundColor }
-        }
-
-        deinit {
-            observers.forEach(NotificationCenter.default.removeObserver)
         }
     }
 }
@@ -1466,13 +1334,15 @@ private struct SettingsCardSurface: ViewModifier {
 
     func body(content: Content) -> some View {
         if #available(macOS 26, *), !reduceTransparency, !glassDisabled {
-            content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+            content.clipShape(shape).glassEffect(.regular, in: shape)
         } else {
+            let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
             content
-                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(shape)
+                .background(Color.primary.opacity(0.04), in: shape)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                    shape.strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
                 }
         }
     }

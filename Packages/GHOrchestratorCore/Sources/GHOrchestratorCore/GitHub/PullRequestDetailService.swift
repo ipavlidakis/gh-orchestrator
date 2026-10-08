@@ -5,6 +5,10 @@ public protocol PullRequestDetailLoading: Sendable {
     func activity(_ address: PullRequestAddress, after: String?) async throws -> PRConnection<PRActivity>
     func threads(_ address: PullRequestAddress, after: String?) async throws -> PRConnection<PRThread>
     func replies(threadID: String, after: String?) async throws -> PRConnection<PRComment>
+    func addComment(pullRequestID: String, body: String) async throws -> PRComment
+    func reply(threadID: String, body: String) async throws -> PRComment
+    func setResolved(threadID: String, resolved: Bool) async throws -> PRThreadResolution
+    func setReaction(subjectID: String, content: PRReactionContent, added: Bool) async throws -> PRReactionSubject
 }
 
 public struct PullRequestDetailService: PullRequestDetailLoading {
@@ -13,9 +17,9 @@ public struct PullRequestDetailService: PullRequestDetailLoading {
 
     public func summary(_ address: PullRequestAddress, checksAfter: String? = nil) async throws -> PRSummary {
         let result: PRSummary = try await pullRequest(address, after: checksAfter, fields: """
-        title body state isDraft createdAt author { login avatarUrl }
+        id locked title body bodyHTML state isDraft createdAt author { login avatarUrl(size: 56) url }
         headRefName baseRefName additions deletions mergeable reviewDecision
-        commits(last: 1) { nodes { commit { statusCheckRollup {
+        commits(last: 1) { totalCount nodes { commit { statusCheckRollup {
           contexts(first: 100, after: $after) {
             pageInfo { hasNextPage endCursor }
             nodes {
@@ -35,14 +39,14 @@ public struct PullRequestDetailService: PullRequestDetailLoading {
           pageInfo { hasNextPage endCursor }
           nodes {
             __typename
-            ... on IssueComment { id body url createdAt author { login avatarUrl } }
-            ... on PullRequestReview { id body url createdAt submittedAt state author { login avatarUrl } }
-            ... on PullRequestCommit { commit { oid messageHeadline committedDate url } }
-            ... on MergedEvent { id createdAt actor { login avatarUrl } }
-            ... on ClosedEvent { id createdAt actor { login avatarUrl } }
-            ... on ReopenedEvent { id createdAt actor { login avatarUrl } }
-            ... on ReadyForReviewEvent { id createdAt actor { login avatarUrl } }
-            ... on ConvertToDraftEvent { id createdAt actor { login avatarUrl } }
+            ... on IssueComment { \(Self.commentFields) }
+            ... on PullRequestReview { \(Self.commentFields) submittedAt state comments { totalCount } }
+            ... on PullRequestCommit { commit { oid messageHeadline committedDate url author { name avatarUrl(size: 56) user { login avatarUrl(size: 56) url } } } }
+            ... on MergedEvent { id createdAt actor { login avatarUrl(size: 56) url } }
+            ... on ClosedEvent { id createdAt actor { login avatarUrl(size: 56) url } }
+            ... on ReopenedEvent { id createdAt actor { login avatarUrl(size: 56) url } }
+            ... on ReadyForReviewEvent { id createdAt actor { login avatarUrl(size: 56) url } }
+            ... on ConvertToDraftEvent { id createdAt actor { login avatarUrl(size: 56) url } }
           }
         }
         """)
@@ -54,9 +58,9 @@ public struct PullRequestDetailService: PullRequestDetailLoading {
         let result: ThreadsResult = try await pullRequest(address, after: after, fields: """
         reviewThreads(first: 25, after: $after) {
           pageInfo { hasNextPage endCursor }
-          nodes { id path line isResolved isOutdated comments(first: 20) {
+          nodes { id path line isResolved isOutdated viewerCanReply viewerCanResolve viewerCanUnresolve comments(first: 20) {
             pageInfo { hasNextPage endCursor }
-            nodes { id body url createdAt author { login avatarUrl } }
+            nodes { \(Self.reviewCommentFields) }
           } }
         }
         """)
@@ -74,7 +78,7 @@ public struct PullRequestDetailService: PullRequestDetailLoading {
           node(id: $id) { ... on PullRequestReviewThread {
             comments(first: 50, after: $after) {
               pageInfo { hasNextPage endCursor }
-              nodes { id body url createdAt author { login avatarUrl } }
+              nodes { \(Self.reviewCommentFields) }
             }
           } }
         }
@@ -82,6 +86,76 @@ public struct PullRequestDetailService: PullRequestDetailLoading {
         guard let comments = result.node?.comments else { throw missingPullRequest() }
         _ = try comments.pageInfo.nextCursor(after: after)
         return comments
+    }
+
+    public func addComment(pullRequestID: String, body: String) async throws -> PRComment {
+        struct Variables: Encodable { let id: String; let body: String }
+        struct Result: Decodable { let addComment: Payload? }
+        struct Payload: Decodable { let commentEdge: Edge? }
+        struct Edge: Decodable { let node: PRComment? }
+        let result: Result = try await client.graphQL(query: """
+        mutation PRComment($id: ID!, $body: String!) {
+          addComment(input: {subjectId: $id, body: $body}) {
+            commentEdge { node { \(Self.commentFields) } }
+          }
+        }
+        """, variables: Variables(id: pullRequestID, body: body))
+        guard let comment = result.addComment?.commentEdge?.node else { throw missingMutation() }
+        return comment
+    }
+
+    public func reply(threadID: String, body: String) async throws -> PRComment {
+        struct Variables: Encodable { let id: String; let body: String }
+        struct Result: Decodable { let addPullRequestReviewThreadReply: Payload? }
+        struct Payload: Decodable { let comment: PRComment? }
+        let result: Result = try await client.graphQL(query: """
+        mutation PRReply($id: ID!, $body: String!) {
+          addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $id, body: $body}) {
+            comment { \(Self.reviewCommentFields) }
+          }
+        }
+        """, variables: Variables(id: threadID, body: body))
+        guard let comment = result.addPullRequestReviewThreadReply?.comment else { throw missingMutation() }
+        return comment
+    }
+
+    public func setResolved(threadID: String, resolved: Bool) async throws -> PRThreadResolution {
+        struct Variables: Encodable { let id: String }
+        struct Result: Decodable { let action: Payload? }
+        struct Payload: Decodable { let thread: PRThreadResolution? }
+        let mutation = resolved ? "resolveReviewThread" : "unresolveReviewThread"
+        let result: Result = try await client.graphQL(query: """
+        mutation PRResolve($id: ID!) {
+          action: \(mutation)(input: {threadId: $id}) {
+            thread { id isResolved viewerCanResolve viewerCanUnresolve }
+          }
+        }
+        """, variables: Variables(id: threadID))
+        guard let thread = result.action?.thread, thread.id == threadID else { throw missingMutation() }
+        return thread
+    }
+
+    public func setReaction(subjectID: String, content: PRReactionContent, added: Bool) async throws -> PRReactionSubject {
+        struct Variables: Encodable { let id: String; let content: PRReactionContent }
+        struct Result: Decodable { let action: Payload? }
+        struct Payload: Decodable { let subject: PRReactionSubject? }
+        let mutation = added ? "addReaction" : "removeReaction"
+        let result: Result = try await client.graphQL(query: """
+        mutation PRReaction($id: ID!, $content: ReactionContent!) {
+          action: \(mutation)(input: {subjectId: $id, content: $content}) {
+            subject { id \(Self.reactionFields) }
+          }
+        }
+        """, variables: Variables(id: subjectID, content: content))
+        guard let subject = result.action?.subject, subject.id == subjectID else { throw missingMutation() }
+        return subject
+    }
+
+    private static let reactionFields = "viewerCanReact reactionGroups { content viewerHasReacted reactors { totalCount } }"
+    private static let commentFields = "id body bodyHTML url createdAt author { login avatarUrl(size: 56) url } \(reactionFields)"
+    private static let reviewCommentFields = "\(commentFields) pullRequestReview { id }"
+    private func missingMutation() -> GitHubAPIClientError {
+        .invalidResponse(message: "GitHub did not confirm this action. Refresh the conversation before trying again.")
     }
 
     private func pullRequest<T: Decodable>(_ address: PullRequestAddress, after: String?, fields: String) async throws -> T {

@@ -7,6 +7,29 @@ import XCTest
 
 @MainActor
 final class SettingsRenderingTests: XCTestCase {
+    func testSettingsCardClipsChildBackgroundAtRoundedCorners() async throws {
+        let view = Color.green.frame(width: 200, height: 60)
+            .settingsCardSurface().padding(20).background(.white)
+            .environment(\.settingsGlassDisabled, true)
+        _ = try await render(view, size: CGSize(width: 240, height: 100), scheme: .light, name: "card-clipping")
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("gh-settings-card-clipping-light.png")
+        let image = try XCTUnwrap(NSBitmapImageRep(data: Data(contentsOf: output)))
+        let center = try XCTUnwrap(image.colorAt(x: image.pixelsWide / 2, y: image.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
+        let corner = try XCTUnwrap(image.colorAt(x: image.pixelsWide * 21 / 240, y: image.pixelsHigh * 21 / 100)?.usingColorSpace(.deviceRGB))
+        XCTAssertGreaterThan(center.greenComponent - center.redComponent, 0.3, "The child background must remain visible inside the card")
+        XCTAssertLessThan(abs(corner.greenComponent - corner.redComponent), 0.05, "The child tint must not escape the rounded corner")
+        let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: storageURL) }
+        let model = SettingsModel(store: SettingsStore(storageURL: storageURL), notificationAuthorizationStatus: .authorized)
+        let notifications = ScrollView {
+            VStack(alignment: .leading, spacing: 20) { NotificationSettingsPane(model: model) }.padding(28)
+        }
+        for scheme in [ColorScheme.light, .dark] {
+            let rendered = try await render(notifications, size: CGSize(width: 624, height: 420), scheme: scheme, name: "notifications-glass", foreground: true)
+            XCTAssertTrue(rendered.text.contains("notifications allowed"))
+        }
+    }
+
     func testNestedFormFieldsDoNotShowDuplicateLabels() async throws {
         let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: storageURL) }
@@ -44,7 +67,7 @@ final class SettingsRenderingTests: XCTestCase {
         let updates = SoftwareUpdateModel(store: store, checker: GitHubReleaseUpdateChecker(), installer: DMGSoftwareUpdateInstaller())
         let general = SettingsWindowView(model: model, softwareUpdateModel: updates, requestLogModel: GitHubRequestLogModel(), menuVisibilityController: SettingsWindowMenuVisibilityController(mainMenuProvider: { nil }), onSettingsWindowVisibilityChange: { _ in })
         for scheme in [ColorScheme.light, .dark] {
-            let generalText = try await render(general.environment(\.settingsGlassDisabled, true), size: CGSize(width: 780, height: 1000), scheme: scheme, name: "general").text
+            let generalText = try await render(general.environment(\.settingsGlassDisabled, true), size: CGSize(width: 820, height: 1000), scheme: scheme, name: "general", foreground: true).text
             XCTAssertTrue(generalText.contains("refresh every"))
             XCTAssertTrue(generalText.contains("pull request order"))
             XCTAssertEqual(generalText.components(separatedBy: "seconds").count - 1, 1, "Polling units must appear once, without duplicate field/stepper labels")
@@ -59,7 +82,7 @@ final class SettingsRenderingTests: XCTestCase {
         }
     }
 
-    private func render<Content: View>(_ content: Content, size: CGSize, scheme: ColorScheme, name: String) async throws -> (text: String, observations: [VNRecognizedTextObservation]) {
+    private func render<Content: View>(_ content: Content, size: CGSize, scheme: ColorScheme, name: String, foreground: Bool = false) async throws -> (text: String, observations: [VNRecognizedTextObservation]) {
         let hostingView = NSHostingView(rootView: content.frame(width: size.width, height: size.height).environment(\.colorScheme, scheme))
         let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: .titled, backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: scheme == .light ? .aqua : .darkAqua)
@@ -72,12 +95,23 @@ final class SettingsRenderingTests: XCTestCase {
         let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
         hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
         let output = FileManager.default.temporaryDirectory.appendingPathComponent("gh-settings-\(name)-\(scheme).png")
-        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: output)
+        if foreground {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            try await Task.sleep(for: .milliseconds(300))
+            let capture = Process()
+            capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            capture.arguments = ["-x", "-o", "-l", String(window.windowNumber), output.path]
+            try capture.run(); capture.waitUntilExit()
+            XCTAssertEqual(capture.terminationStatus, 0)
+        } else {
+            try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: output)
+        }
         print("Settings rendering evidence: \(output.path)")
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = false
-        try VNImageRequestHandler(cgImage: XCTUnwrap(bitmap.cgImage)).perform([request])
+        try VNImageRequestHandler(url: output).perform([request])
         let observations = request.results ?? []
         return (observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased(), observations)
     }

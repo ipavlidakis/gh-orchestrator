@@ -179,6 +179,7 @@ final class AppController {
             } else {
                 viewer = PRViewerWindowController(address: address, service: prDetailService,
                     openBrowser: { [weak self] url in self?.openInBrowser(url) },
+                    openContentURL: { [weak self] url in self?.openURL(url) },
                     onClose: { [weak self] in
                         self?.prViewerWindows[address] = nil
                         self?.applyDockIconPreference()

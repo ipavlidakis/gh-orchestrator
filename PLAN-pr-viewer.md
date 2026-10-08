@@ -1,11 +1,94 @@
 # In-app PR Viewer
 
 ## Decision Log
+- 2026-10-08: Use the native unified Settings toolbar to remove excess space above the sidebar list while preserving its glass/window-control integration and hidden title/toggle. Settings ignores the scene toolbar style, so select the native style at the existing window-visibility boundary; compact unified styling separates the controls from the sidebar glass.
+- 2026-10-08: Keep Settings navigation visible without a sidebar toggle or toolbar title bubble. Retain the native split-view surface and window controls.
+- 2026-10-08: Replace the manually drawn Settings rail with NavigationSplitView and a native sidebar List. Let macOS own the sidebar glass, concentric corners and integrated window controls; remove the title-bar mutations that fight that layout. Keep the existing visibility observer for Dock lifecycle.
+- 2026-10-08: Extend the current visual-polish increment to Settings: clip child backgrounds at the shared card boundary, reserve the native title-bar safe area for window controls, and use Apple's concentric rectangle for the macOS 26 glass sidebar.
+- 2026-10-08: Keep the Checks title on one line and hide status indicators whose loaded count is zero. Add 12 pt horizontal padding inside the Summary toolbar item.
+- 2026-10-08: Give the native inspector section headings 14 pt semibold primary text. Threads, Reviews and Checks toggle from their complete 32 pt header row, including trailing space and vertical padding; retain initially expanded sections and loaded check totals.
+- 2026-10-08: Open comments/conversations and review containers containing unfinished work expand by default; resolved/outdated conversations and fully completed reviews collapse. Preserve manual choices until completion changes. Remove the composer emoji button and parent-review reactions, retaining individual comment reactions. Sidebar Threads, Reviews and Checks use initially expanded disclosures; check headers summarize loaded failed/succeeded/running/neutral counts even when collapsed.
+- 2026-10-08: Per the user's composer placement preference, Cancel occupies the top leading edge and Submit the top trailing edge, with the title between them; emoji/Markdown controls remain beneath the editor.
+- 2026-10-08: Reduce Open on GitHub to a small accessible external-link icon in the author/header row; remove the extra footer line while retaining direct comment timestamp links.
+- 2026-10-08: Present each expanded file conversation as one continuous container with aligned starter/reply authors and actions after the final loaded comment. Keep the review/file disclosures collapsed initially and virtualize each comment separately. Refine the standard native sheet with a focused editor, placeholder and grouped trailing glass actions. Use Apple's character palette for emoji insertion, GitHub bodyHTML for rendering, and typed permission-aware add/remove reactions for GitHub's eight reaction types.
+- 2026-10-08: Group conversations by their root comment's GitHub review ID. Render reviews as timeline disclosures instead of empty comment cards; preserve individual virtualized comments and thread reply/resolution controls. All timeline entries start collapsed with full-width title controls and chevrons. Resolved/outdated threads badge the starter avatar; a review is complete only when every child is complete and its comment count is fully loaded.
+- 2026-10-08: Adopt native Liquid Glass for viewer controls on macOS 26, using a standard window toolbar, inspector and system sheet controls first. Keep document content flat and readable; honor Reduce Transparency and earlier macOS versions.
+- 2026-10-08: Supersede browser-only conversation actions with native comment/reply composition and permission-aware resolve/unresolve. Match the menu-bar avatar/card tokens; use a GitHub-style linked author, status pill and visible branch chips, and compact commit/status timeline entries. Retain viewport virtualization and all loaded pages; preserve failed drafts.
 - 2026-10-08: Add General Settings > Open PR destination (Browser by default, In App opt-in). Route GitHub PR and comment URLs through AppController; other links retain their normal destination.
 - 2026-10-08: Match the supplied references with a summary and chronological activity column, persistent merge/thread/review/check sidebar, and compact toolbar. Code diffs are deferred. This first viewer reads GitHub data; GitHub editing/reply/resolve actions open their original URLs.
 - 2026-10-08: Use a reusable native table for the variable-height conversation, bounded page sizes, prepared Markdown outside scrolling, and explicit load-more controls. Do not mount all comment views or perform HTTP, parsing, or avatar downloads during scrolling.
+- 2026-10-08: Following the user's approval to try the rendering recommendation, replace the conversation table with one Apple WebKit surface and app-bundled HTML/CSS/JavaScript for viewport virtualization. Fetch GitHub bodyHTML in the existing core queries; retain raw Markdown as a visible fallback. Native window/sidebar/pagination remain. No third-party dependencies; math and diagram enrichment remain an explicitly reported limitation of this trial.
 
 ## Task Board
+### PV10: Remove excess space above the Settings list
+- status: `done`
+- owner: `codex-main`
+- goal: Reduce the empty Settings toolbar height using native window styling, preserving integrated window controls and the system sidebar.
+- verification: The real Settings-scene spacing regression failed on the previous 88 pt top inset and passed with a maximum 52 pt inset after selecting the native unified toolbar. Both Settings scene/lifecycle tests passed; the existing SceneStorage test-host warning remains. Foreground light/dark captures show the list moved up with the window controls still inside the sidebar glass: `DerivedData/PRViewerQA/settings-native-{light,dark}.png`. Captures are reactivated after appearance changes to avoid macOS transition artifacts.
+- verification: Tuist generation, `./script/build_and_run.sh --verify` and `git diff --check` passed. The updated development executable is running from this checkout. No third-party dependencies or manual window-control positioning were added.
+- notes: The Settings scene ignores SwiftUI's windowToolbarStyle and installs the Preferences toolbar. The existing visibility observer selects `.unified` when shown, including when a retained window reopens. Older macOS appearance remains untested; changes remain local and uncommitted.
+
+### PV09: Polish check summaries, toolbar padding and Settings surfaces
+- status: `done`
+- owner: `codex-main`
+- goal: Prevent a wrapped Checks heading, omit zero-value indicators, pad the Summary pill, contain notification-banner tint and use the system Settings sidebar/window-control layout.
+- verification: The 15-success/one-neutral fixture reproduced the wrapped Checks heading. The notification-card pixel regression failed before shared clipping and passed afterward. Seven focused UI checks passed across viewer summaries/disclosures, Settings rendering, retained-window visibility and the actual SwiftUI Settings scene. Three SceneStorage test-host warnings remain; the final two lifecycle checks also passed after removing redundant capture instrumentation.
+- verification: Foreground light/dark captures of the real Settings scene show the native glass sidebar containing the window controls with no toggle/title bubble; notification-banner tint stays inside the card. Evidence: `DerivedData/PRViewerQA/settings-native-{light,dark}.png`, `settings-notifications-{light,dark}.png` and the existing viewer sidebar captures. Tuist generation, `./script/build_and_run.sh --verify` and `git diff --check` passed. The exact development executable is running from this checkout.
+- notes: Removing the last visible toolbar item otherwise drops the native toolbar and separates the sidebar from the controls. A standard macOS 26 ToolbarSpacer preserves the system layout without adding a visible action. macOS 15 appearance has not been checked on an older OS. Changes remain local and uncommitted after the original viewer commit.
+- notes: Retain full-row disclosure controls and loaded-check help text. Settings work belongs to this user-requested visual increment; preserve flat/Reduce Transparency fallbacks.
+
+### PV08: Strengthen sidebar headings and disclosure hit areas
+- status: `done`
+- owner: `codex-main`
+- goal: Make inspector headings more prominent and allow expansion/collapse across each complete header row.
+- verification: Extended the existing native-window regression to click trailing space and lower header padding, using rendered header positions. It failed against the previous controls and passed after the shared disclosure-style fix. Foreground light/dark captures inspected: `DerivedData/PRViewerQA/viewer-sidebar-expanded.png` and `viewer-sidebar-collapsed-{light,dark}.png`.
+- verification: All 11 viewer tests and 105 core tests passed. The full app run passed 112 of 113 tests; an unrelated menu-bar design test lost key-window focus and passed in isolation afterward. Three existing SceneStorage warnings remain; the focused compile also reported the existing unused loop variable in PopoverPerformanceTests.swift.
+- verification: Reviewed the sidebar source/diff with OCR delegation rules and the changed test/design/plan directly; no unresolved findings for this increment. Earlier coverage remains for unchanged viewer files. Tuist generation, local build/launch and git diff --check passed. The development app is running from this checkout.
+- notes: Use the existing SwiftUI disclosure bindings and native button behavior; retain the glass inspector and aggregate check counts.
+
+### PV07: Default disclosures to unfinished work and summarize sidebar checks
+- status: `done`
+- owner: `codex-main`
+- goal: Automatically show open conversations, collapse completed ones, remove redundant emoji controls and provide native sidebar disclosures with aggregate check status.
+- verification: The new regression first failed on collapsed open threads and parent-review reactions, then passed. Final complete runs passed 105 core and 113 app tests; three existing unrelated SceneStorage warnings remain. Checks cover open/resolved/outdated defaults, review completion, manual collapse across reaction updates, resolve/reopen transitions, and mixed check-run/status-context counts including skipped/cancelled/unknown completed states.
+- verification: The expanded-content stress case exposed last-comment navigation displaced by measuring a long preceding row. Navigation now measures only mounted rows before settling the jump; repeated navigation remains visible after measurement. An offscreen badge assertion in the large-review harness now navigates to the review before checking its rendered badge. Subsequent complete 113-test run passed.
+- verification: Native sidebar disclosures were actually clicked and foreground light/dark captures inspected, including retained failed/succeeded/running/neutral header totals and the composer without its emoji button: `DerivedData/PRViewerQA/viewer-sidebar-expanded.png`, `viewer-sidebar-collapsed-{light,dark}.png`, and `viewer-composer-{light,dark}.png`.
+- verification: The 1,000-open-thread / 2,004-row fixture made 84 jumps at p95 viewport update and forced layout 3 ms, with at most 12 mounted rows. The 2,004-row activity fixture measured p95 5 ms / seven mounted rows over 80 jumps. These local synthetic CPU measurements exclude frame waiting, IPC and painting. Native default expansion preserves virtualization.
+- verification: OCR rules and source/diff review covered the three changed production files, with tests/design/plan inspected separately and the earlier review retained for unchanged viewer files; no unresolved findings. Tuist generation, local build/launch and git diff --check passed. Development app launched from this checkout.
+- notes: Preserve per-comment virtualization, manual disclosure choices, drafts, paging and individual reactions. Commit/status events remain initially collapsed.
+
+### PV06: Refine conversations, reply composition and emoji reactions
+- status: `done`
+- owner: `codex-main`
+- goal: GitHub-style continuous conversations, a native HIG/glass reply composer, emoji insertion/rendering and confirmed GitHub reactions.
+- verification: The file-conversation regression failed before the change, then passed with aligned comments and actions after the final reply. 105 core and 111 app tests passed. Native editor insertion and Command-Return preserve Unicode skin tones, ZWJ sequences and flags; returned GitHub HTML renders shortcode emoji. Actual WebKit controls cover eight reaction choices, confirmed add/remove counts, duplicate prevention, denied/unknown targets, invalid bridge content and retained state after failure. Stub transport checks reject mismatched confirmation and denied actions without automatic retry.
+- verification: Initial full run exposed a new test-harness WebKit readiness race and an unrelated existing key-window focus assertion. The harness now waits for actual layout/WebKit readiness; the subsequent complete 111-test run passed. Three existing unrelated SceneStorage warnings remain.
+- verification: Foreground light/dark captures inspected for the continuous conversation, compact GitHub icon and native sheet with Cancel/Reply at the top edges: `DerivedData/PRViewerQA/viewer-glass-{light,dark}.png` and `viewer-composer-{light,dark}.png`. The 1,000-thread / 2,004-row fixture made 84 jumps at p95 viewport update and forced layout 3 ms with at most 34 mounted comments; the existing 2,004-row activity fixture measured 3 ms / 36 comments over 80 jumps. These synthetic CPU measurements exclude frame waiting, IPC and painting.
+- verification: GitHub read-only reaction queries accepted for issue/review/thread comments; the Markdown endpoint confirmed Unicode and shortcode output without publishing content. OCR rules and source/diff review covered all eight selected production files, with the deleted renderer, two tests and two design/plan files inspected separately (13/13, none skipped), no unresolved findings. Tuist generation, local build/launch, bundled HTML checksum and git diff --check passed. Development app is running from this checkout.
+- notes: Trial remains local and uncommitted after the original viewer commit. Character palette uses the native platform; reaction writes use permission checks and server confirmation, with manual live-service acceptance remaining for user testing.
+- notes: Preserve existing drafts, disclosures, pagination, completion badges and per-comment virtualization. No live test writes; code diffs remain deferred.
+
+### PV05: Group reviews and refine viewer disclosures and glass
+- status: `done`
+- owner: `codex-main`
+- goal: Review-owned nested conversations, collapsed timeline disclosures and completion badges, with native Liquid Glass navigation and controls.
+- verification: The regression first failed on date-interleaved comments and empty review cards, then passed with review-ID grouping. 104 core and 109 app tests passed. Real WebKit checks cover default collapse, full-width chevrons, nested reply links, preserved expansion when a later activity page supplies the review, individual and aggregate completion badges, paginated replies, permission-aware actions and Command-R while WebKit has focus. Three existing unrelated SceneStorage warnings remain.
+- verification: A 1,000-conversation / 2,004-row review made 84 viewport jumps, with p95 viewport update and forced layout 3 ms and at most 36 mounted rows. The existing 2,004-row activity scenario also measured p95 3 ms / 36 rows over 80 jumps. These local synthetic CPU measurements exclude IPC, frame waiting and painting.
+- verification: Actual foreground window captures inspected in light and dark, including native toolbar/inspector, glass footer, disclosures, nesting and avatar badge: `DerivedData/PRViewerQA/viewer-glass-{light,dark}.png`; grouped WebKit captures and measurements are alongside them. Compact title wrapping remains verified. Earlier-system and Reduce Transparency fallbacks use native controls behind availability/environment checks; this Mac ran the macOS 26 glass path.
+- verification: OCR delegation rules and source/diff inspection covered all eight selected production files; deleted renderer, two tests and two design/plan files reviewed separately (13/13 changed files, none skipped), no unresolved findings. Tuist generation, git diff --check and local build/launch passed; bundled HTML matches source. Development app launched from this checkout.
+- notes: Read-only live GitHub queries confirmed the comment-to-review association and review comment counts. No live comments or resolutions were submitted. Trial remains local and uncommitted.
+- notes: Preserve review identity, paginated replies, drafts, focus and per-comment virtualization. Code diffs remain deferred.
+
+### PV04: Refine header, comments and timeline actions
+- status: `done`
+- owner: `codex-main`
+- goal: GitHub-style status/branch header, linked authors, menu-bar comment styling with avatars, in-app comments/replies/resolution, and compact commit/event entries.
+- verification: 104 core and 107 app tests passed; focused viewer tests rerun after the final composer permission guard. Stub HTTP tests cover comment/reply body encoding, returned HTML/authors, resolve/unresolve, missing confirmation and denied actions without automatic retry. Model/WebKit checks cover retained independent drafts after failure/cancellation, duplicate submission prevention, linked author/branch/status rendering, avatars, compact commits, actual reply/resolve controls, preserved pages and sidebar state.
+- verification: Exact production summary/activity/thread/reply queries accepted live on GetStream/stream-video-swift#1355, including profile URLs, 56 px avatars, commit counts/authors, locked state and thread permissions. No remote comments or resolutions were submitted. Light/dark and compact WebKit snapshots inspected; 2,004 rows / 80 jumps measured p95 viewport update and forced layout 3 ms, max 4 ms, at most ten mounted rows. This synthetic CPU metric excludes frame waiting, IPC and painting; media-heavy manual acceptance remains separate.
+- verification: Tuist generation and local build/launch passed. OCR delegation rules plus source/diff review covered eight selected production files; deleted renderer, two tests and two design/plan files reviewed separately (13/13 changed files, none skipped), no unresolved findings; git diff --check passed. Existing SceneStorage warnings in three unrelated app rendering tests remain.
+- notes: Supersedes the initial browser-only comment actions. Use GitHub permission fields, keep drafts on failure, and validate writes with stub transports rather than posting test content to live PRs.
+- notes: Final focused viewer checks passed after composer and theme adjustments, and the rebuilt development app was launched again for user testing. Changes remain local and uncommitted; remote write acceptance is a manual check. Header/status and comment-card tokens reuse the existing app palette; avatar-enabled scrolling remains virtualized.
+
 ### PV01: Build and validate the PR viewer
 - status: `done`
 - owner: `codex-main`
@@ -16,3 +99,58 @@
 - verification: Light/dark summary, dark activity and compact-window rendering inspected; resized-title regression checks the wrapped header's actual frame height. Layout uses actual native cell width, including table insets. Evidence: [summary](/Users/ipavlidakis/workspace/gh-orchestrator/DerivedData/PRViewerQA/summary-dark.png), [activity](/Users/ipavlidakis/workspace/gh-orchestrator/DerivedData/PRViewerQA/activity-dark.png), [compact](/Users/ipavlidakis/workspace/gh-orchestrator/DerivedData/PRViewerQA/compact-dark.png), [performance](/Users/ipavlidakis/workspace/gh-orchestrator/DerivedData/PRViewerQA/performance.json).
 - verification: Open Code Review delegation preview/rules and manual source review covered all ten selected production files; four test files and three design/plan files were reviewed separately (excluded by OCR's default paths/extensions). No unresolved findings; `git diff --check` passed.
 - notes: Local implementation only; no publication requested. Viewer actions open GitHub for editing/replying/resolving; code diffs remain deferred as requested. Account changes close viewer windows and cancel loading.
+
+### PV02: Investigate GitHub content-rendering fidelity
+- status: `done`
+- owner: `codex-main`
+- goal: identify the supported GitHub comment/description formats, inspect Codex's public Markdown/diff renderers, and recommend a complete rendering approach that preserves conversation performance.
+- verification: Reviewed GitHub's GFM specification, formatting documentation, GraphQL bodyHTML fields, REST Markdown endpoint, and Apple's HTML importer guidance. Read Codex's Markdown, render-cache and diff implementations at `f73a478c87a78a553f8009e6b26b44cc700c7f35`.
+- verification: Live read-only GraphQL query against GetStream/stream-video-swift#1355 accepted bodyHTML for the description, issue comments, reviews and review comments. Six issue comments, one thread and one review returned. Danger's HTML contains a table; CodeRabbit's HTML contains the alert, task checkbox, details and code markup, with bot metadata removed.
+- verification: Synthetic GitHub Markdown rendering checks confirmed pipe/raw HTML tables, alerts, task lists, footnotes, strikethrough, details, highlighted Swift code, Unicode emoji and removed hidden metadata. Mermaid and math returned client-enrichment markup, so static HTML does not establish complete GitHub visual parity.
+- notes: Viewer implementation committed locally as `41a64f7`; no push requested. This task researches the rendering change before implementation.
+
+### PV03: Try GitHub HTML in a virtualized WebKit conversation
+- status: `done`
+- owner: `codex-main`
+- goal: render the supplied bot-comment formats correctly and keep large conversations responsive, then launch the development app for manual testing.
+- verification: 102 core and 106 app tests passed. The new formatting regression failed on the previous renderer before the fix; real WebKit now renders tables, alerts, disabled task checkboxes and expandable details without exposing hidden metadata. Tests verify active HTML/JavaScript links cannot execute, content links use the app router, explicit GitHub links open the browser, and repeated comment jumps plus expansion/collapse and compact title wrapping work. Three existing unrelated SceneStorage warnings remain.
+- verification: Exact production summary/activity/thread/reply queries succeeded live for GetStream/stream-video-swift#1355 and returned bodyHTML for the description, seven comment/review events, one thread comment and replies. No live comment content was written to the repository.
+- verification: 2,004-row WebKit conversation, 80 viewport jumps: p95 viewport update/forced layout 3 ms, maximum 4 ms, at most ten mounted comments. This measures CPU work for this local synthetic text workload; it excludes frame waiting, native IPC and painting and does not establish real scrolling performance for every machine or media-heavy PR.
+- verification: WebKit snapshots inspected in light/dark and at compact width: [light summary](/Users/ipavlidakis/workspace/gh-orchestrator/DerivedData/PRViewerQA/html-summary-light.png), [dark summary](/Users/ipavlidakis/workspace/gh-orchestrator/DerivedData/PRViewerQA/html-summary-dark.png), [activity](/Users/ipavlidakis/workspace/gh-orchestrator/DerivedData/PRViewerQA/html-activity-dark.png), [compact](/Users/ipavlidakis/workspace/gh-orchestrator/DerivedData/PRViewerQA/html-compact-dark.png), [measurements](/Users/ipavlidakis/workspace/gh-orchestrator/DerivedData/PRViewerQA/html-performance.json). These are synthetic fixtures, including deliberate unsafe-content probes.
+- verification: Tuist generation and `./script/build_and_run.sh --verify` passed; the development app was rebuilt and launched. Open Code Review delegation rules and manual source review covered all seven selected production files; the deleted native renderer, two test files and two design/plan files were reviewed separately. 12/12 changed files reviewed, none skipped, no unresolved findings; `git diff --check` passed.
+- notes: Replace the shared content-rendering boundary rather than add Markdown heuristics. Keep rendered comments read-only and preserve paging, focus, expansion and window lifecycle. Do not claim math/diagram parity from static HTML.
+- notes: Trial changes remain local and uncommitted for user testing. Math/diagram markup displays a GitHub fallback note; authenticated media and manual end-to-end acceptance remain to be checked in the running app. The original viewer commit remains `41a64f7`; no project push, PR or release was requested.
+
+## Rendering research (2026-10-08)
+
+### Root cause and recommendation
+`PRMarkdown.prepare` handles one line at a time using Foundation's inline Markdown parser and a few block-prefix checks. This loses nested block structure and displays raw HTML and hidden comments. Additional line heuristics cannot cover GitHub's full content language.
+
+Recommended next change: request `bodyHTML` alongside `body` in the existing paginated core queries, and render the returned GitHub HTML with WebKit in the app. GitHub provides the contextual parsing, sanitization, links, emoji and syntax-highlight markup; WebKit provides actual HTML layout. This uses direct GitHub APIs and an Apple framework without adding a parser dependency. Keep raw Markdown for fallback and future editing.
+
+| Content | Rendering route and remaining work |
+| --- | --- |
+| Headings, paragraphs, nested lists/quotes, emphasis, inline/fenced code, autolinks | GitHub bodyHTML plus app theme styles; preserve code whitespace and horizontal scrolling. |
+| Pipe tables and allowed raw HTML tables, details/summary, hidden metadata | GitHub bodyHTML plus native browser layout; metadata is removed by GitHub. |
+| Task lists, alerts, strikethrough, footnotes, emoji, mentions and issue links | GitHub postprocessing plus matching CSS and navigation handling; task controls remain read-only. |
+| Images, GIFs, attachments and media | Browser resource loading with size constraints and lazy loading; verify authenticated/private resources separately. |
+| Mermaid/GeoJSON/TopoJSON/STL and mathematical expressions | GitHub returns client-enrichment/custom-element markup. A static HTML wrapper is insufficient. Evaluate GitHub-hosted enrichment or an explicitly approved rendering runtime before promising parity; current repo rules forbid new third-party dependencies. |
+
+### Performance and acceptance
+Keep native window controls, sidebar and bounded connection pages. Prototype one WebKit conversation surface with only visible comments plus overscan mounted, rather than a WebView for every comment. Cache heights by content revision, width and appearance; preserve the visible anchor when images or details change height. Parsing, network calls and DOM rebuilding must stay outside scroll handlers. Benchmark the implementation against the existing 2,004-row scenario before adopting it; native TextKit measurements do not prove future WebKit performance.
+
+Intercept navigation through the existing PR/link router. Never expose the OAuth token to page scripts or arbitrary subresource requests. Only app-controlled code should run in the rendering surface. Include keyboard navigation, selection/copy, VoiceOver, resize, theme changes, thread jumps, hidden metadata, long code lines, nested formats, images and expanded details in acceptance checks.
+
+Do not use `NSAttributedString` HTML import as an off-main replacement for `PRMarkdown`: Apple documents main-thread restrictions and limited general HTML support, which conflict with the current preparation pipeline.
+
+### Codex findings
+The public Markdown renderer is a Rust/ratatui terminal renderer using pulldown-cmark, with tables, task lists and custom math handling. Its HTML handler emits text, so it does not solve the raw HTML table failures here. Its cache is keyed by width and rendering state; that invalidation pattern is useful for our height/render cache.
+
+The public diff renderer includes line numbers, gutters, Unicode-aware wrapping and syntax highlighting across a complete hunk to retain multiline state. These are useful references for a future diff view, but the output is terminal spans rather than a reusable macOS PR component. Code-diff implementation remains deferred.
+
+### Primary sources
+- [GFM specification](https://github.github.com/gfm/) and [GitHub formatting](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax).
+- [GraphQL PR bodyHTML](https://docs.github.com/en/graphql/reference/pulls), [issue-comment bodyHTML](https://docs.github.com/en/graphql/reference/issues), and [REST Markdown rendering](https://docs.github.com/en/rest/markdown/markdown).
+- [Advanced formatting](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting), [math](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/writing-mathematical-expressions), and [diagrams](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams).
+- [Apple HTML attributed-string importer](https://developer.apple.com/documentation/foundation/nsattributedstring/init%28data%3Aoptions%3Adocumentattributes%3A%29?changes=_3&language=objc).
+- Codex pinned source: [Markdown renderer](https://github.com/openai/codex/blob/f73a478c87a78a553f8009e6b26b44cc700c7f35/codex-rs/tui/src/markdown_render.rs#L399), [HTML handling](https://github.com/openai/codex/blob/f73a478c87a78a553f8009e6b26b44cc700c7f35/codex-rs/tui/src/markdown_render.rs#L917), [render cache](https://github.com/openai/codex/blob/f73a478c87a78a553f8009e6b26b44cc700c7f35/codex-rs/tui/src/history_cell/markdown_render_cache.rs#L14), and [diff renderer](https://github.com/openai/codex/blob/f73a478c87a78a553f8009e6b26b44cc700c7f35/codex-rs/tui/src/diff_render.rs#L1).
