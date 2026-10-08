@@ -36,6 +36,6 @@ The fictional fixtures are in `Tests/GHOrchestratorTests/MenuBar/DesignParityRen
 xcodebuild test -workspace GHOrchestrator.xcworkspace -scheme GHOrchestrator -destination 'platform=macOS,arch=arm64' -only-testing:GHOrchestratorTests/DesignParityRenderingTests
 ```
 
-Copy `dashboard-overview.png`, `dashboard-pr-details.png`, `dashboard-comments.png`, `settings-insights.png` and `settings-notifications.png` from `/tmp/gho-shots/` into this project's `media/`, then render again. Captures use the real native views with dummy data.
+Copy `dashboard-overview.png`, `dashboard-pr-details.png`, `dashboard-comments.png`, `settings-insights.png` and `settings-notifications.png` from `/tmp/gho-shots/` into this project's `media/`, then render again. Captures use the real native views with dummy data. The Settings fixtures show the current five-section sidebar and native search/refresh toolbar; they capture foreground windows because offscreen rendering omits that chrome. Card surfaces use the flat appearance. Preserve each capture's aspect ratio in `src/lib.rs` and keep repository search visible throughout the Settings scenes. The tall review-comments capture pans to the thread content.
 
 DM Sans is distributed under the [SIL Open Font License](LICENSE-DM-Sans.txt).

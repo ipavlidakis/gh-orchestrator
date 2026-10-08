@@ -1,6 +1,7 @@
 import AppKit
 import GHOrchestratorCore
 import SwiftUI
+import Vision
 import XCTest
 @testable import GHOrchestrator
 
@@ -109,7 +110,8 @@ final class DesignParityRenderingTests: XCTestCase {
             onSettingsWindowVisibilityChange: { _ in }
         )
         try await render(window.environment(\.settingsGlassDisabled, true), size: CGSize(width: 820, height: 620), name: "settings-window")
-        try await renderChrome(window.environment(\.settingsGlassDisabled, true), name: "settings-chrome")
+        try await renderSettingsWindow(NotificationSettingsPane(model: settingsModel), title: "Notifications", name: "settings-notifications")
+        try await renderSettingsWindow(ActionsInsightsSettingsPane(model: settingsModel), title: "Insights", name: "settings-insights")
         func page<V: View>(_ v: V) -> some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) { v }.padding(28).frame(width: 624, alignment: .leading)
@@ -117,8 +119,6 @@ final class DesignParityRenderingTests: XCTestCase {
             .environment(\.settingsGlassDisabled, true)
         }
         try await render(page(GitHubSettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 420), name: "pane-github")
-        try await render(page(NotificationSettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 680), name: "settings-notifications")
-        try await render(page(ActionsInsightsSettingsPane(model: settingsModel)), size: CGSize(width: 624, height: 1100), name: "settings-insights")
         try await render(page(GitHubRequestUsagePane(requestLogModel: log)), size: CGSize(width: 624, height: 420), name: "pane-requests")
     }
 
@@ -204,20 +204,70 @@ final class DesignParityRenderingTests: XCTestCase {
         return [pending, failing, ready]
     }
 
-    /// Renders the whole window frame (title bar and traffic lights included) through the theme frame view.
-    private func renderChrome<Content: View>(_ content: Content, name: String) async throws {
-        let hosting = NSHostingView(rootView: content)
-        let window = NSWindow(contentRect: CGRect(origin: .zero, size: hosting.fittingSize), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    private func renderSettingsWindow<Content: View>(_ content: Content, title: String, name: String) async throws {
+        let size = CGSize(width: 820, height: title == "Notifications" ? 780 : 1100)
+        let page = NavigationSplitView(columnVisibility: .constant(.all)) {
+            List(selection: .constant(Optional(title))) {
+                Label("General", systemImage: "gearshape").tag("General")
+                Label("GitHub", systemImage: "person.crop.circle.badge.checkmark").tag("GitHub")
+                Label("Insights", systemImage: "chart.xyaxis.line").tag("Insights")
+                Label("Notifications", systemImage: "bell.badge").tag("Notifications")
+                Label("Requests", systemImage: "chart.bar.xaxis").tag("Requests")
+            }
+            .listStyle(.sidebar)
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 8) {
+                    AppMarkView(size: 22)
+                    Text(AppMetadata.menuBarTitle).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(14)
+            }
+            .navigationSplitViewColumnWidth(min: 196, ideal: 212, max: 240)
+            .toolbar(removing: .sidebarToggle)
+        } detail: {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) { content }
+                    .padding(.horizontal, 28).padding(.vertical, 24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .navigationTitle(title)
+        }
+        .toolbar(removing: .title)
+        .toolbar {
+            if #available(macOS 26, *) { ToolbarSpacer(.flexible) }
+        }
+        .environment(\.settingsGlassDisabled, true)
+        .environment(\.colorScheme, .light)
+        let hosting = NSHostingView(rootView: page.frame(width: size.width, height: size.height))
+        let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .aqua)
         window.contentView = hosting
+        window.toolbarStyle = .unified
+        let previousActivationPolicy = NSApp.activationPolicy()
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
-        defer { window.orderOut(nil) }
+        defer {
+            window.orderOut(nil)
+            NSApp.setActivationPolicy(previousActivationPolicy)
+        }
         try await Task.sleep(for: .milliseconds(600))
-        let frameView = try XCTUnwrap(window.contentView?.superview)
-        frameView.layoutSubtreeIfNeeded()
-        let bitmap = try XCTUnwrap(frameView.bitmapImageRepForCachingDisplay(in: frameView.bounds))
-        frameView.cacheDisplay(in: frameView.bounds, to: bitmap)
-        try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-            .write(to: outputDirectory.appendingPathComponent("\(name).png"))
+        window.makeFirstResponder(nil)
+        let url = outputDirectory.appendingPathComponent("\(name).png")
+        let screenshot = Process()
+        screenshot.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        screenshot.arguments = ["-x", "-o", "-l", String(window.windowNumber), url.path]
+        try screenshot.run()
+        screenshot.waitUntilExit()
+        XCTAssertEqual(screenshot.terminationStatus, 0)
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = false
+        try VNImageRequestHandler(url: url).perform([request])
+        let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased()
+        XCTAssertTrue(text.contains("search repositories"), "The marketing capture must include native repository search")
+        XCTAssertTrue(text.contains("orbit-labs/nova-app"), "The configured repository must remain visible")
+        XCTAssertTrue(text.contains(title == "Insights" ? "success rate" : "watch this repository"), "The requested pane must be selected")
     }
 
     private func render<Content: View>(_ content: Content, size: CGSize, name: String, appearance: NSAppearance.Name = .aqua, focusHeader: Bool = false) async throws {

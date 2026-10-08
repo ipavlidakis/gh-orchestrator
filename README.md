@@ -41,8 +41,8 @@ Uninstalling preserves your settings and GitHub session in Keychain.
 ### Menu-bar dashboard
 
 - Menu-bar-first macOS app built with `MenuBarExtra`, so your open PRs stay one click away.
-- Switch between `My PRs` and `All PRs` across the configured repository allowlist.
-- Focus one observed repository or keep an all-repositories view.
+- Switch between `Authored by me` and `Needs my review` across all accessible repositories, without registering them first.
+- Focus one discovered repository or keep an all-repositories view.
 - Group pull requests by repository and sort them by recent activity.
 - Expand pull requests inline to inspect unresolved review comments, GitHub Actions workflow runs, jobs, and per-step duration details.
 - Re-run failed GitHub Actions jobs directly from the dashboard when GitHub exposes rerun permissions.
@@ -57,8 +57,8 @@ Uninstalling preserves your settings and GitHub session in Keychain.
 
 ### Settings, notifications, and maintenance
 
-- Native macOS Settings window with panes for General, GitHub, Repositories, Insights, Notifications, and Requests.
-- Repository management using one `owner/repo` entry per observed repository.
+- Native macOS Settings window with panes for General, GitHub, Insights, Notifications, and Requests.
+- Search GitHub repositories from the Notifications and Insights toolbars. Configured repositories and their local preferences stay visible without searching.
 - Per-repository local notifications with trigger toggles plus optional workflow and job filters.
 - Native macOS alerts when PR-attached workflow jobs finish, whether they succeed or fail. Customize the repositories, events, workflows and jobs that notify you in Settings → Notifications.
 - Live Actions insights charts in Settings for a selected repository, workflow, job, and time period.
@@ -77,7 +77,7 @@ support Liquid Glass in Settings.
     <td align="center" valign="top">
       <img src="docs/screenshots/dashboard-overview.png" alt="Dashboard overview" width="360"><br>
       <strong>Dashboard overview</strong><br>
-      Scope toggle, repository focus, and grouped pull requests.
+      Authored/review-requested categories, repository focus, and grouped pull requests.
     </td>
     <td align="center" valign="top">
       <img src="docs/screenshots/dashboard-pr-details.png" alt="Expanded pull request details" width="360"><br>
@@ -94,14 +94,14 @@ support Liquid Glass in Settings.
     <td align="center" valign="top">
       <img src="docs/screenshots/settings-notifications.png" alt="Notifications settings" width="360"><br>
       <strong>Notifications settings</strong><br>
-      Success/failure job alerts with per-repository triggers and selected workflow/job filters.
+      Repository search and saved notification rules with selected workflow/job filters.
     </td>
   </tr>
   <tr>
     <td align="center" valign="top" colspan="2">
       <img src="docs/screenshots/settings-insights.png" alt="Actions insights settings" width="520"><br>
       <strong>Actions insights</strong><br>
-      Summary metrics and trend charts for a selected repository, workflow, and job.
+      Repository search, saved selections, summary metrics, and trend charts.
     </td>
   </tr>
 </table>

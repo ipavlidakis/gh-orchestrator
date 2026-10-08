@@ -11,10 +11,10 @@
   <meta property="og:title" content="GHOrchestrator — GitHub, in your menu bar">
   <meta property="og:description" content="Less tab chaos. More room to ship. Pull requests, reviews and Actions in a native macOS menu-bar app.">
   <meta property="og:url" content="https://ipavlidakis.github.io/gh-orchestrator/">
-  <meta property="og:image" content="https://ipavlidakis.github.io/gh-orchestrator/assets/intro-poster.webp">
+  <meta property="og:image" content="https://ipavlidakis.github.io/gh-orchestrator/assets/intro-poster.webp?v=0.5.8">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" href="assets/app-icon.png">
-  <link rel="preload" as="image" href="assets/intro-poster.webp" fetchpriority="high">
+  <link rel="preload" as="image" href="assets/intro-poster.webp?v=0.5.8" fetchpriority="high">
   <style>
 :root {
   color-scheme: light;
@@ -152,9 +152,9 @@ h3 { font-size: var(--lead); letter-spacing: -0.02em; font-weight: 650; }
         </div>
       </div>
       <figure class="video-frame">
-        <video controls playsinline preload="none" poster="assets/intro-poster.webp" width="1920" height="1080" aria-label="GHOrchestrator introduction: pull requests, checks, reviews, Actions insights and customizable success or failure workflow-job notifications">
-          <source src="assets/intro.mp4" type="video/mp4">
-          <p>Your browser cannot play this video. <a href="assets/intro.mp4">Download the introduction.</a></p>
+        <video controls playsinline preload="none" poster="assets/intro-poster.webp?v=0.5.8" width="1920" height="1080" aria-label="GHOrchestrator introduction: authored and review-requested pull requests, checks, reviews, repository search in Actions insights and Notifications, and customizable workflow-job alerts">
+          <source src="assets/intro.mp4?v=0.5.8" type="video/mp4">
+          <p>Your browser cannot play this video. <a href="assets/intro.mp4?v=0.5.8">Download the introduction.</a></p>
         </video>
         <figcaption><span>A little less switching. A lot more focus.</span><span>25 seconds · Silent demo</span></figcaption>
       </figure>
@@ -164,7 +164,7 @@ h3 { font-size: var(--lead); letter-spacing: -0.02em; font-weight: 650; }
       <div class="section-heading">
         <p class="eyebrow">Up and running</p>
         <h2 id="install-title">Two commands. Then back to work.</h2>
-        <p>Install with Homebrew, open GHOrchestrator, sign in with GitHub and add the repositories you care about.</p>
+        <p>Install with Homebrew, open GHOrchestrator and sign in with GitHub. Your authored and review-requested PRs appear automatically. Search for repositories in Settings to configure notifications and Insights.</p>
       </div>
       <div class="terminal">
         <div class="terminal-header"><span>Homebrew</span><button class="copy-button" type="button" hidden>Copy commands</button></div>
@@ -182,34 +182,34 @@ brew install --cask ipavlidakis/gh-orchestrator/gh-orchestrator</code></pre>
       </div>
       <div class="screenshot-grid">
         <figure class="screenshot">
-          <a class="screenshot-image" href="assets/dashboard-overview.webp" aria-label="Open full-size pull request dashboard screenshot">
-            <img src="assets/dashboard-overview.webp" width="880" height="1140" loading="lazy" decoding="async" alt="Pull requests in orbit-labs/nova-app with pending, failing and passing checks.">
+          <a class="screenshot-image" href="assets/dashboard-overview.webp?v=0.5.8" aria-label="Open full-size pull request dashboard screenshot">
+            <img src="assets/dashboard-overview.webp?v=0.5.8" width="880" height="1140" loading="lazy" decoding="async" alt="Authored by me pull requests in orbit-labs/nova-app with pending, failing and passing checks.">
           </a>
-          <figcaption><h3>Pull requests, at a glance.</h3><p>See your PRs or the whole team's. Find the next thing that needs your attention.</p></figcaption>
+          <figcaption><h3>Pull requests, at a glance.</h3><p>Switch between Authored by me and Needs my review across your repositories. No manual registration.</p></figcaption>
         </figure>
         <figure class="screenshot">
-          <a class="screenshot-image" href="assets/dashboard-pr-details.webp" aria-label="Open full-size checks and workflows screenshot">
-            <img src="assets/dashboard-pr-details.webp" width="880" height="950" loading="lazy" decoding="async" alt="Expanded App Build, CodeQL and Smoke Checks workflows showing job status and duration.">
+          <a class="screenshot-image" href="assets/dashboard-pr-details.webp?v=0.5.8" aria-label="Open full-size checks and workflows screenshot">
+            <img src="assets/dashboard-pr-details.webp?v=0.5.8" width="880" height="950" loading="lazy" decoding="async" alt="Expanded App Build, CodeQL and Smoke Checks workflows showing job status and duration.">
           </a>
           <figcaption><h3>Checks, without the chase.</h3><p>Inspect workflows and jobs inline. Retry failed jobs when GitHub allows it.</p></figcaption>
         </figure>
         <figure class="screenshot">
-          <a class="screenshot-image" href="assets/dashboard-comments.webp" aria-label="Open full-size unresolved review comments screenshot">
-            <img src="assets/dashboard-comments.webp" width="880" height="740" loading="lazy" decoding="async" alt="An unresolved review comment from sam asking about offline edits in FavoritesStore.swift.">
+          <a class="screenshot-image" href="assets/dashboard-comments.webp?v=0.5.8" aria-label="Open full-size unresolved review comments screenshot">
+            <img src="assets/dashboard-comments.webp?v=0.5.8" width="880" height="1240" loading="lazy" decoding="async" alt="Unresolved review comments asking about offline edits and preserving local changes in FavoritesStore.swift.">
           </a>
           <figcaption><h3>Keep reviews moving.</h3><p>Find unresolved comments and jump straight to the conversation on GitHub.</p></figcaption>
         </figure>
         <figure class="screenshot">
-          <a class="screenshot-image" href="assets/settings-insights.webp" aria-label="Open full-size Actions insights screenshot">
-            <img src="assets/settings-insights.webp" width="1248" height="2200" loading="lazy" decoding="async" alt="Actions insights showing run success rates, failures, average duration and trends.">
+          <a class="screenshot-image" href="assets/settings-insights.webp?v=0.5.8" aria-label="Open full-size Actions insights screenshot">
+            <img src="assets/settings-insights.webp?v=0.5.8" width="1640" height="2304" loading="lazy" decoding="async" alt="Insights selected in the Settings sidebar, with repository search and refresh in the toolbar, a saved repository, workflow filters and Actions metrics.">
           </a>
-          <figcaption><h3>See the bigger picture.</h3><p>Explore Actions success rates and durations by repository, workflow and job.</p></figcaption>
+          <figcaption><h3>See the bigger picture.</h3><p>Search for a repository in Insights, then explore Actions success rates and durations by workflow and job. Your configured repositories stay visible.</p></figcaption>
         </figure>
         <figure class="screenshot screenshot-wide" id="notifications">
-          <a class="screenshot-image" href="assets/settings-notifications.webp" aria-label="Open full-size notification customization screenshot">
-            <img src="assets/settings-notifications.webp" width="624" height="680" loading="lazy" decoding="async" alt="Notifications settings for orbit-labs/nova-app with workflow job completion enabled and selected workflow and job filters.">
+          <a class="screenshot-image" href="assets/settings-notifications.webp?v=0.5.8" aria-label="Open full-size notification customization screenshot">
+            <img src="assets/settings-notifications.webp?v=0.5.8" width="1640" height="1664" loading="lazy" decoding="async" alt="Notifications selected in the Settings sidebar, with repository search and refresh in the toolbar and saved notification rules for orbit-labs/nova-app.">
           </a>
-          <figcaption><p class="eyebrow">Workflow job alerts</p><h3>Success or failure. Stay in the loop.</h3><p>Get native macOS notifications when a job in a pull request's workflow completes, whether it succeeds or fails.</p><p>Customize alerts per repository. Choose the events, workflows and jobs you care about in Settings → Notifications.</p></figcaption>
+          <figcaption><p class="eyebrow">Workflow job alerts</p><h3>Success or failure. Stay in the loop.</h3><p>Get native macOS notifications when a job in a pull request's workflow completes, whether it succeeds or fails.</p><p>Search for a repository in Settings → Notifications, then choose its events, workflows and jobs. Your saved repositories and alert rules stay on this Mac.</p></figcaption>
         </figure>
       </div>
       <p class="demo-note">Real app views, fictional repositories and pull requests. Settings shown with the flat appearance.</p>

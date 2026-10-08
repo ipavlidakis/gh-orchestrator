@@ -24,8 +24,10 @@ Edit `index.html` (including its embedded CSS) or `install.js`, preview at deskt
 
 ## Media
 
-`assets/intro.mp4` is the silent 25-second FFrames video from `marketing/intro/gh-orchestrator-intro.mp4`, including customizable success/failure workflow-job notifications. It is checked in here so Pages hosts it directly. Keep its poster in sync when replacing the video.
+`assets/intro.mp4` is the silent 25-second FFrames video from `marketing/intro/gh-orchestrator-intro.mp4`, showing global authored/review-requested PR categories, repository search in Insights and Notifications, and customizable workflow-job notifications. It is checked in here so Pages hosts it directly. Keep its poster in sync when replacing the video.
 
-The five WebP screenshots come from `marketing/intro/media/` and use fictional native fixtures from `DesignParityRenderingTests.swift`. They are compressed copies without content changes. The notification capture shows selected workflow/job filters and enabled completion alerts. Open a screenshot on the page to inspect it at full size. The app icon comes from the app's generated artwork.
+The five WebP screenshots come from `marketing/intro/media/` and use fictional native fixtures from `DesignParityRenderingTests.swift`. The Settings fixtures use the production panes in a native window with the current five-section sidebar and system search/refresh toolbar. Capture them in the foreground, since offscreen rendering omits native sidebar and toolbar surfaces. Their card surfaces use the flat appearance. The notification capture shows saved repositories, selected workflow/job filters and enabled completion alerts. Open a screenshot on the page to inspect it at full size. The app icon comes from the app's generated artwork.
+
+After refreshing the native PNGs, copy them to both `marketing/intro/media/` and `docs/screenshots/`, then create the display WebPs with `cwebp -q 90 input.png -o output.webp`. Keep each image's HTML width and height consistent with the exported dimensions. The video preserves each capture's aspect ratio and keeps repository search visible throughout both Settings scenes; the taller review-comments capture pans to the thread content. Export the poster from the updated video at 4.5 seconds and compress it with the same WebP command. Update the media URL version query in `index.html` when replacing assets so returning visitors load the new captures.
 
 Videos never autoplay; loading is user-initiated. Screenshots load lazily. No analytics, cookies or third-party embeds are used.
