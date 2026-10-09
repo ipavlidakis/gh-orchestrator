@@ -8,14 +8,18 @@
 <style>
 :root { color-scheme: light; }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--background); color: var(--text); font: 14px/1.55 -apple-system, BlinkMacSystemFont, sans-serif; overflow-anchor: none; }
-#conversation { position: relative; width: 100%; }
+body { margin: 0; background: var(--background); color: var(--text); font: 15px/1.65 -apple-system, BlinkMacSystemFont, sans-serif; overflow-anchor: none; }
+#conversation { position: relative; width: 100%; max-width: 1000px; margin: 0 auto; --gutter: clamp(24px, 7vw, 80px); }
+#conversation.has-activity::before { content: ""; position: absolute; top: var(--timeline-start); bottom: 24px; left: calc(var(--gutter) + 13px); width: 2px; background: var(--border); pointer-events: none; }
 article { position: absolute; left: 24px; right: 24px; padding: 16px 24px; border: .5px solid var(--border); border-radius: 12px; background: var(--card); }
 article.summary { background: transparent; border-color: transparent; }
 header { display: flex; align-items: center; gap: 12px; }
 h1, h2, h3, h4, h5, h6 { line-height: 1.3; }
 header h1, header h2 { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
-.summary header h1 { font-size: 24px; }
+.summary header h1 { font-size: 24px; letter-spacing: -.025em; }
+article.summary { padding: 12px 0 24px; }
+article.heading { padding-left: 0; padding-right: 0; }
+.summary .markdown-body { font-size: 16px; line-height: 1.7; }
 .heading header h2 { font-size: 22px; }
 .avatar { flex: 0 0 28px; height: 28px; border-radius: 50%; background: var(--code); text-align: center; line-height: 28px; font-size: 11px; font-weight: 600; }
 .metadata { margin: 8px 0 12px; color: var(--secondary); font-size: 12px; white-space: pre-line; overflow-wrap: anywhere; }
@@ -55,6 +59,8 @@ summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
 [align="center"] { text-align: center; }
 .task-list-item { list-style-type: none; }
 .task-list-item input { margin: 0 6px 0 -20px; }
+.task-list-item input:not(:disabled) { cursor: pointer; accent-color: var(--text); }
+.task-list-item input:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
 .markdown-alert { border-left: 3px solid var(--blue); padding: 8px 16px; margin-bottom: 16px; }
 .markdown-alert-title { color: var(--blue); font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .markdown-alert-important { border-color: var(--purple); }
@@ -90,17 +96,12 @@ article.card { padding: 0 0 0 36px; border: 0; background: transparent; border-r
 .avatar { display: block; position: relative; width: 28px; overflow: visible; color: var(--secondary); text-decoration: none; border: .5px solid var(--border); }
 .avatar img { width: 28px; height: 28px; object-fit: cover; position: absolute; inset: 0; }
 .author { font-weight: 600; }
-.pr-subtitle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 16px 0 8px; font-size: 13px; color: var(--secondary); }
+.pr-subtitle { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 24px; font-size: 14px; color: var(--secondary); }
 .pr-subtitle .author { color: var(--text); }
-.status { display: inline-flex; align-items: center; gap: 6px; background: var(--status-neutral); color: var(--background); border-radius: 999px; padding: 5px 12px; margin-right: 6px; font-weight: 600; white-space: nowrap; }
-.status.ready { background: var(--status-success); }
-.status.merged { background: var(--purple); color: white; }
-.status.closed { background: var(--status-danger); }
-.branch { color: var(--link); background: var(--branch); padding: 2px 6px; border-radius: 5px; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; max-width: 100%; }
-.pr-repository { font-size: 12px; color: var(--secondary); margin-bottom: 24px; }
-.pr-number { color: var(--secondary); font-weight: 400; white-space: nowrap; }
+.branch { color: var(--secondary); text-decoration: none; overflow-wrap: anywhere; }
+.edit-summary { color: var(--secondary); width: 28px; height: 28px; flex: 0 0 28px; }
+.description-actions { display: flex; justify-content: flex-end; margin: 8px 0; font-size: 12px; }
 article.timeline { border: 0; border-radius: 0; background: transparent; padding: 8px 0; display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
-.timeline::before, .card::before { content: ""; position: absolute; top: -12px; bottom: -12px; left: 14px; width: 2px; background: var(--border); }
 .timeline-symbol { position: relative; width: 28px; height: 28px; flex: 0 0 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--background); color: var(--secondary); }
 .timeline .avatar { width: 20px; height: 20px; flex-basis: 20px; line-height: 20px; font-size: 9px; }
 .timeline .avatar img { width: 20px; height: 20px; }
@@ -122,8 +123,6 @@ article.timeline { border: 0; border-radius: 0; background: transparent; padding
 .child-count { color: var(--secondary); font-size: 11px; white-space: nowrap; }
 .avatar img { border-radius: 50%; }
 .resolved-badge { position: absolute; z-index: 2; right: -3px; bottom: -3px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--background); background: var(--status-success); color: var(--background); font: 600 9px/10px -apple-system, sans-serif; }
-article.review .comment-card { background: transparent; border: 0; }
-article.review .comment-card > header { background: transparent; border: 0; }
 article.timeline { display: block; padding: 0; }
 .timeline > header { gap: 8px; }
 .timeline > .markdown-body, .timeline > footer { margin-left: 36px; }
@@ -158,7 +157,7 @@ button:disabled { cursor: default; opacity: .55; }
     "use strict";
     const canvas = document.getElementById("conversation");
     const mounted = new Map(), heights = new Map(), expanded = new Set();
-    let allRows = [], byID = new Map(), depths = new Map(), rows = [], indices = new Map(), offsets = [12], frame = 0, measurementFrame = 0, width = 0;
+    let allRows = [], byID = new Map(), depths = new Map(), rows = [], indices = new Map(), offsets = [12], frame = 0, measurementFrame = 0, width = 0, pendingTask = null;
     const pendingHeights = new Map();
 
     function post(message) { window.webkit.messageHandlers.prViewer.postMessage(message); }
@@ -179,6 +178,9 @@ button:disabled { cursor: default; opacity: .55; }
             offsets.push(offsets[i] + (heights.get(row.id) || estimate(row)) + (joined ? 0 : 12));
         }
         canvas.style.height = (offsets[offsets.length - 1] + 12) + "px";
+        const activityStart = rows.findIndex(row => !row.isSummary);
+        canvas.classList.toggle("has-activity", activityStart !== -1);
+        if (activityStart !== -1) canvas.style.setProperty("--timeline-start", (offsets[activityStart] + 14) + "px");
         for (const [id, node] of mounted) node.style.top = offsets[indices.get(id)] + "px";
     }
     function visibleRows() {
@@ -304,13 +306,19 @@ button:disabled { cursor: default; opacity: .55; }
         if (expanded.has(row.id)) node.classList.add("expanded");
         node.dataset.rowId = row.id;
         node.classList.add(row.kind);
-        node.style.left = (24 + (depths.get(row.id) || 0) * 24) + "px";
+        node.style.left = "calc(var(--gutter) + " + (depths.get(row.id) || 0) * 24 + "px)";
         const container = row.isSummary || compact ? node : element("div", "comment-card");
         const header = element("header");
         if (row.isSummary) {
             const title = element(row.id === "summary" ? "h1" : "h2", "", row.title);
-            if (row.header) title.append(document.createTextNode(" "), link("#" + row.header.number, row.url, "pr-number"));
             header.append(title);
+            if (row.id === "summary" && row.canEditDescription) {
+                const edit = button("", "edit-summary", function () { post({kind: "edit-text"}); });
+                edit.setAttribute("aria-label", "Edit pull request title"); edit.title = "Edit pull request title";
+                edit.disabled = row.isUpdatingDescription;
+                edit.innerHTML = '<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="m10 2 4 4-8 8H2v-4Z"/><path d="m8 4 4 4"/></svg>';
+                header.append(edit);
+            }
         } else {
             if (compact) header.append(icon(row.kind === "commit"), avatar(row));
             else node.append(avatar(row));
@@ -336,28 +344,60 @@ button:disabled { cursor: default; opacity: .55; }
             if (row.kind === "commit") header.append(link(row.id.slice(0, 7), row.url, "commit-sha"));
             header.append(element("time", "comment-time", row.time));
         }
-        if (row.url && !compact) header.append(externalLink(row));
+        if (row.url && !compact && !row.isSummary) header.append(externalLink(row));
         container.append(header);
         if (row.header) {
             const metadata = element("div", "pr-subtitle"), info = row.header;
-            const status = element("span", "status " + (info.status === "Ready for review" ? "ready" : info.status.toLowerCase()), info.status);
-            const symbol = icon(false).firstChild;
-            status.prepend(symbol);
-            metadata.append(status, link(row.author ? row.author.login : "Deleted user", row.author && row.author.url, "author"));
-            metadata.append(document.createTextNode(info.commitCount == null ? " wants to merge into " : " wants to merge " + info.commitCount + (info.commitCount === 1 ? " commit into " : " commits into ")));
-            metadata.append(element("span", "branch", info.base), document.createTextNode(" from "), element("span", "branch", info.head));
-            container.append(metadata, element("div", "pr-repository", info.repository));
+            metadata.append(avatar(row), link(row.author ? row.author.login : "Deleted user", row.author && row.author.url, "author"), element("time", "", row.time), document.createTextNode(" · "));
+            const repositoryURL = row.url.slice(0, row.url.indexOf("/pull/"));
+            for (const [index, branch] of [info.head, info.base].entries()) {
+                if (index) metadata.append(element("span", "", "→"));
+                const branchLink = link(branch, repositoryURL + "/tree/" + branch.split("/").map(encodeURIComponent).join("/"), "branch");
+                branchLink.title = branch;
+                metadata.append(branchLink);
+            }
+            container.append(metadata);
         }
         const body = element("div", "markdown-body");
         body.id = "content-" + row.id;
         body.hidden = (!row.isSummary && !expanded.has(row.id)) || (row.kind === "review" && !row.body && !row.bodyHTML);
         if (!body.hidden && row.bodyHTML !== undefined && row.bodyHTML !== null) body.append(sanitize(row.bodyHTML));
         else if (!body.hidden && row.body) body.append(element("pre", "raw-markdown", row.body));
+        if (row.id === "summary") configureDescriptionTasks(body, row);
         container.append(body);
+        if (row.id === "summary" && row.canEditDescription) {
+            const actions = element("div", "description-actions");
+            const edit = button("Edit description", "edit-description", function () { post({kind: "edit-text"}); });
+            edit.disabled = row.isUpdatingDescription;
+            actions.append(edit); container.append(actions);
+        }
         if (!body.hidden && !row.isSummary && row.kind !== "review") appendReactions(container, row);
         if (body.querySelector("math-renderer,.js-render-needs-enrichment")) container.append(element("p", "enrichment-note", "Math and diagrams can be viewed on GitHub."));
         if (container !== node) node.append(container);
         return node;
+    }
+
+    function configureDescriptionTasks(body, row) {
+        const inputs = Array.from(body.querySelectorAll('input[type="checkbox"]'));
+        const tasks = row.descriptionTasks || [];
+        const matched = inputs.length === tasks.length && inputs.every((input, index) => input.closest(".task-list-item") && input.checked === tasks[index].checked);
+        if (!matched) return;
+        body.tabIndex = -1;
+        body.setAttribute("aria-busy", String(row.isUpdatingDescription));
+        inputs.forEach(function (input, index) {
+            const task = tasks[index];
+            input.disabled = !row.canEditDescription || row.isUpdatingDescription;
+            input.dataset.taskOffset = String(task.offset);
+            input.setAttribute("aria-label", input.closest("li").textContent.trim());
+            if (pendingTask && row.isUpdatingDescription && pendingTask.offset === task.offset) input.checked = pendingTask.checked;
+            input.title = row.canEditDescription ? "Save this task on GitHub" : "You cannot edit this pull request description";
+            input.addEventListener("change", function () {
+                pendingTask = { offset: task.offset, checked: input.checked };
+                inputs.forEach(control => { control.disabled = true; });
+                body.setAttribute("aria-busy", "true"); body.focus({preventScroll: true});
+                post({kind: "description-task", offset: String(task.offset), checked: String(input.checked), body: row.body});
+            });
+        });
     }
 
     const reactionTypes = { THUMBS_UP: ["👍", "Thumbs up"], THUMBS_DOWN: ["👎", "Thumbs down"], LAUGH: ["😄", "Laugh"], HOORAY: ["🎉", "Hooray"], CONFUSED: ["😕", "Confused"], HEART: ["❤️", "Heart"], ROCKET: ["🚀", "Rocket"], EYES: ["👀", "Eyes"] };
@@ -402,7 +442,7 @@ button:disabled { cursor: default; opacity: .55; }
         const node = element("article", "card conversation-part " + row.kind + (open ? " expanded" : ""));
         node.dataset.rowId = row.id;
         const depth = depths.get(first ? row.id : row.parentID) || 0;
-        node.style.left = (24 + depth * 24) + "px";
+        node.style.left = "calc(var(--gutter) + " + depth * 24 + "px)";
         const container = element("div", "comment-card" + (first ? " thread-start" : "") + ((!open || row.isThreadEnd) ? " thread-end" : ""));
         if (first) {
             if (!open) node.append(avatar(row));
@@ -484,6 +524,8 @@ button:disabled { cursor: default; opacity: .55; }
             const saved = anchor(), previous = new Map(allRows.map(function (row) { return [row.id, row]; })), previousDepths = depths;
             const reactionFocus = document.activeElement?.closest(".reactions")?.closest("article")?.dataset.rowId;
             allRows = next;
+            const completedTask = pendingTask && !next.find(row => row.id === "summary")?.isUpdatingDescription ? pendingTask : null;
+            if (completedTask) pendingTask = null;
             byID = new Map(allRows.map(function (row) { return [row.id, row]; }));
             for (const row of allRows) {
                 const before = previous.get(row.id);
@@ -495,7 +537,8 @@ button:disabled { cursor: default; opacity: .55; }
             depths = new Map();
             for (const row of allRows) depths.set(row.id, row.parentID ? (depths.get(row.parentID) || 0) + 1 : 0);
             const changed = new Set(allRows.filter(row => !same(previous.get(row.id), row) || previousDepths.get(row.id) !== depths.get(row.id)).map(row => row.id));
-            for (const id of heights.keys()) if (!byID.has(id) || changed.has(id)) heights.delete(id);
+            // Keep the document height until the replacement summary is measured, so scroll restoration cannot clamp it.
+            for (const id of heights.keys()) if (!byID.has(id) || (changed.has(id) && id !== "summary")) heights.delete(id);
             for (const id of pendingHeights.keys()) if (!byID.has(id) || changed.has(id)) pendingHeights.delete(id);
             for (const id of expanded) if (!byID.has(id)) expanded.delete(id);
             for (const [id, node] of mounted) if (!byID.has(id) || changed.has(id)) {
@@ -518,6 +561,7 @@ button:disabled { cursor: default; opacity: .55; }
                 const toolbar = mounted.get(reactionFocus)?.querySelector(".reactions");
                 (toolbar?.querySelector(".add-reaction:not(:disabled)") || toolbar)?.focus({preventScroll: true});
             }
+            if (completedTask) mounted.get("summary")?.querySelector('input[data-task-offset="' + completedTask.offset + '"]:not(:disabled)')?.focus({preventScroll: true});
         },
         setTheme: function (colors, dark) {
             for (const [key, value] of Object.entries(colors)) document.documentElement.style.setProperty("--" + key, value);

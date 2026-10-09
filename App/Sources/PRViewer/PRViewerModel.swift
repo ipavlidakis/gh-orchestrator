@@ -22,16 +22,42 @@ final class PRViewerModel {
     private(set) var focusRevision = 0
     private(set) var pendingCommentURL: URL?
     var composerPresented = false
+    var textEditorPresented = false
+    var titleDraft = ""
+    var descriptionDraft = ""
+    var mergeMethod: PRMergeMethod = .squash
+    var bypassMergeRules = false
+    var mergeConfirmationPresented = false
+    private(set) var pendingMerge: PRMergeRequest?
+    private var editingSummary: PRSummary?
+    var reviewerPickerPresented = false
+    var reviewerQuery = ""
+    private(set) var reviewerCandidates: [PRReviewer] = []
+    private(set) var reviewersCursor: String?
+    private(set) var selectedReviewers: [PRReviewer] = []
     private(set) var composerThreadID: String?
     private var drafts: [String: String] = [:]
     var composerDraft: String {
         get { drafts[composerThreadID ?? "pull-request"] ?? "" }
         set { drafts[composerThreadID ?? "pull-request"] = newValue }
     }
-    var isWriting: Bool { loading.contains("Comment") || loading.contains { $0.hasPrefix("Resolve:") || $0.hasPrefix("Reaction:") } }
-    var canComment: Bool { summary?.id != nil && summary?.locked != true }
+    var isWriting: Bool { loading.contains("Merge") || loading.contains("Description") || loading.contains("PR text") || loading.contains("Request review") || loading.contains("Comment") || loading.contains { $0.hasPrefix("Resolve:") || $0.hasPrefix("Reaction:") } }
+    var canEditText: Bool { summary?.viewerCanUpdate == true && summary?.id != nil && !isWriting && !loading.contains("Summary") }
+    var canSaveText: Bool {
+        canEditText && !titleDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        (titleDraft != editingSummary?.title || descriptionDraft != editingSummary?.body)
+    }
+    var sidebarReviews: [PRActivity] {
+        let pending = Set(summary?.reviewRequests?.nodes.compactMap { $0.requestedReviewer?.login.lowercased() } ?? [])
+        var seen: Set<String> = []
+        return activity.reversed().filter { review in
+            let login = review.author?.login.lowercased() ?? review.id
+            return review.kind == "PullRequestReview" && !pending.contains(login) && seen.insert(login).inserted
+        }.reversed()
+    }
+    var canComment: Bool { summary?.id != nil && summary?.locked != true && !loading.contains("Merge") }
     var canSubmitComment: Bool {
-        !loading.contains("Comment") && !composerDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !loading.contains("Merge") && !loading.contains("Comment") && !composerDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         (composerThreadID == nil ? canComment : threads.contains { $0.id == composerThreadID && $0.viewerCanReply == true })
     }
     @ObservationIgnored private var tasks: [String: Task<Void, Never>] = [:]
@@ -73,11 +99,22 @@ final class PRViewerModel {
     }
 
     func loadSummary() {
+        guard !loading.contains("Merge"), !loading.contains("Description"), !loading.contains("PR text"), !loading.contains("Request review") else { return }
+        errors["Description"] = nil
         request("Summary") { [self] in
             let result = try await service.summary(address, checksAfter: nil)
             let cursor = try result.checksPageInfo?.nextCursor()
-            return { [self] in summary = result; checks = result.checks; checksCursor = cursor }
+            return { [self] in
+                summary = result; checks = result.checks; checksCursor = cursor
+                if let method = result.autoMergeRequest?.mergeMethod { mergeMethod = method }
+                else if let methods = result.repository?.methods, !methods.contains(mergeMethod), let first = methods.first { mergeMethod = first }
+                bypassMergeRules = false
+                pendingMerge = nil
+                mergeConfirmationPresented = false
+                errors["Merge"] = nil
+            }
         }
+        prepareRows()
     }
 
     func loadActivity() {
@@ -166,7 +203,7 @@ final class PRViewerModel {
     }
 
     func toggleResolved(_ threadID: String) {
-        guard let thread = threads.first(where: { $0.id == threadID }),
+        guard !loading.contains("Merge"), let thread = threads.first(where: { $0.id == threadID }),
               (thread.isResolved ? thread.viewerCanUnresolve : thread.viewerCanResolve) == true else { return }
         request("Resolve:\(threadID)") { [self] in
             let result = try await service.setResolved(threadID: threadID, resolved: !thread.isResolved)
@@ -188,7 +225,7 @@ final class PRViewerModel {
     }
 
     func toggleReaction(subjectID: String, content: PRReactionContent) {
-        guard let row = rows.first(where: { $0.id == subjectID && $0.canReact }),
+        guard !loading.contains("Merge"), let row = rows.first(where: { $0.id == subjectID && $0.canReact }),
               !loading.contains("Reaction:\(subjectID)") else { return }
         let added = !row.reactionGroups.contains { $0.content == content && $0.viewerHasReacted }
         request("Reaction:\(subjectID)") { [self] in
@@ -210,6 +247,133 @@ final class PRViewerModel {
         prepareRows()
     }
 
+    func setDescriptionTask(offset: Int, checked: Bool, expectedBody: String) {
+        guard let summary, summary.viewerCanUpdate == true, summary.body == expectedBody,
+              !loading.contains("Merge"), !loading.contains("Summary"), !loading.contains("Description"), !loading.contains("PR text"),
+              PRDescriptionTask.items(in: summary.body).contains(where: { $0.offset == offset }) else { return }
+        request("Description") { [self] in
+            let result = try await service.setDescriptionTask(address, offset: offset, checked: checked, expectedBody: expectedBody)
+            return { [self] in
+                self.summary?.body = result.body
+                self.summary?.bodyHTML = result.bodyHTML
+            }
+        }
+        prepareRows()
+    }
+
+    func editText() {
+        guard canEditText, let summary else { return }
+        if editingSummary?.title != summary.title || editingSummary?.body != summary.body {
+            titleDraft = summary.title
+            descriptionDraft = summary.body
+            editingSummary = summary
+        }
+        errors["PR text"] = nil
+        textEditorPresented = true
+    }
+
+    func saveText() {
+        guard canSaveText, let original = editingSummary else { return }
+        let title = titleDraft, body = descriptionDraft
+        request("PR text") { [self] in
+            let result = try await service.updateText(address, title: title, body: body, expectedTitle: original.title, expectedBody: original.body)
+            return { [self] in
+                guard summary?.id == result.id else { return }
+                summary?.title = result.title
+                summary?.body = result.body
+                summary?.bodyHTML = result.bodyHTML
+                editingSummary = nil
+                textEditorPresented = false
+            }
+        }
+        prepareRows()
+    }
+
+    func openReviewerPicker() {
+        guard canEditText else { return }
+        selectedReviewers = []
+        reviewerQuery = ""
+        reviewerPickerPresented = true
+        searchReviewers()
+    }
+
+    func searchReviewers(after: String? = nil) {
+        if after == nil {
+            tasks.removeValue(forKey: "Find reviewers")?.cancel()
+            loading.remove("Find reviewers")
+            reviewerCandidates = []
+            reviewersCursor = nil
+        }
+        let query = reviewerQuery
+        request("Find reviewers") { [self] in
+            if after == nil { try await Task.sleep(for: .milliseconds(200)) }
+            let result = try await service.reviewers(address, query: query, after: after)
+            let cursor = try result.pageInfo.nextCursor(after: after)
+            return { [self] in
+                guard reviewerQuery == query else { return }
+                let existing = Set(reviewerCandidates.map(\.id))
+                let requested = Set(summary?.reviewRequests?.nodes.compactMap { $0.requestedReviewer?.id } ?? [])
+                reviewerCandidates += result.nodes.filter { !existing.contains($0.id) && !requested.contains($0.id) && $0.login != summary?.author?.login }
+                reviewersCursor = cursor
+            }
+        }
+    }
+
+    func selectReviewer(_ reviewer: PRReviewer) {
+        guard !loading.contains("Request review"), reviewerCandidates.contains(where: { $0.id == reviewer.id }) else { return }
+        if selectedReviewers.contains(where: { $0.id == reviewer.id }) { selectedReviewers.removeAll { $0.id == reviewer.id } }
+        else { selectedReviewers.append(reviewer) }
+    }
+
+    func requestSelectedReviewers() {
+        guard canEditText, !selectedReviewers.isEmpty else { return }
+        let users = selectedReviewers.map(\.id)
+        request("Request review") { [self] in
+            let result = try await service.requestReviewers(address, userIDs: users)
+            return { [self] in
+                guard summary?.id == result.id else { return }
+                summary?.reviewRequests = result.reviewRequests
+                selectedReviewers = []
+                reviewerPickerPresented = false
+            }
+        }
+    }
+
+    func beginMerge(_ action: PRMergeAction) {
+        guard !isWriting, !loading.contains("Summary"), let summary, let head = summary.headRefOid else { return }
+        let permitted: Bool
+        switch action {
+        case .merge: permitted = summary.canMerge(method: mergeMethod, bypassRules: bypassMergeRules)
+        case .enableAutoMerge: permitted = !bypassMergeRules && summary.canEnableAutoMerge(method: mergeMethod)
+        case .disableAutoMerge: permitted = summary.state == "OPEN" && summary.autoMergeRequest != nil && summary.viewerCanDisableAutoMerge == true
+        }
+        guard permitted else { return }
+        pendingMerge = PRMergeRequest(method: action == .disableAutoMerge ? summary.autoMergeRequest?.mergeMethod ?? mergeMethod : mergeMethod, action: action, expectedHeadOID: head, expectedBaseRefName: summary.baseRefName, bypassRules: action == .merge && bypassMergeRules)
+        errors["Merge"] = nil
+        mergeConfirmationPresented = true
+    }
+
+    func confirmMerge() {
+        guard mergeConfirmationPresented, !isWriting, let pendingMerge else { return }
+        request("Merge") { [self] in
+            let result = try await service.merge(address, request: pendingMerge)
+            return { [self] in
+                summary?.state = result.state
+                summary?.autoMergeRequest = result.autoMergeRequest
+                self.pendingMerge = nil
+                mergeConfirmationPresented = false
+                bypassMergeRules = false
+            }
+        }
+        prepareRows()
+    }
+
+    func cancelMerge() {
+        guard !loading.contains("Merge") else { return }
+        mergeConfirmationPresented = false
+        pendingMerge = nil
+    }
+
     func focus(rowID: String?) {
         focusedRowID = rowID
         focusRevision += 1
@@ -228,12 +392,13 @@ final class PRViewerModel {
                 self.loading.remove(key)
                 self.tasks[key] = nil
                 self.prepareRows()
+                if key == "Merge" { self.loadSummary() }
             } catch {
                 guard let self, self.generation == token, !Task.isCancelled else { return }
                 self.errors[key] = error.localizedDescription
                 self.loading.remove(key)
                 self.tasks[key] = nil
-                if key.hasPrefix("Reaction:") { self.prepareRows() }
+                if key.hasPrefix("Reaction:") || ["Description", "PR text", "Summary", "Merge"].contains(key) { self.prepareRows() }
             }
         }
     }

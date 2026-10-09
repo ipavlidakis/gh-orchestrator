@@ -25,6 +25,48 @@ public struct PRActor: Codable, Equatable, Sendable {
     public let url: URL?
 }
 
+public struct PRReviewer: Decodable, Identifiable, Equatable, Sendable {
+    public let id: String
+    public let login: String
+    public let name: String?
+    public let avatarUrl: URL?
+    public let url: URL?
+}
+
+public struct PRReviewRequest: Decodable, Identifiable, Sendable {
+    public let id: String
+    public let requestedReviewer: PRReviewer?
+    public let isTeam: Bool
+
+    private enum CodingKeys: String, CodingKey { case id, requestedReviewer }
+    private enum ReviewerKeys: String, CodingKey { case type = "__typename" }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        if container.contains(.requestedReviewer), try !container.decodeNil(forKey: .requestedReviewer) {
+            let reviewer = try container.nestedContainer(keyedBy: ReviewerKeys.self, forKey: .requestedReviewer)
+            isTeam = try reviewer.decodeIfPresent(String.self, forKey: .type) == "Team"
+            requestedReviewer = isTeam ? nil : try container.decode(PRReviewer.self, forKey: .requestedReviewer)
+        } else {
+            isTeam = false
+            requestedReviewer = nil
+        }
+    }
+}
+
+public struct PRReviewersUpdate: Decodable, Sendable {
+    public let id: String
+    public let reviewRequests: PRConnection<PRReviewRequest>
+}
+
+public struct PRTextUpdate: Decodable, Sendable {
+    public let id: String
+    public let title: String
+    public let body: String
+    public let bodyHTML: String
+}
+
 public struct PRPageInfo: Decodable, Equatable, Sendable {
     public let hasNextPage: Bool
     public let endCursor: String?
@@ -123,10 +165,11 @@ public struct PRCheck: Decodable, Identifiable, Sendable {
 public struct PRSummary: Decodable, Sendable {
     public let id: String?
     public let locked: Bool?
-    public let title: String
-    public let body: String
-    public let bodyHTML: String?
-    public let state: String
+    public let viewerCanUpdate: Bool?
+    public var title: String
+    public var body: String
+    public var bodyHTML: String?
+    public var state: String
     public let isDraft: Bool
     public let author: PRActor?
     public let createdAt: Date
@@ -134,8 +177,18 @@ public struct PRSummary: Decodable, Sendable {
     public let baseRefName: String
     public let additions: Int
     public let deletions: Int
+    public let changedFiles: Int?
     public let mergeable: String
     public let reviewDecision: String?
+    public let headRefOid: String?
+    public let mergeStateStatus: String?
+    public let isMergeQueueEnabled: Bool?
+    public let viewerCanMergeAsAdmin: Bool?
+    public let viewerCanEnableAutoMerge: Bool?
+    public let viewerCanDisableAutoMerge: Bool?
+    public let repository: PRMergeRepository?
+    public var autoMergeRequest: PRAutoMergeRequest?
+    public var reviewRequests: PRConnection<PRReviewRequest>?
     public let commits: CommitConnection
 
     public struct CommitConnection: Decodable, Sendable {
@@ -153,6 +206,107 @@ public struct PRSummary: Decodable, Sendable {
     }
     public var checks: [PRCheck] { commits.nodes.first?.commit.statusCheckRollup?.contexts.nodes ?? [] }
     public var checksPageInfo: PRPageInfo? { commits.nodes.first?.commit.statusCheckRollup?.contexts.pageInfo }
+
+    public func canMerge(method: PRMergeMethod, bypassRules: Bool = false) -> Bool {
+        guard state == "OPEN", !isDraft, mergeable == "MERGEABLE", isMergeQueueEnabled == false,
+              repository?.canWrite == true, repository?.methods.contains(method) == true,
+              id?.isEmpty == false, headRefOid?.isEmpty == false,
+              !bypassRules || viewerCanMergeAsAdmin == true else { return false }
+        return ["CLEAN", "HAS_HOOKS", "UNSTABLE"].contains(mergeStateStatus ?? "") ||
+            (bypassRules && ["BLOCKED", "BEHIND"].contains(mergeStateStatus ?? ""))
+    }
+
+    public func canEnableAutoMerge(method: PRMergeMethod) -> Bool {
+        state == "OPEN" && !isDraft && mergeable == "MERGEABLE" && isMergeQueueEnabled == false &&
+            viewerCanEnableAutoMerge == true && repository?.autoMergeAllowed == true &&
+            repository?.canWrite == true && repository?.methods.contains(method) == true && autoMergeRequest == nil &&
+            id?.isEmpty == false && headRefOid?.isEmpty == false
+    }
+}
+
+public enum PRMergeMethod: String, Codable, CaseIterable, Sendable { case merge = "MERGE", squash = "SQUASH", rebase = "REBASE" }
+public enum PRMergeAction: Sendable { case merge, enableAutoMerge, disableAutoMerge }
+
+public struct PRMergeRequest: Sendable {
+    public let method: PRMergeMethod
+    public let action: PRMergeAction
+    public let expectedHeadOID: String
+    public let expectedBaseRefName: String
+    public let bypassRules: Bool
+    public init(method: PRMergeMethod, action: PRMergeAction, expectedHeadOID: String, expectedBaseRefName: String, bypassRules: Bool = false) {
+        self.method = method; self.action = action; self.expectedHeadOID = expectedHeadOID; self.bypassRules = bypassRules
+        self.expectedBaseRefName = expectedBaseRefName
+    }
+}
+
+public struct PRMergeRepository: Decodable, Sendable {
+    public let mergeCommitAllowed: Bool
+    public let squashMergeAllowed: Bool
+    public let rebaseMergeAllowed: Bool
+    public let autoMergeAllowed: Bool
+    public let viewerPermission: String?
+    public var canWrite: Bool { ["WRITE", "MAINTAIN", "ADMIN"].contains(viewerPermission ?? "") }
+    public var methods: [PRMergeMethod] {
+        PRMergeMethod.allCases.filter { method in
+            switch method { case .merge: mergeCommitAllowed; case .squash: squashMergeAllowed; case .rebase: rebaseMergeAllowed }
+        }
+    }
+}
+
+public struct PRAutoMergeRequest: Decodable, Sendable { public let mergeMethod: PRMergeMethod }
+
+public struct PRMergeUpdate: Decodable, Sendable {
+    public let id: String
+    public let state: String
+    public let autoMergeRequest: PRAutoMergeRequest?
+    private enum CodingKeys: String, CodingKey { case id, state, autoMergeRequest }
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        state = try values.decode(String.self, forKey: .state)
+        autoMergeRequest = try values.decode(PRAutoMergeRequest?.self, forKey: .autoMergeRequest)
+    }
+}
+
+public struct PRDescriptionUpdate: Decodable, Sendable {
+    public let id: String
+    public let body: String
+    public let bodyHTML: String
+}
+
+public struct PRDescriptionTask: Encodable, Sendable {
+    public let offset: Int
+    public let checked: Bool
+
+    public static func items(in body: String) -> [Self] {
+        // shortcut: ambiguous HTML stays read-only; use a full Markdown parser if those descriptions need editing.
+        guard body.range(of: "<input", options: .caseInsensitive) == nil else { return [] }
+        let task = try! NSRegularExpression(pattern: #"^[ \t]*(?:>[ \t]*)*(?:[-+*]|[0-9]{1,9}[.)])[ \t]+\[([ xX])\](?:[ \t]|$)"#)
+        let fence = try! NSRegularExpression(pattern: #"^[ \t]*(?:>[ \t]*)*(?:(?:[-+*]|[0-9]{1,9}[.)])[ \t]+)?(`{3,}|~{3,})(.*)$"#)
+        let comments = try! NSRegularExpression(pattern: #"<!--[\s\S]*?(?:-->|$)"#)
+        let hidden = comments.matches(in: body, range: NSRange(body.startIndex..., in: body)).map(\.range)
+        var activeFence: (String, Int)?
+        var result: [Self] = []
+        body.enumerateSubstrings(in: body.startIndex..., options: .byLines) { line, range, _, _ in
+            guard let line else { return }
+            let lineRange = NSRange(range, in: body)
+            if hidden.contains(where: { NSIntersectionRange($0, lineRange).length > 0 }) { return }
+            let full = NSRange(line.startIndex..., in: line)
+            if let match = fence.firstMatch(in: line, range: full) {
+                let marker = (line as NSString).substring(with: match.range(at: 1))
+                let tail = (line as NSString).substring(with: match.range(at: 2))
+                let character = String(marker.prefix(1))
+                if let current = activeFence {
+                    if character == current.0 && marker.count >= current.1 && tail.trimmingCharacters(in: .whitespaces).isEmpty { activeFence = nil }
+                } else { activeFence = (character, marker.count) }
+                return
+            }
+            guard activeFence == nil, let match = task.firstMatch(in: line, range: full) else { return }
+            let marker = match.range(at: 1)
+            result.append(Self(offset: lineRange.location + marker.location, checked: (line as NSString).substring(with: marker) != " "))
+        }
+        return result
+    }
 }
 
 public struct PRActivity: Decodable, Identifiable, Equatable, Sendable {

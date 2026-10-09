@@ -18,6 +18,9 @@ struct PRConversationWebView: NSViewRepresentable {
         configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.add(context.coordinator, name: "prViewer")
         let web = WKWebView(frame: .zero, configuration: configuration)
+        // shortcut: macOS WebKit exposes this switch through KVC; replace it when a public transparency API is available.
+        web.setValue(false, forKey: "drawsBackground")
+        web.underPageBackgroundColor = .clear
         web.navigationDelegate = context.coordinator
         web.setAccessibilityLabel("Pull request summary and activity")
         context.coordinator.web = web
@@ -78,7 +81,7 @@ struct PRConversationWebView: NSViewRepresentable {
                 appliedDark = dark
                 var colors: [String: String] = [:]
                 NSAppearance(named: dark ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance {
-                    for (name, color) in ["background": NSColor.windowBackgroundColor, "card": .controlBackgroundColor,
+                    for (name, color) in ["background": NSColor.clear, "card": .clear,
                                           "rail": .labelColor.withAlphaComponent(0.05), "branch": .systemBlue.withAlphaComponent(0.12),
                                           "status-neutral": NSColor(StatusTint.neutral.color), "status-success": NSColor(StatusTint.success.color),
                                           "status-danger": NSColor(StatusTint.danger.color),
@@ -125,6 +128,12 @@ struct PRConversationWebView: NSViewRepresentable {
                 if let id = value["id"], let raw = value["content"], let content = PRReactionContent(rawValue: raw) {
                     model.toggleReaction(subjectID: id, content: content)
                 }
+            case "description-task":
+                if let raw = value["offset"], let offset = Int(raw), let checked = value["checked"],
+                   ["true", "false"].contains(checked), let body = value["body"] {
+                    model.setDescriptionTask(offset: offset, checked: checked == "true", expectedBody: body)
+                }
+            case "edit-text": model.editText()
             default: break
             }
         }

@@ -8,6 +8,339 @@ import XCTest
 
 @MainActor
 final class PRViewerTests: XCTestCase {
+    func testNativeMergeConfirmationAndExplicitBypass() async throws {
+        let recorder = PRViewerMergeRecorder()
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/orbit/nova/pull/42")!))
+        let controller = PRViewerWindowController(address: address, service: PRViewerFixtureService(isDraft: false, mergeBlocked: true, mergeRecorder: recorder), openBrowser: { _ in }, onClose: {})
+        controller.present(url: address.url)
+        defer { controller.close() }
+        let model = controller.model, window = try XCTUnwrap(controller.window)
+        window.setContentSize(NSSize(width: 1180, height: 820))
+        try await wait("merge fixture loaded") { model.rows.count == 7 && model.loading.isEmpty }
+        window.contentView?.layoutSubtreeIfNeeded()
+        XCTAssertFalse(try XCTUnwrap(model.summary).canMerge(method: .squash))
+        model.beginMerge(.merge)
+        XCTAssertFalse(model.mergeConfirmationPresented)
+        let bypass = "Merge without waiting for requirements (bypass rules)"
+        try await wait("merge bypass checkbox visible") { self.accessibilityButton(bypass, in: window, role: .checkBox) != nil }
+        XCTAssertEqual(accessibilityButton(bypass, in: window, role: .checkBox)?.accessibilityPerformPress?(), true)
+        try await wait("merge bypass checkbox selected") { model.bypassMergeRules }
+        let action = "Bypass rules and merge (squash)"
+        try await wait("merge action visible") { self.accessibilityButton(action, in: window) != nil }
+        let directory = URL(fileURLWithPath: "/tmp/gho-pr-viewer")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let web = try XCTUnwrap(descendant(WKWebView.self, in: XCTUnwrap(window.contentView)))
+        try await wait("merge fixture description rendered") { (try? await web.evaluateJavaScript("document.querySelector('article.summary h1') !== null")) as? Bool == true }
+        for (name, width, appearance) in [("light", 1180.0, NSAppearance.Name.aqua), ("dark", 1180.0, .darkAqua), ("compact", 860.0, .aqua)] {
+            window.appearance = NSAppearance(named: appearance)
+            window.setContentSize(NSSize(width: width, height: 820))
+            window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(200))
+            try captureNative(window, to: directory.appendingPathComponent("merge-controls-\(name).png"))
+        }
+        window.setContentSize(NSSize(width: 1180, height: 820))
+        window.appearance = NSAppearance(named: .aqua)
+        XCTAssertEqual(accessibilityButton(action, in: window)?.accessibilityPerformPress?(), true)
+        try await wait { window.attachedSheet != nil }
+        let sheet = try XCTUnwrap(window.attachedSheet)
+        try await wait { self.accessibilityButton("Bypass rules and merge", in: sheet) != nil }
+        XCTAssertEqual(model.pendingMerge?.method, .squash)
+        XCTAssertEqual(model.pendingMerge?.expectedHeadOID, "head1")
+        XCTAssertEqual(model.pendingMerge?.expectedBaseRefName, "develop")
+        XCTAssertTrue(model.pendingMerge?.bypassRules == true)
+        let before = await recorder.requests
+        XCTAssertTrue(before.isEmpty, "Opening confirmation never merges")
+        try captureNative(sheet, to: directory.appendingPathComponent("merge-confirmation-native.png"))
+        XCTAssertEqual(accessibilityButton("Cancel", in: sheet)?.accessibilityPerformPress?(), true)
+        try await wait { window.attachedSheet == nil }
+        XCTAssertNil(model.pendingMerge)
+        XCTAssertEqual(accessibilityButton(action, in: window)?.accessibilityPerformPress?(), true)
+        try await wait { window.attachedSheet != nil }
+        let confirmedSheet = try XCTUnwrap(window.attachedSheet)
+        try await wait { self.accessibilityButton("Bypass rules and merge", in: confirmedSheet) != nil }
+        XCTAssertEqual(accessibilityButton("Bypass rules and merge", in: confirmedSheet)?.accessibilityPerformPress?(), true)
+        try await wait { model.summary?.state == "MERGED" && !model.mergeConfirmationPresented && model.loading.isEmpty }
+        let requests = await recorder.requests
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.first?.method, .squash)
+        XCTAssertTrue(requests.first?.bypassRules == true)
+    }
+
+    func testMergeSelectionAutoMergeAndErrorsPreserveConfirmation() async throws {
+        for method in PRMergeMethod.allCases {
+            let recorder = PRViewerMergeRecorder()
+            let model = makeModel(service: PRViewerFixtureService(isDraft: false, mergeBlocked: false, mergeRecorder: recorder))
+            model.refresh()
+            try await wait { model.rows.count == 7 && model.loading.isEmpty }
+            model.mergeMethod = method
+            model.beginMerge(.enableAutoMerge)
+            model.confirmMerge()
+            try await wait { model.summary?.autoMergeRequest?.mergeMethod == method && model.loading.isEmpty }
+            model.beginMerge(.disableAutoMerge)
+            model.confirmMerge()
+            try await wait { model.summary?.autoMergeRequest == nil && model.loading.isEmpty }
+            model.beginMerge(.merge)
+            await recorder.failNext()
+            model.confirmMerge()
+            try await wait { model.errors["Merge"] != nil && !model.isWriting }
+            XCTAssertTrue(model.mergeConfirmationPresented)
+            XCTAssertEqual(model.pendingMerge?.method, method)
+            XCTAssertEqual(model.summary?.state, "OPEN")
+            model.confirmMerge()
+            try await wait { model.summary?.state == "MERGED" && model.loading.isEmpty }
+            let requests = await recorder.requests
+            XCTAssertEqual(requests.map(\.method), [method, method, method, method])
+            model.cancel()
+        }
+    }
+
+    func testTeamReviewRequestHasAccessibleGitHubFallback() async throws {
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/orbit/nova/pull/42")!))
+        var openedURL: URL?
+        let controller = PRViewerWindowController(address: address, service: PRViewerFixtureService(teamReviewRequest: true), openBrowser: { openedURL = $0 }, onClose: {})
+        controller.present(url: address.url)
+        defer { controller.close() }
+        let window = try XCTUnwrap(controller.window)
+        try await wait { controller.model.summary != nil }
+        XCTAssertEqual(controller.model.summary?.reviewRequests?.nodes.first?.isTeam, true)
+        try await wait { self.accessibilityButton("View requested team review on GitHub", in: window) != nil }
+        let team = try XCTUnwrap(accessibilityButton("View requested team review on GitHub", in: window))
+        XCTAssertEqual(team.accessibilityPerformPress?(), true)
+        XCTAssertEqual(openedURL, address.url)
+    }
+
+    func testNativePREditorAndReviewerPickerConfirmWrites() async throws {
+        let recorder = PRViewerEditRecorder()
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/orbit/nova/pull/42")!))
+        let controller = PRViewerWindowController(address: address, service: PRViewerFixtureService(descriptionTasks: true, editRecorder: recorder, threadBody: "**Data Integrity & Integration** | **Major** | A long reviewer thread title that must stay on one quiet line", headRefName: "iliaspavlidakis/ios-2116-joincall-reaction-initialization-preserving-the-complete-branch-name"), openBrowser: { _ in }, onClose: {})
+        controller.present(url: address.url)
+        defer { controller.close() }
+        let model = controller.model, window = try XCTUnwrap(controller.window)
+        let directory = URL(fileURLWithPath: "/tmp/gho-pr-viewer", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        window.setContentSize(NSSize(width: 1180, height: 820))
+        try await wait { model.rows.count == 7 }
+        window.contentView?.layoutSubtreeIfNeeded()
+        try await wait { self.descendant(WKWebView.self, in: window.contentView!) != nil }
+        let web = try XCTUnwrap(descendant(WKWebView.self, in: XCTUnwrap(window.contentView)))
+        try await wait { (try? await web.evaluateJavaScript("document.querySelector('.edit-summary') !== null")) as? Bool == true }
+        let original = try XCTUnwrap(model.summary)
+        _ = try await web.evaluateJavaScript("document.querySelector('.edit-summary').click()")
+        try await wait { window.attachedSheet?.contentView != nil }
+        let sheet = try XCTUnwrap(window.attachedSheet)
+        let content = try XCTUnwrap(sheet.contentView)
+        try await wait { self.editableTextField(in: content) != nil }
+        let titleField = try XCTUnwrap(editableTextField(in: content))
+        sheet.makeFirstResponder(titleField)
+        let titleEditor = try XCTUnwrap(titleField.currentEditor() as? NSTextView)
+        titleEditor.selectAll(nil)
+        titleEditor.insertText("Updated PR title 👩‍💻", replacementRange: titleEditor.selectedRange())
+        sheet.makeFirstResponder(nil)
+        try await wait { model.titleDraft == "Updated PR title 👩‍💻" }
+        let bodyEditor = try XCTUnwrap(descendant(NSTextView.self, in: content))
+        sheet.makeFirstResponder(bodyEditor)
+        bodyEditor.selectAll(nil)
+        bodyEditor.insertText("## Updated\nDescription edited with native controls.", replacementRange: bodyEditor.selectedRange())
+        try await wait { model.descriptionDraft == "## Updated\nDescription edited with native controls." }
+        content.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(200))
+        try captureNative(sheet, to: directory.appendingPathComponent("editing-sheet.png"))
+        let send = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: sheet.windowNumber, context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+        XCTAssertTrue(sheet.performKeyEquivalent(with: send))
+        try await wait("Native Save confirmed title and description") { model.summary?.title == "Updated PR title 👩‍💻" && !model.isWriting && !model.textEditorPresented }
+        try await wait("Native edit sheet dismissed") { window.attachedSheet == nil }
+        let textWrites = await recorder.texts
+        XCTAssertEqual(textWrites.count, 1)
+        XCTAssertEqual(textWrites.first?.expectedTitle, original.title)
+        XCTAssertEqual(textWrites.first?.expectedBody, original.body)
+        try await wait { (try? await web.evaluateJavaScript("document.querySelector('.summary h1').textContent")) as? String == "Updated PR title 👩‍💻" }
+        XCTAssertEqual(model.summary?.bodyHTML, "<p>Saved description from GitHub</p>")
+        for width in [1180.0, 860.0] {
+            window.setContentSize(NSSize(width: width, height: 820)); window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(150))
+            let fits = try await web.evaluateJavaScript("Array.from(document.querySelectorAll('.branch')).every(b => b.scrollWidth <= b.clientWidth && b.getBoundingClientRect().right <= innerWidth) && document.documentElement.scrollWidth <= innerWidth") as? Bool
+            XCTAssertEqual(fits, true, "Full branch names must fit without clipping")
+        }
+        window.setContentSize(NSSize(width: 1180, height: 820))
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        try await wait("Reviewer button window active") { window.isKeyWindow && NSApp.isActive }
+        try await Task.sleep(for: .milliseconds(350))
+        let controls = directory.appendingPathComponent("editing-controls.png")
+        try captureNative(window, to: controls)
+        let addReviewers = try XCTUnwrap(accessibilityButton("Add reviewers", in: window))
+        XCTAssertEqual(addReviewers.accessibilityPerformPress?(), true)
+        try await wait("Reviewer plus opened picker") { model.reviewerPickerPresented }
+        try await wait { model.reviewerCandidates.count == 1 && !model.loading.contains("Find reviewers") }
+        XCTAssertEqual(model.reviewerCandidates.first?.login, "morgan", "The PR author must not be offered as a reviewer")
+        try await wait("Native reviewer search field ready") { NSApp.windows.contains { $0.isVisible && $0.contentView.flatMap { self.editableTextField(in: $0, placeholder: "Search by name or username") } != nil } }
+        let picker = try XCTUnwrap(NSApp.windows.first { $0.isVisible && $0.contentView.flatMap { self.editableTextField(in: $0, placeholder: "Search by name or username") } != nil })
+        let search = try XCTUnwrap(editableTextField(in: XCTUnwrap(picker.contentView), placeholder: "Search by name or username"))
+        picker.makeFirstResponder(search)
+        let searchEditor = try XCTUnwrap(search.currentEditor() as? NSTextView)
+        searchEditor.selectAll(nil); searchEditor.insertText("mor", replacementRange: searchEditor.selectedRange())
+        try await wait("Native reviewer search entry delivered") { model.reviewerQuery == "mor" }
+        try await wait("Searched reviewers returned") { await recorder.queries.contains("mor") && !model.loading.contains("Find reviewers") }
+        model.selectReviewer(try XCTUnwrap(model.reviewerCandidates.first))
+        XCTAssertEqual(model.selectedReviewers.map(\.login), ["morgan"])
+        picker.contentView?.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(150))
+        try captureNative(picker, to: directory.appendingPathComponent("reviewer-picker.png"))
+        model.requestSelectedReviewers()
+        model.requestSelectedReviewers()
+        try await wait { !model.reviewerPickerPresented && !model.isWriting }
+        try await wait { !picker.isVisible || picker.contentView.flatMap { self.editableTextField(in: $0, placeholder: "Search by name or username") } == nil }
+        let requested = await recorder.reviewers
+        XCTAssertEqual(requested, [["U1"]], "Duplicate submissions must not notify reviewers twice")
+        XCTAssertEqual(model.summary?.reviewRequests?.nodes.first?.requestedReviewer?.login, "morgan")
+        for (name, width, appearance) in [("light", 1180.0, NSAppearance.Name.aqua), ("dark", 1180.0, .darkAqua), ("compact", 860.0, .aqua)] {
+            window.appearance = NSAppearance(named: appearance)
+            window.setContentSize(NSSize(width: width, height: 820)); window.contentView?.layoutSubtreeIfNeeded()
+            window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+            try await wait { window.isKeyWindow }
+            try await Task.sleep(for: .milliseconds(250))
+            try captureNative(window, to: directory.appendingPathComponent("editing-\(name).png"))
+        }
+    }
+
+    func testFailedEditsKeepDraftsAndReviewerSelection() async throws {
+        let model = makeModel(service: PRViewerFixtureService(descriptionTasks: true, failTextUpdate: true, failReviewRequest: true))
+        model.refresh()
+        try await wait { model.rows.count == 7 }
+        let original = try XCTUnwrap(model.summary)
+        model.editText(); model.titleDraft = "My edited title"; model.descriptionDraft = "My draft"
+        model.saveText()
+        try await wait { model.errors["PR text"] != nil && !model.isWriting }
+        XCTAssertEqual(model.summary?.title, original.title)
+        XCTAssertEqual(model.summary?.body, original.body)
+        XCTAssertEqual(model.descriptionDraft, "My draft")
+        XCTAssertTrue(model.textEditorPresented)
+        model.textEditorPresented = false
+        model.openReviewerPicker()
+        try await wait { model.reviewerCandidates.count == 1 && !model.loading.contains("Find reviewers") }
+        model.searchReviewers(after: model.reviewersCursor)
+        try await wait { model.reviewerCandidates.count == 2 }
+        XCTAssertNil(model.reviewersCursor)
+        model.selectReviewer(try XCTUnwrap(model.reviewerCandidates.first))
+        model.requestSelectedReviewers()
+        try await wait { model.errors["Request review"] != nil && !model.isWriting }
+        XCTAssertTrue(model.reviewerPickerPresented)
+        XCTAssertEqual(model.selectedReviewers.map(\.login), ["morgan"])
+        XCTAssertNil(model.summary?.reviewRequests)
+        model.cancel()
+        let denied = makeModel(service: PRViewerFixtureService(descriptionTasks: true, canUpdateDescription: false))
+        denied.refresh(); try await wait { denied.rows.count == 7 }
+        denied.editText(); denied.openReviewerPicker()
+        XCTAssertFalse(denied.textEditorPresented)
+        XCTAssertFalse(denied.reviewerPickerPresented)
+        denied.cancel()
+    }
+
+    func testCheckboxKeepsItsPositionInLongDescription() async throws {
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/orbit/nova/pull/42")!))
+        let controller = PRViewerWindowController(address: address, service: PRViewerFixtureService(descriptionTasks: true, longDescription: true), openBrowser: { _ in }, onClose: {})
+        controller.present(url: address.url)
+        defer { controller.close() }
+        try await wait { controller.model.rows.count == 7 }
+        let window = try XCTUnwrap(controller.window)
+        window.setContentSize(NSSize(width: 1180, height: 820))
+        let hosting = try XCTUnwrap(window.contentView)
+        hosting.layoutSubtreeIfNeeded()
+        try await wait { self.descendant(WKWebView.self, in: hosting) != nil }
+        let web = try XCTUnwrap(descendant(WKWebView.self, in: hosting))
+        try await wait { (try? await web.evaluateJavaScript("document.querySelector('.summary input') !== null")) as? Bool == true }
+        try await Task.sleep(for: .milliseconds(250))
+        _ = try await web.evaluateJavaScript("window.scrollTo(0, document.querySelector('.summary input').getBoundingClientRect().top + scrollY - innerHeight / 2)")
+        try await Task.sleep(for: .milliseconds(200))
+        let beforeValue = try await web.evaluateJavaScript("window.scrollY")
+        let before = try XCTUnwrap(beforeValue as? Double)
+        let visible = try await web.evaluateJavaScript("document.querySelector('.summary input').getBoundingClientRect().top >= 0 && document.querySelector('.summary input').getBoundingClientRect().bottom < innerHeight") as? Bool
+        XCTAssertEqual(visible, true, "Click the checkbox while it is visible")
+        XCTAssertGreaterThan(before, 3000)
+        _ = try await web.evaluateJavaScript("document.querySelector('.summary input').click()")
+        try await wait { controller.model.summary?.body.contains("- [x] Ship") == true && !controller.model.isWriting }
+        try await wait { (try? await web.evaluateJavaScript("document.querySelector('.summary input').checked && !document.querySelector('.summary input').disabled")) as? Bool == true }
+        try await Task.sleep(for: .milliseconds(200))
+        let afterValue = try await web.evaluateJavaScript("window.scrollY")
+        let after = try XCTUnwrap(afterValue as? Double)
+        XCTAssertLessThan(abs(after - before), 60, "A checkbox update must preserve its viewport position")
+    }
+
+    func testDescriptionTaskCheckboxIsActionable() async throws {
+        let recorder = PRViewerDescriptionRecorder()
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/orbit/nova/pull/42")!))
+        let controller = PRViewerWindowController(address: address, service: PRViewerFixtureService(descriptionTasks: true, descriptionRecorder: recorder), openBrowser: { _ in }, onClose: {})
+        let model = controller.model
+        controller.present(url: address.url)
+        try await wait { model.rows.count == 7 }
+        let window = try XCTUnwrap(controller.window)
+        let hosting = try XCTUnwrap(window.contentView)
+        window.setContentSize(NSSize(width: 1180, height: 820))
+        defer { controller.close() }
+        hosting.layoutSubtreeIfNeeded()
+        try await wait { self.descendant(WKWebView.self, in: hosting) != nil }
+        let web = try XCTUnwrap(descendant(WKWebView.self, in: hosting))
+        try await wait { (try? await web.evaluateJavaScript("document.querySelector('.summary .task-list-item input') !== null")) as? Bool == true }
+        let disabled = try await web.evaluateJavaScript("document.querySelector('.summary .task-list-item input').disabled") as? Bool
+        XCTAssertEqual(disabled, false)
+        _ = try await web.evaluateJavaScript("document.querySelector('.summary .task-list-item input').click()")
+        try await wait { model.loading.contains("Description") }
+        XCTAssertTrue(model.isWriting)
+        try await wait { (try? await web.evaluateJavaScript("document.querySelector('.summary .task-list-item input').disabled")) as? Bool == true }
+        try await wait { model.summary?.body == "## Checklist\r\n- [x] Ship **safely**\r\n- [x] Keep `code` and 👩‍💻\r\n" }
+        let writes = await recorder.writes
+        XCTAssertEqual(writes.count, 1)
+        XCTAssertEqual(writes.first?.offset, 17)
+        XCTAssertEqual(writes.first?.checked, true)
+        XCTAssertEqual(writes.first?.body, "## Checklist\r\n- [ ] Ship **safely**\r\n- [x] Keep `code` and 👩‍💻\r\n")
+        try await wait { (try? await web.evaluateJavaScript("!document.querySelector('.summary .task-list-item input').disabled && document.querySelector('.summary .task-list-item input').checked")) as? Bool == true }
+        _ = try await web.evaluateJavaScript("document.querySelector('.summary .task-list-item input').click()")
+        try await wait { model.summary?.body == "## Checklist\r\n- [ ] Ship **safely**\r\n- [x] Keep `code` and 👩‍💻\r\n" && !model.isWriting }
+        let unchecked = await recorder.writes
+        XCTAssertEqual(unchecked.count, 2)
+        XCTAssertEqual(unchecked.last?.checked, false)
+        let directory = URL(fileURLWithPath: "/tmp/gho-pr-viewer", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for (name, width, appearance) in [("light", 1180.0, NSAppearance.Name.aqua), ("dark", 1180.0, .darkAqua), ("compact", 860.0, .aqua)] {
+            window.appearance = NSAppearance(named: appearance)
+            window.setContentSize(NSSize(width: width, height: 820))
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            try await Task.sleep(for: .milliseconds(200))
+            let page = try await web.takeSnapshot(configuration: nil)
+            let pixels = try XCTUnwrap(NSBitmapImageRep(data: XCTUnwrap(page.tiffRepresentation)))
+            XCTAssertLessThan(try XCTUnwrap(pixels.colorAt(x: 1, y: 1)).alphaComponent, 0.01, "WebKit's empty gutter must let the native material show through")
+            let screenshot = Process()
+            screenshot.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            let url = directory.appendingPathComponent("description-\(name).png")
+            screenshot.arguments = ["-x", "-o", "-l", String(window.windowNumber), url.path]
+            try screenshot.run(); screenshot.waitUntilExit()
+            XCTAssertEqual(screenshot.terminationStatus, 0)
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.regionOfInterest = CGRect(x: 0, y: 0.93, width: 0.55, height: 0.07)
+            try VNImageRequestHandler(url: url).perform([request])
+            let header = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+            XCTAssertTrue(header.contains("Draft"), "The toolbar must retain a readable status at every width: \(header)")
+            let fits = try await web.evaluateJavaScript("document.documentElement.scrollWidth <= innerWidth") as? Bool
+            XCTAssertEqual(fits, true, "Description must fit the conversation column")
+        }
+        for (canUpdate, failWrite) in [(false, false), (true, true)] {
+            let denied = makeModel(service: PRViewerFixtureService(descriptionTasks: true, canUpdateDescription: canUpdate, failDescription: failWrite))
+            denied.refresh()
+            try await wait { denied.rows.count == 7 }
+            let original = try XCTUnwrap(denied.summary?.body)
+            denied.setDescriptionTask(offset: 17, checked: true, expectedBody: original)
+            if canUpdate {
+                try await wait { denied.errors["Description"] != nil && !denied.isWriting && !denied.rows[0].isUpdatingDescription }
+                XCTAssertFalse(denied.rows[0].isUpdatingDescription)
+            } else { XCTAssertFalse(denied.isWriting) }
+            XCTAssertEqual(denied.summary?.body, original)
+            denied.cancel()
+        }
+    }
+
     func testConflictSidebarHandlesStatesAndOpensGitHubResolution() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("gho-merge-conflicts-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -42,7 +375,7 @@ final class PRViewerTests: XCTestCase {
                 XCTAssertEqual(screenshot.terminationStatus, 0)
                 let request = VNRecognizeTextRequest()
                 request.recognitionLevel = .accurate
-                let sidebarStart = (window.frame.width - 280) / window.frame.width
+                let sidebarStart = (window.frame.width - 320) / window.frame.width
                 request.regionOfInterest = CGRect(x: sidebarStart, y: 0, width: 1 - sidebarStart, height: 1)
                 try VNImageRequestHandler(url: url).perform([request])
                 return request.results ?? []
@@ -62,7 +395,7 @@ final class PRViewerTests: XCTestCase {
             }
             XCTAssertTrue(text.contains("develop"), "Guidance must identify the target branch: \(text)")
             let action = try XCTUnwrap(resolve)
-            let point = NSPoint(x: window.frame.width - 280 + 280 * action.boundingBox.midX, y: window.frame.height * action.boundingBox.midY)
+            let point = NSPoint(x: window.frame.width - 320 + 320 * action.boundingBox.midX, y: window.frame.height * action.boundingBox.midY)
             for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
                 let event = try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
                 NSApp.postEvent(event, atStart: false)
@@ -84,17 +417,26 @@ final class PRViewerTests: XCTestCase {
     }
 
     func testFileConversationAlignsRepliesAndPlacesActionsAfterLastComment() async throws {
-        let model = makeModel(service: PRViewerFixtureService())
-        model.refresh()
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/orbit/stream-video-swift/pull/1362")!))
+        let controller = PRViewerWindowController(address: address, service: PRViewerFixtureService(isDraft: false), openBrowser: { _ in }, onClose: {})
+        controller.present(url: address.url)
+        let model = controller.model
         try await wait { model.rows.count == 7 }
-        let hosting = NSHostingView(rootView: PRViewerWindowView(model: model, openBrowser: { _ in }))
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 820), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
-        window.contentView = hosting
-        window.orderFront(nil)
-        defer { window.orderOut(nil); model.cancel() }
+        let window = try XCTUnwrap(controller.window), hosting = try XCTUnwrap(window.contentView)
+        window.setContentSize(NSSize(width: 1180, height: 820))
+        defer { controller.close() }
         hosting.layoutSubtreeIfNeeded()
         try await wait { self.descendant(WKWebView.self, in: hosting) != nil }
         let web = try XCTUnwrap(descendant(WKWebView.self, in: hosting))
+        try await wait { (try? await web.evaluateJavaScript("window.prConversation !== undefined")) as? Bool == true }
+        let reviewHeader = try await web.evaluateJavaScript("""
+        (() => { window.prConversation.focus('event-1'); const h = document.querySelector('article.review .comment-card > header').getBoundingClientRect(); return {x:h.left+h.width/2,y:h.top+4}; })()
+        """) as? [String: Double]
+        let headerPoint = try XCTUnwrap(reviewHeader)
+        let headerImage = try await web.takeSnapshot(configuration: nil)
+        let headerPixels = try XCTUnwrap(NSBitmapImageRep(data: XCTUnwrap(headerImage.tiffRepresentation)))
+        let headerScale = Double(headerPixels.pixelsWide) / web.bounds.width
+        XCTAssertGreaterThan(try XCTUnwrap(headerPixels.colorAt(x: Int(try XCTUnwrap(headerPoint["x"]) * headerScale), y: Int(try XCTUnwrap(headerPoint["y"]) * headerScale))).alphaComponent, 0.02, "Review headers must have the same visible tint as other comment headers")
         model.focus(rowID: "reply-0")
         try await wait { (try? await web.evaluateJavaScript("document.querySelector('article[data-row-id=\"reply-1\"]') !== null")) as? Bool == true }
         let conversation = try await web.evaluateJavaScript("""
@@ -109,6 +451,43 @@ final class PRViewerTests: XCTestCase {
         XCTAssertEqual(conversation?["replyVisible"] as? Bool, true)
         XCTAssertEqual(conversation?["rootActions"] as? Int, 0)
         XCTAssertEqual(conversation?["finalActions"] as? Int, 2)
+        func assertContinuousRail(_ phase: String) async throws {
+            try await Task.sleep(for: .milliseconds(200))
+            let geometry = try await web.evaluateJavaScript("""
+            (() => {window.prConversation.focus("reply-0");const root=document.querySelector('article[data-row-id="reply-0"]'), reply=document.querySelector('article[data-row-id="reply-1"]');return {
+              x:root.getBoundingClientRect().left-24+14,
+              top:root.getBoundingClientRect().top+44,
+              bottom:Math.min(reply.getBoundingClientRect().bottom,innerHeight-24)
+            }})()
+            """) as? [String: Double]
+            let line = try XCTUnwrap(geometry)
+            let image = try await web.takeSnapshot(configuration: nil)
+            let pixels = try XCTUnwrap(NSBitmapImageRep(data: XCTUnwrap(image.tiffRepresentation)))
+            let scale = Double(pixels.pixelsWide) / web.bounds.width
+            let x = Int(try XCTUnwrap(line["x"]) * scale)
+            let top = max(0, Int(try XCTUnwrap(line["top"]) * scale))
+            let bottom = Int(try XCTUnwrap(line["bottom"]) * scale)
+            XCTAssertGreaterThan(bottom - top, 40, "Exercise a visible nested conversation")
+            let opacity = try stride(from: top, to: bottom, by: 8).map { y in try XCTUnwrap(pixels.colorAt(x: x, y: y)).alphaComponent }.min()
+            XCTAssertGreaterThan(try XCTUnwrap(opacity), 0.04, "The root timeline rail must stay painted through nested comments (\(phase))")
+            let directory = URL(fileURLWithPath: "/tmp/gho-pr-viewer", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try XCTUnwrap(pixels.representation(using: .png, properties: [:])).write(to: directory.appendingPathComponent("timeline-\(phase).png"))
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            try await Task.sleep(for: .milliseconds(100))
+            try captureNative(window, to: directory.appendingPathComponent("timeline-native-\(phase).png"))
+        }
+        try await assertContinuousRail("expanded")
+        _ = try await web.evaluateJavaScript("document.querySelector('article[data-row-id=\"reply-0\"] .disclosure').click()")
+        try await wait { (try? await web.evaluateJavaScript("document.querySelector('article[data-row-id=\"reply-1\"]') === null")) as? Bool == true }
+        model.focus(rowID: "reply-0")
+        try await wait { (try? await web.evaluateJavaScript("document.querySelector('article[data-row-id=\"reply-1\"]') !== null")) as? Bool == true }
+        window.setContentSize(NSSize(width: 860, height: 820))
+        window.contentView?.layoutSubtreeIfNeeded()
+        try await assertContinuousRail("reopened-compact")
+        window.appearance = NSAppearance(named: .darkAqua)
+        try await assertContinuousRail("dark")
     }
 
     func testReviewOwnsItsConversationsRatherThanInterleavingCommentDates() throws {
@@ -216,10 +595,9 @@ final class PRViewerTests: XCTestCase {
         try await wait {
             (try? await web.evaluateJavaScript("document.querySelectorAll('.markdown-body table').length")) as? Int == 1
         }
-        let header = try await web.evaluateJavaScript("({status:document.querySelector('.status').textContent, author:document.querySelector('.pr-subtitle .author').href, branches:Array.from(document.querySelectorAll('.branch')).map(n=>n.textContent)})") as? [String: Any]
-        XCTAssertEqual(header?["status"] as? String, "Draft")
+        let header = try await web.evaluateJavaScript("({author:document.querySelector('.pr-subtitle .author').href, branches:Array.from(document.querySelectorAll('.branch')).map(n=>n.textContent)})") as? [String: Any]
         XCTAssertEqual(header?["author"] as? String, "https://github.com/alex")
-        XCTAssertEqual(header?["branches"] as? [String], ["develop", "fix/audio-initialization"])
+        XCTAssertEqual(header?["branches"] as? [String], ["fix/audio-initialization", "develop"])
         let content = try await web.evaluateJavaScript("document.querySelector('.markdown-body').innerText") as? String
         XCTAssertTrue(content?.contains("Draft PR not reviewed") == true)
         XCTAssertFalse(content?.contains("HIDDEN_BOT_METADATA") == true)
@@ -240,11 +618,11 @@ final class PRViewerTests: XCTestCase {
         _ = try await web.evaluateJavaScript("document.querySelector('.markdown-body a[href*=issues]').click()")
         try await wait { contentURLs.count == 1 }
         XCTAssertEqual(contentURLs.first?.absoluteString, "https://github.com/orbit/nova/issues/7")
-        _ = try await web.evaluateJavaScript("document.querySelector('.summary .external-link').click()")
-        try await wait { browserURLs.count == 1 }
-        XCTAssertEqual(browserURLs.first, model.address.url)
         model.focus(rowID: "reply-1")
         try await wait { (try? await web.evaluateJavaScript("document.querySelector('.reply') !== null")) as? Bool == true }
+        _ = try await web.evaluateJavaScript("document.querySelector('.reply .external-link').click()")
+        try await wait { browserURLs.count == 1 }
+        XCTAssertEqual(browserURLs.first?.absoluteString, "https://github.com/orbit/nova/pull/42#discussion_r1")
         let commentUI = try await web.evaluateJavaScript("({avatar:document.querySelector('article.card > .avatar img')?.getAttribute('src'), header:document.querySelector('.comment-card > header .author')?.textContent})") as? [String: Any]
         XCTAssertNotNil(commentUI?["avatar"] as? String)
         XCTAssertNotNil(commentUI?["header"] as? String)
@@ -405,14 +783,15 @@ final class PRViewerTests: XCTestCase {
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = false
             try VNImageRequestHandler(url: imageURL).perform([request])
-            return (request.results ?? []).filter { $0.boundingBox.minX > 0.75 }
+            return (request.results ?? []).filter { $0.boundingBox.minX > (window.frame.width - 320) / window.frame.width }
         }
         let expandedText = try sidebarText()
         XCTAssertTrue(expandedText.contains { $0.topCandidates(1).first?.string.contains("Review Required") == true })
         XCTAssertTrue(expandedText.contains { $0.topCandidates(1).first?.string.contains("Test Core") == true })
         XCTAssertTrue(expandedText.contains { $0.topCandidates(1).first?.string.contains("Why is this changing?") == true })
         for title in ["Checks", "Reviews", "Threads"] {
-            let header = try XCTUnwrap(expandedText.first { $0.topCandidates(1).first?.string.contains(title) == true })
+            let currentText = try sidebarText()
+            let header = try XCTUnwrap(currentText.first { $0.topCandidates(1).first?.string.contains(title) == true })
             let point = NSPoint(x: window.frame.width - 54, y: window.frame.height * header.boundingBox.midY - 12)
             for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
                 let event = try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
@@ -449,6 +828,9 @@ final class PRViewerTests: XCTestCase {
         let window = try XCTUnwrap(controller.window)
         window.level = .floating
         window.setContentSize(NSSize(width: 1180, height: 820))
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        try await wait("large review window in foreground") { window.isKeyWindow }
         let web = try XCTUnwrap(descendant(WKWebView.self, in: XCTUnwrap(window.contentView)))
         try await wait("large review document ready") { (try? await web.evaluateJavaScript("window.prConversation !== undefined")) as? Bool == true }
         model.focus(rowID: "event-1")
@@ -472,8 +854,8 @@ final class PRViewerTests: XCTestCase {
         XCTAssertEqual(closed, 0)
         model.focus(rowID: "reply-1498")
         try await wait("large review direct reply visible") { (try? await web.evaluateJavaScript("document.querySelector('article[data-row-id=\"reply-1498\"] .markdown-body:not([hidden])') !== null")) as? Bool == true }
-        let nested = try await web.evaluateJavaScript("document.querySelector('article[data-row-id=\"reply-1498\"]').style.left") as? String
-        XCTAssertEqual(nested, "48px", "A direct reply link opens both ancestors and aligns replies inside their file conversation")
+        let nested = try await web.evaluateJavaScript("({reply:document.querySelector('article[data-row-id=\"reply-1498\"]').getBoundingClientRect().left, root:document.querySelector('article[data-row-id=\"reply-1497\"]').getBoundingClientRect().left})") as? [String: Double]
+        XCTAssertEqual(try XCTUnwrap(nested?["reply"]), try XCTUnwrap(nested?["root"]), "A direct reply link opens both ancestors and aligns replies inside their file conversation")
         let ids = stride(from: 0, to: 1000, by: 12).map { "reply-\($0 * 3)" }
         let metrics: Any = try await withCheckedThrowingContinuation { continuation in
             web.callAsyncJavaScript("""
@@ -679,10 +1061,29 @@ final class PRViewerTests: XCTestCase {
         return view.subviews.lazy.compactMap { self.descendant(type, in: $0) }.first
     }
 
+    private func editableTextField(in view: NSView, placeholder: String? = nil) -> NSTextField? {
+        if let field = view as? NSTextField, field.isEditable, placeholder == nil || field.placeholderString == placeholder { return field }
+        return view.subviews.lazy.compactMap { self.editableTextField(in: $0, placeholder: placeholder) }.first
+    }
+
+    private func accessibilityButton(_ label: String, in element: Any, role: NSAccessibility.Role = .button) -> AnyObject? {
+        let element = element as AnyObject
+        if element.accessibilityRole?() == role && element.accessibilityLabel?() == label { return element }
+        return (element.accessibilityChildren?() ?? []).lazy.compactMap { self.accessibilityButton(label, in: $0, role: role) }.first
+    }
+
     private func capture(_ web: WKWebView, to url: URL) async throws {
         let image = try await web.takeSnapshot(configuration: nil)
         let bitmap = try XCTUnwrap(NSBitmapImageRep(data: XCTUnwrap(image.tiffRepresentation)))
         try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: url)
+    }
+
+    private func captureNative(_ window: NSWindow, to url: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-o", "-l", String(window.windowNumber), url.path]
+        try process.run(); process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
     }
 }
 
@@ -696,17 +1097,45 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
     var reactionRecorder: PRViewerReactionRecorder? = nil
     var mergeable = "MERGEABLE"
     var state = "OPEN"
+    var descriptionTasks = false
+    var canUpdateDescription = true
+    var failDescription = false
+    var descriptionRecorder: PRViewerDescriptionRecorder? = nil
+    var longDescription = false
+    var failTextUpdate = false
+    var failReviewerSearch = false
+    var failReviewRequest = false
+    var editRecorder: PRViewerEditRecorder? = nil
+    var threadBody = "Why is this changing?"
+    var headRefName = "fix/audio-initialization"
+    var teamReviewRequest = false
+    var isDraft = true
+    var mergeBlocked: Bool? = nil
+    var mergeRecorder: PRViewerMergeRecorder? = nil
 
     func summary(_ address: PullRequestAddress, checksAfter: String?) async throws -> PRSummary {
-        try Self.makeSummary(title: title, completedChecksOnly: completedChecksOnly, mergeable: mergeable, state: state)
+        var result = try Self.makeSummary(title: title, completedChecksOnly: completedChecksOnly, mergeable: mergeable, state: state, descriptionTasks: descriptionTasks, canUpdateDescription: canUpdateDescription, headRefName: headRefName, isDraft: isDraft, mergeBlocked: mergeBlocked)
+        if let update = await mergeRecorder?.result { result.state = update.state; result.autoMergeRequest = update.autoMergeRequest }
+        if teamReviewRequest {
+            result.reviewRequests = try Self.decode(["nodes": [["id": "RR-team", "requestedReviewer": ["__typename": "Team"]]], "pageInfo": ["hasNextPage": false]])
+        }
+        if longDescription {
+            result.body = String(repeating: "A paragraph in the long PR description.\n\n", count: 150) + result.body
+            result.bodyHTML = String(repeating: "<p>A paragraph in the long PR description.</p>", count: 150) + (result.bodyHTML ?? "")
+        }
+        return result
     }
 
-    static func makeSummary(title: String = "Fix audio initialization order during call joins", completedChecksOnly: Bool = false, mergeable: String = "MERGEABLE", state: String = "OPEN") throws -> PRSummary {
-        try decode([
+    func merge(_ address: PullRequestAddress, request: PRMergeRequest) async throws -> PRMergeUpdate {
+        try await XCTUnwrap(mergeRecorder).record(request)
+    }
+
+    static func makeSummary(title: String = "Fix audio initialization order during call joins", completedChecksOnly: Bool = false, mergeable: String = "MERGEABLE", state: String = "OPEN", descriptionTasks: Bool = false, canUpdateDescription: Bool = true, headRefName: String = "fix/audio-initialization", isDraft: Bool = true, mergeBlocked: Bool? = nil) throws -> PRSummary {
+        var payload: [String: Any] = [
             "id": "PR-42", "locked": false, "title": title, "body": "<!-- HIDDEN_BOT_METADATA -->\n## Goal\nPrepare the audio session **before capture starts**.\n\n## Summary\n- Activate the audio session before capture starts.\n- Preserve cancellation checks.\n- Add focused regression coverage.\n\n## Implementation\n`CallAudioSession` applies the category and activation before microphone changes.\n\n```swift\nawait audioSession.activate()\ntry Task.checkCancellation()\n```\n\n## Validation\nFocused tests and app builds passed. [View the issue](https://github.com/orbit/nova/issues/7).",
             "bodyHTML": "<!-- HIDDEN_BOT_METADATA --><script>window.untrustedRan = true</script><a href=\"javascript:window.untrustedRan=true\">Unsafe link</a><div class=\"markdown-alert markdown-alert-important\"><p class=\"markdown-alert-title\">Important</p><h2>Draft PR not reviewed</h2><ul class=\"contains-task-list\"><li class=\"task-list-item\"><input type=\"checkbox\" disabled> Trigger a manual review</li></ul></div><table><thead><tr><th>Status</th></tr></thead><tbody><tr><td>Draft</td></tr></tbody></table><details><summary>Configuration</summary><pre><code>drafts: true</code></pre></details><p><a href=\"https://github.com/orbit/nova/issues/7\">Issue</a></p>",
-            "state": state, "isDraft": true, "createdAt": "2026-10-08T00:00:00Z", "author": ["login": "alex", "url": "https://github.com/alex", "avatarUrl": "https://avatars.githubusercontent.com/u/583231?s=56"],
-            "headRefName": "fix/audio-initialization", "baseRefName": "develop", "additions": 533, "deletions": 40,
+            "state": state, "isDraft": isDraft, "createdAt": "2026-10-08T00:00:00Z", "author": ["login": "alex", "url": "https://github.com/alex", "avatarUrl": "https://avatars.githubusercontent.com/u/583231?s=56"],
+            "headRefName": headRefName, "baseRefName": "develop", "additions": 533, "deletions": 40, "changedFiles": 5,
             "mergeable": mergeable, "reviewDecision": "REVIEW_REQUIRED",
             "commits": ["totalCount": 2, "nodes": [["commit": ["statusCheckRollup": ["contexts": ["nodes": completedChecksOnly ? (0..<15).map { ["name": "Test Core \($0)", "status": "COMPLETED", "conclusion": "SUCCESS"] } + [["name": "Skipped check", "status": "COMPLETED", "conclusion": "SKIPPED"]] : [
                 ["name": "Test Core (Debug)", "status": "IN_PROGRESS", "detailsUrl": "https://github.com/orbit/nova/actions/runs/1"],
@@ -716,7 +1145,22 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
                 ["name": "Failed check", "status": "COMPLETED", "conclusion": "FAILURE"],
                 ["name": "Skipped check", "status": "COMPLETED", "conclusion": "SKIPPED"]
             ], "pageInfo": ["hasNextPage": false]]]]]]]
-        ])
+        ]
+        if descriptionTasks {
+            payload["viewerCanUpdate"] = canUpdateDescription
+            payload["body"] = "## Checklist\r\n- [ ] Ship **safely**\r\n- [x] Keep `code` and 👩‍💻\r\n"
+            payload["bodyHTML"] = "<h2>Checklist</h2><ul><li class='task-list-item'><input type='checkbox' disabled> Ship <strong>safely</strong></li><li class='task-list-item'><input type='checkbox' checked disabled> Keep <code>code</code> and 👩‍💻</li></ul>"
+        }
+        if let mergeBlocked {
+            payload["headRefOid"] = "head1"
+            payload["mergeStateStatus"] = mergeBlocked ? "BLOCKED" : "CLEAN"
+            payload["isMergeQueueEnabled"] = false
+            payload["viewerCanMergeAsAdmin"] = true
+            payload["viewerCanEnableAutoMerge"] = true
+            payload["viewerCanDisableAutoMerge"] = true
+            payload["repository"] = ["mergeCommitAllowed": true, "squashMergeAllowed": true, "rebaseMergeAllowed": true, "autoMergeAllowed": true, "viewerPermission": "WRITE"]
+        }
+        return try decode(payload)
     }
 
     func activity(_ address: PullRequestAddress, after: String?) async throws -> PRConnection<PRActivity> {
@@ -758,7 +1202,7 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
     func threads(_ address: PullRequestAddress, after: String?) async throws -> PRConnection<PRThread> {
         let nodes: [[String: Any]] = (0..<threadCount).map { index in
             ["id": "thread-\(index + 1)", "path": "Sources/Audio/CallAudioSession.swift", "line": 586 + index, "isResolved": false, "isOutdated": false, "viewerCanReply": true, "viewerCanResolve": true, "viewerCanUnresolve": false,
-             "comments": ["nodes": [Self.comment(index * 3, body: "Why is this changing?", reviewID: "event-1"), Self.comment(index * 3 + 1, body: "The final transport must be ready before capture starts.")], "pageInfo": ["hasNextPage": true, "endCursor": "reply-page-2"]]]
+             "comments": ["nodes": [Self.comment(index * 3, body: threadBody, reviewID: "event-1"), Self.comment(index * 3 + 1, body: "The final transport must be ready before capture starts.")], "pageInfo": ["hasNextPage": true, "endCursor": "reply-page-2"]]]
         }
         return try Self.decode(["nodes": nodes, "pageInfo": ["hasNextPage": false]])
     }
@@ -787,6 +1231,35 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
         return try Self.decode(["id": subjectID, "viewerCanReact": true, "reactionGroups": [["content": content.rawValue, "viewerHasReacted": added, "reactors": ["totalCount": added ? 3 : 2]]]])
     }
 
+    func setDescriptionTask(_ address: PullRequestAddress, offset: Int, checked: Bool, expectedBody: String) async throws -> PRDescriptionUpdate {
+        await descriptionRecorder?.record(offset: offset, checked: checked, body: expectedBody)
+        try await Task.sleep(for: .milliseconds(100))
+        if failDescription { throw GitHubAPIClientError.invalidResponse(message: "Could not update description") }
+        let prefix = longDescription ? String(repeating: "<p>A paragraph in the long PR description.</p>", count: 150) : ""
+        return try Self.decode(["id": "PR-42", "body": (expectedBody as NSString).replacingCharacters(in: NSRange(location: offset, length: 1), with: checked ? "x" : " "), "bodyHTML": prefix + "<h2>Checklist</h2><ul><li class='task-list-item'><input type='checkbox' \(checked ? "checked" : "") disabled> Ship <strong>safely</strong></li><li class='task-list-item'><input type='checkbox' checked disabled> Keep <code>code</code> and 👩‍💻</li></ul>"])
+    }
+
+    func updateText(_ address: PullRequestAddress, title: String, body: String, expectedTitle: String, expectedBody: String) async throws -> PRTextUpdate {
+        await editRecorder?.record(title: title, body: body, expectedTitle: expectedTitle, expectedBody: expectedBody)
+        try await Task.sleep(for: .milliseconds(100))
+        if failTextUpdate { throw GitHubAPIClientError.invalidResponse(message: "Could not update PR text") }
+        return try Self.decode(["id": "PR-42", "title": title, "body": body, "bodyHTML": "<p>Saved description from GitHub</p>"])
+    }
+
+    func reviewers(_ address: PullRequestAddress, query: String, after: String?) async throws -> PRConnection<PRReviewer> {
+        await editRecorder?.record(query: query)
+        if failReviewerSearch { throw GitHubAPIClientError.invalidResponse(message: "Could not search reviewers") }
+        let users: [[String: Any]] = after != nil ? [["id": "U2", "login": "sam", "name": "Sam"]] : [["id": "U1", "login": "morgan", "name": "Morgan", "avatarUrl": "https://avatars.githubusercontent.com/u/583231?s=56"], ["id": "AUTHOR", "login": "alex"]]
+        return try Self.decode(["nodes": query.isEmpty ? users : users.filter { ($0["login"] as? String)?.contains(query) == true }, "pageInfo": ["hasNextPage": after == nil, "endCursor": "users-page-2"]])
+    }
+
+    func requestReviewers(_ address: PullRequestAddress, userIDs: [String]) async throws -> PRReviewersUpdate {
+        await editRecorder?.record(userIDs: userIDs)
+        try await Task.sleep(for: .milliseconds(100))
+        if failReviewRequest { throw GitHubAPIClientError.invalidResponse(message: "Could not request review") }
+        return try Self.decode(["id": "PR-42", "reviewRequests": ["nodes": [["id": "RR1", "requestedReviewer": ["id": "U1", "login": "morgan", "avatarUrl": "https://avatars.githubusercontent.com/u/583231?s=56"]]], "pageInfo": ["hasNextPage": false]]])
+    }
+
     private static func comment(_ index: Int, body: String, reviewID: String? = nil) -> [String: Any] {
         var result: [String: Any] = ["id": "reply-\(index)", "body": body, "bodyHTML": "<p>\(body)</p>", "url": "https://github.com/orbit/nova/pull/42#discussion_r\(index)", "createdAt": "2026-10-08T02:00:00Z", "author": ["login": "morgan", "url": "https://github.com/morgan", "avatarUrl": "https://avatars.githubusercontent.com/u/583231?s=56"]]
         if let reviewID { result["pullRequestReview"] = ["id": reviewID] }
@@ -794,7 +1267,7 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
         result["reactionGroups"] = [["content": "THUMBS_UP", "viewerHasReacted": false, "reactors": ["totalCount": 2]]]
         return result
     }
-    private static func decode<T: Decodable>(_ value: [String: Any]) throws -> T {
+    fileprivate static func decode<T: Decodable>(_ value: [String: Any]) throws -> T {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(T.self, from: JSONSerialization.data(withJSONObject: value))
@@ -806,7 +1279,39 @@ actor PRViewerReactionRecorder {
     func record(_ content: PRReactionContent) { contents.append(content) }
 }
 
+actor PRViewerDescriptionRecorder {
+    struct Write { let offset: Int; let checked: Bool; let body: String }
+    private(set) var writes: [Write] = []
+    func record(offset: Int, checked: Bool, body: String) { writes.append(Write(offset: offset, checked: checked, body: body)) }
+}
+
+actor PRViewerMergeRecorder {
+    private(set) var requests: [PRMergeRequest] = []
+    private(set) var result: PRMergeUpdate?
+    private var shouldFail = false
+    func failNext() { shouldFail = true }
+    func record(_ request: PRMergeRequest) throws -> PRMergeUpdate {
+        requests.append(request)
+        if shouldFail { shouldFail = false; throw GitHubAPIClientError.invalidResponse(message: "Required review changed") }
+        let automatic: Any = request.action == .enableAutoMerge ? ["mergeMethod": request.method.rawValue] : NSNull()
+        let update: PRMergeUpdate = try PRViewerFixtureService.decode(["id": "PR-42", "state": request.action == .merge ? "MERGED" : "OPEN", "autoMergeRequest": automatic])
+        result = update
+        return update
+    }
+}
+
+actor PRViewerEditRecorder {
+    struct TextWrite { let title: String; let body: String; let expectedTitle: String; let expectedBody: String }
+    private(set) var texts: [TextWrite] = []
+    private(set) var queries: [String] = []
+    private(set) var reviewers: [[String]] = []
+    func record(title: String, body: String, expectedTitle: String, expectedBody: String) { texts.append(TextWrite(title: title, body: body, expectedTitle: expectedTitle, expectedBody: expectedBody)) }
+    func record(query: String) { queries.append(query) }
+    func record(userIDs: [String]) { reviewers.append(userIDs) }
+}
+
 private actor DelayedPRViewerService: PullRequestDetailLoading {
+    func merge(_ address: PullRequestAddress, request: PRMergeRequest) async throws -> PRMergeUpdate { try await PRViewerFixtureService().merge(address, request: request) }
     private var pending: [CheckedContinuation<PRSummary, Never>] = []
     var waitingCount: Int { pending.count }
     func summary(_ address: PullRequestAddress, checksAfter: String?) async throws -> PRSummary {
@@ -820,4 +1325,8 @@ private actor DelayedPRViewerService: PullRequestDetailLoading {
     func reply(threadID: String, body: String) async throws -> PRComment { try await PRViewerFixtureService().reply(threadID: threadID, body: body) }
     func setResolved(threadID: String, resolved: Bool) async throws -> PRThreadResolution { try await PRViewerFixtureService().setResolved(threadID: threadID, resolved: resolved) }
     func setReaction(subjectID: String, content: PRReactionContent, added: Bool) async throws -> PRReactionSubject { try await PRViewerFixtureService().setReaction(subjectID: subjectID, content: content, added: added) }
+    func setDescriptionTask(_ address: PullRequestAddress, offset: Int, checked: Bool, expectedBody: String) async throws -> PRDescriptionUpdate { try await PRViewerFixtureService().setDescriptionTask(address, offset: offset, checked: checked, expectedBody: expectedBody) }
+    func updateText(_ address: PullRequestAddress, title: String, body: String, expectedTitle: String, expectedBody: String) async throws -> PRTextUpdate { try await PRViewerFixtureService().updateText(address, title: title, body: body, expectedTitle: expectedTitle, expectedBody: expectedBody) }
+    func reviewers(_ address: PullRequestAddress, query: String, after: String?) async throws -> PRConnection<PRReviewer> { try await PRViewerFixtureService().reviewers(address, query: query, after: after) }
+    func requestReviewers(_ address: PullRequestAddress, userIDs: [String]) async throws -> PRReviewersUpdate { try await PRViewerFixtureService().requestReviewers(address, userIDs: userIDs) }
 }

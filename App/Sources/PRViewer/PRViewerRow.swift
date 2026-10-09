@@ -27,23 +27,27 @@ struct PRViewerRow: Encodable, Sendable {
     var reactionGroups: [PRReactionGroup] = []
     var isReacting = false
     var defaultExpanded = false
+    var descriptionTasks: [PRDescriptionTask] = []
+    var canEditDescription = false
+    var isUpdatingDescription = false
 
     struct Header: Encodable, Sendable {
-        let status: String
-        let repository: String
-        let number: Int
         let head: String
         let base: String
-        let commitCount: Int?
     }
 
     static func prepare(address: PullRequestAddress, summary: PRSummary?, activity: [PRActivity], threads: [PRThread], loading: Set<String> = []) -> [Self] {
         var rows: [Self] = []
         if let summary {
-            let status = summary.state == "MERGED" ? "Merged" : summary.state == "CLOSED" ? "Closed" : summary.isDraft ? "Draft" : "Ready for review"
-            rows.append(Self(id: "summary", kind: "summary", title: summary.title, subtitle: "", time: "", body: summary.body, bodyHTML: summary.bodyHTML, url: address.url, author: summary.author, isSummary: true,
-                             header: Header(status: status, repository: address.repository.fullName, number: address.number, head: summary.headRefName, base: summary.baseRefName, commitCount: summary.commits.totalCount),
-                             threadID: nil, hasMoreReplies: false, canReply: false, canResolve: false, isResolved: false))
+            let relative = RelativeDateTimeFormatter()
+            relative.unitsStyle = .short
+            var row = Self(id: "summary", kind: "summary", title: summary.title, subtitle: "", time: relative.localizedString(for: summary.createdAt, relativeTo: Date()), body: summary.body, bodyHTML: summary.bodyHTML, url: address.url, author: summary.author, isSummary: true,
+                             header: Header(head: summary.headRefName, base: summary.baseRefName),
+                             threadID: nil, hasMoreReplies: false, canReply: false, canResolve: false, isResolved: false)
+            row.descriptionTasks = PRDescriptionTask.items(in: summary.body)
+            row.canEditDescription = summary.viewerCanUpdate == true && summary.id != nil && !loading.contains("Summary")
+        row.isUpdatingDescription = loading.contains("Description") || loading.contains("PR text") || loading.contains("Merge")
+            rows.append(row)
         }
         rows.append(Self(id: "activity-heading", kind: "heading", title: "Activity", subtitle: "", time: "", body: "", bodyHTML: nil, url: nil, author: nil, isSummary: true, header: nil, threadID: nil, hasMoreReplies: false, canReply: false, canResolve: false, isResolved: false))
         let relative = RelativeDateTimeFormatter()
