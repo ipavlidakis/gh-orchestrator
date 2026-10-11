@@ -45,12 +45,14 @@
 ## Task Board
 
 ### PV28: Publish the PR diff viewer release
-- status: `in_progress`
+- status: `done`
 - owner: `codex-main`
 - goal: Review and verify the completed PR viewer changes, commit and push them, then publish signed and notarized 0.5.9 (build 56).
 - verification: Open Code Review host-agent review covered all 22 selected files with no blocking findings; generated renderer and license rebuilds were byte-identical. Ten tool-excluded docs/test/license/lock files received supplementary checks. `git diff --check` and both Homebrew automation tests passed. Existing Tuist/build/launch verification and all 15 focused diff tests remain applicable.
 - verification: Final full Xcode suite passed 149/150 tests; comment-menu UI timing failed once and passed unchanged on an isolated rerun (4.649 s). Core suite passed 130/131; the unchanged ActionsWorkflowJobListService test assumes request ordering despite concurrent requests and passed unchanged with all three owner tests on rerun. These are retry passes, not clean full-suite passes. No live destructive GitHub comment tests were run.
-- verification: Release signing/notarization and published asset checks pending.
+- verification: Source committed/pushed at `46dcdf3c7186e424bf8672d819a505c644250960`; tag/latest stable [0.5.9](https://github.com/ipavlidakis/gh-orchestrator/releases/tag/0.5.9) points to that exact commit. Universal macOS 15+ build 56 includes the diff resources and Hardened Runtime. Apple accepted notarization `8b4f8da7-cc0c-4cdf-8d52-8f082a272e85`; DMG stapling and validation passed. The public download matches local/upload SHA-256 `7337dd83f401da6e5a88c7003af1eb07c50bad117546cd12c9c01d2826064202`; its mounted app passed strict signature and Gatekeeper checks as Notarized Developer ID.
+- verification: [Homebrew workflow 38174906734](https://github.com/ipavlidakis/gh-orchestrator/actions/runs/38174906734) passed, updating the same-repository cask to 0.5.9 and the verified digest in `bf98834`. Local main fast-forwarded the cask update. Installed app was not upgraded. Existing archive metadata/category warnings and local-DMG Insufficient Context remain; public app acceptance was verified separately.
+- notes: Follow up on the intermittent native menu test and the pre-existing Actions request-order assertion; neither was modified to obtain the retry passes.
 - notes: User explicitly requested commit, push and a new release on 2026-10-11.
 
 ### PV27: Preload files and preserve navigation across delayed pages
