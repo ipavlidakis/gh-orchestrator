@@ -1,6 +1,6 @@
 # GHOrchestrator
 
-GHOrchestrator is a Tuist-managed macOS 15+ menu-bar app for tracking your open GitHub pull requests in a curated set of repositories.
+GHOrchestrator is a Tuist-managed macOS 15+ menu-bar app for tracking GitHub pull requests and reviewing conversations and code diffs in a native window.
 
 [Product website](https://ipavlidakis.github.io/gh-orchestrator/) · [Website preview and publishing instructions](docs/README.md)
 
@@ -15,8 +15,9 @@ brew tap ipavlidakis/gh-orchestrator https://github.com/ipavlidakis/gh-orchestra
 brew install --cask ipavlidakis/gh-orchestrator/gh-orchestrator
 ```
 
-Launch GHOrchestrator from Applications, open Settings, add your repositories,
-and sign in with GitHub.
+Launch GHOrchestrator from Applications and sign in with GitHub. Your authored and
+review-requested PRs appear automatically. Choose **In App** as the pull request
+destination in General Settings to use the native viewer.
 
 To update through Homebrew:
 
@@ -48,6 +49,16 @@ Uninstalling preserves your settings and GitHub session in Keychain.
 - Re-run failed GitHub Actions jobs directly from the dashboard when GitHub exposes rerun permissions.
 - Keep the last successful dashboard snapshot visible when a refresh fails, with an inline stale-data warning banner.
 
+### Native pull request viewer
+
+- Switch between Conversation and Files changed in one native macOS window.
+- Read descriptions, reviews and checks; reply to threads and jump from a comment to its code.
+- Browse a folder tree, search file names and filter by extension.
+- Review unified or split code diffs, with line wrapping and collapsible file sections.
+- Add comments to a line or range; delete your own comments from either view.
+- Sync viewed files with GitHub and keep the file tree in step as you scroll.
+- Load paginated files in the background when the window opens, with virtualized diff rendering.
+
 ### GitHub auth and data access
 
 - GitHub OAuth device flow login for source builds and distributed builds.
@@ -71,6 +82,14 @@ Uninstalling preserves your settings and GitHub session in Keychain.
 Rendered from the current app views with demo data and the flat Settings appearance
 used on macOS 15 or when Reduce Transparency is enabled. macOS 26 and later also
 support Liquid Glass in Settings.
+
+### Conversation
+
+![Native pull request conversation with description, reviews, checks and merge status](docs/screenshots/pr-viewer-conversation.png)
+
+### Files changed
+
+![Native file tree and Swift diff with inline comments and GitHub-synchronized viewed state](docs/screenshots/pr-viewer-files.png)
 
 <table>
   <tr>

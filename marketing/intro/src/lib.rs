@@ -12,7 +12,7 @@ const FONT: &str = "DM Sans";
 const WHITE: &str = "#F8F6FF";
 const LILAC: &str = "#BDA8FF";
 const MUTED: &str = "#ADA4C3";
-const TOTAL_SECONDS: f32 = 25.0;
+const TOTAL_SECONDS: f32 = 34.0;
 static EASE: LazyLock<AnimationRuntime> = LazyLock::new(||
     AnimationRuntime::new(0.65, &Easing::CubicBezier(0.16, 1.0, 0.3, 1.0)));
 static EXIT: LazyLock<AnimationRuntime> = LazyLock::new(||
@@ -22,6 +22,7 @@ static EXIT: LazyLock<AnimationRuntime> = LazyLock::new(||
 pub struct GhoIntroVideo<'a> {
     hook: HookScene,
     features: [FeatureScene; 5],
+    viewer: [ViewerScene; 2],
     outro: OutroScene<'a>,
 }
 impl<'a> GhoIntroVideo<'a> {
@@ -45,6 +46,12 @@ impl<'a> GhoIntroVideo<'a> {
                     body: "Search repos. Save your alert rules.", image: "settings-notifications.png",
                     width: 740.0, height: 750.8, pan_from: 0.0, pan_to: 0.0, seconds: 5.0 },
             ],
+            viewer: [
+                ViewerScene { title: "The whole conversation. In one window.",
+                    body: "Description, reviews, checks and merge status.", image: "pr-viewer-conversation.png", seconds: 4.0 },
+                ViewerScene { title: "From the conversation to the code.",
+                    body: "Browse diffs. Comment on lines. Keep viewed files in sync with GitHub.", image: "pr-viewer-files.png", seconds: 5.0 },
+            ],
             outro: OutroScene { title },
         }
     }
@@ -58,7 +65,7 @@ impl Video for GhoIntroVideo<'_> {
     fn audio(&self) -> AudioMap<'_> { AudioMap::none() }
     fn define_scenes(&self) -> Scenes<'_> {
         Scenes::from(vec![&self.hook as &dyn Scene, &self.features[0], &self.features[1],
-            &self.features[2], &self.features[3], &self.features[4], &self.outro])
+            &self.viewer[0], &self.viewer[1], &self.features[2], &self.features[3], &self.features[4], &self.outro])
     }
     fn render_frame<'a>(&'a self, frame: Frame, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
         let progress = (frame.seconds() / TOTAL_SECONDS * 1608.0).max(0.5);
@@ -173,6 +180,29 @@ impl Scene for FeatureScene {
                 <g clip-path={format!("url(#{clip})")}>{picture}</g>
                 <rect x={x} y={y} width={self.width} height={viewport} rx="26" fill="none" stroke="#C1B4D5" stroke-opacity="0.25" stroke-width="2" />
             </g>
+        </g>)
+    }
+}
+#[derive(Debug)]
+struct ViewerScene {
+    title: &'static str,
+    body: &'static str,
+    image: &'static str,
+    seconds: f32,
+}
+impl Scene for ViewerScene {
+    fn duration(&self) -> Duration<'_> { Duration::Seconds(self.seconds) }
+    fn overlap(&self) -> Overlap { Overlap::Previous(0.25) }
+    fn render_frame<'a>(&'a self, frame: Frame, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
+        let p = ramp(&frame, 0.08);
+        let duration = ctx.get_scene_info(self).map(|s| (s.end_frame - s.start_frame) as f32 / 30.0).unwrap_or(self.seconds);
+        let picture = ctx.get_image(self.image).map(|i| fframes::svgr!(
+            <image href={i.href()} x="408" y="330" width="1104" height="696" />)).unwrap_or_default();
+        fframes::svgr!(<g opacity={visibility(&frame, duration)} transform={Transform::translate(0.0, 25.0 * (1.0 - p))}>
+            <text x="960" y="200" text-anchor="middle" font-size="60" letter-spacing="-2" fill={WHITE}>{self.title}</text>
+            <text x="960" y="264" text-anchor="middle" font-size="32" fill={LILAC}>{self.body}</text>
+            {picture}
+            <text x="156" y="990" font-size="18" letter-spacing="1" fill={MUTED}>"FICTIONAL DEMO DATA"</text>
         </g>)
     }
 }
