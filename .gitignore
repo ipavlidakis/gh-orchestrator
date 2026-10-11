@@ -77,5 +77,6 @@ Config/Release.local.json
 build/
 
 # macOS and local tooling
+script/pr-diff/node_modules/
 .DS_Store
 .codex/config.toml

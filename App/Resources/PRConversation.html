@@ -115,6 +115,7 @@ article.timeline { border: 0; border-radius: 0; background: transparent; padding
 .disclosure { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; z-index: 0; }
 .disclosure-title { position: relative; min-width: 0; flex: 1; pointer-events: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .disclosure-title a { pointer-events: auto; }
+    button.disclosure-title { pointer-events: auto; }
 .disclosure-header { position: relative; cursor: pointer; min-height: 40px; }
 .disclosure-header > a, .disclosure-header > .avatar { z-index: 1; }
 .disclosure-header > time, .chevron, .child-count { position: relative; pointer-events: none; }
@@ -214,11 +215,13 @@ button:disabled { cursor: default; opacity: .55; }
         return Math.min(low, Math.max(0, rows.length - 1));
     }
     function anchor() {
+        if (window.scrollY <= 0) return { top: true };
         const i = indexAt(window.scrollY + 12);
         return rows[i] ? { id: rows[i].id, delta: window.scrollY - offsets[i] } : null;
     }
     function restore(saved) {
-        if (saved && indices.has(saved.id)) window.scrollTo(0, Math.max(0, offsets[indices.get(saved.id)] + saved.delta));
+        if (saved?.top) window.scrollTo(0, 0);
+        else if (saved && indices.has(saved.id)) window.scrollTo(0, Math.max(0, offsets[indices.get(saved.id)] + saved.delta));
     }
     function schedule() {
         if (!frame) frame = requestAnimationFrame(function () { frame = 0; render(); });
@@ -298,6 +301,23 @@ button:disabled { cursor: default; opacity: .55; }
         external.innerHTML = '<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M9 2h5v5m0-5L7 9M7 3H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9"/></svg>';
         return external;
     }
+    function appendCommentActions(header, row) {
+        if (!row.canDelete) return;
+        const menu = button("…", "comment-actions", function () {
+            const rect = menu.getBoundingClientRect();
+            post({kind: "comment-menu", id: row.id, x: String(rect.left), y: String(rect.bottom)});
+        });
+        menu.style.cssText = 'position:relative;z-index:1;min-width:28px;min-height:28px;color:inherit';
+        menu.setAttribute("aria-label", "Comment actions"); menu.setAttribute("aria-haspopup", "menu");
+        menu.disabled = row.isDeleting;
+        header.append(menu);
+    }
+    function appendDeletionState(container, row) {
+        if (row.isDeleting || row.deletionError) {
+            const status = element("p", "enrichment-note", row.isDeleting ? "Deleting comment…" : row.deletionError);
+            status.setAttribute("role", "status"); container.append(status);
+        }
+    }
     function makeRow(row) {
         if (row.kind === "thread" || row.kind === "reply") return makeThreadComment(row);
         const compact = row.kind === "commit" || row.kind === "event";
@@ -345,6 +365,7 @@ button:disabled { cursor: default; opacity: .55; }
             header.append(element("time", "comment-time", row.time));
         }
         if (row.url && !compact && !row.isSummary) header.append(externalLink(row));
+        appendCommentActions(header, row);
         container.append(header);
         if (row.header) {
             const metadata = element("div", "pr-subtitle"), info = row.header;
@@ -372,6 +393,7 @@ button:disabled { cursor: default; opacity: .55; }
             actions.append(edit); container.append(actions);
         }
         if (!body.hidden && !row.isSummary && row.kind !== "review") appendReactions(container, row);
+        appendDeletionState(container, row);
         if (body.querySelector("math-renderer,.js-render-needs-enrichment")) container.append(element("p", "enrichment-note", "Math and diagrams can be viewed on GitHub."));
         if (container !== node) node.append(container);
         return node;
@@ -449,7 +471,8 @@ button:disabled { cursor: default; opacity: .55; }
             const header = element("header", "disclosure-header");
             const disclosure = button("", "disclosure", () => toggle(row.id));
             disclosure.setAttribute("aria-expanded", String(open)); disclosure.setAttribute("aria-label", row.title + " " + row.subtitle); disclosure.setAttribute("aria-controls", "content-" + row.id);
-            const title = element("div", "disclosure-title", row.filePath); title.title = row.filePath;
+            const title = button(row.filePath, "disclosure-title", () => post({kind: "diff-thread", id: row.threadID})); title.title = "Open this thread in Files changed";
+            title.style.cssText = 'position:relative;z-index:1;text-align:left;font:inherit;color:inherit;background:none;border:0;padding:0';
             header.append(disclosure, element("span", "chevron"), title, element("span", "thread-state", row.badgeResolved ? (row.isResolved ? "Resolved" : "Outdated") : "Open"));
             if (row.childCount) header.append(element("span", "child-count", row.childCount + (row.childCount === 1 ? " reply" : " replies")));
             container.append(header);
@@ -457,9 +480,10 @@ button:disabled { cursor: default; opacity: .55; }
         const body = element("div", "markdown-body"); body.id = "content-" + row.id; body.hidden = !open;
         if (open) {
             const author = element("div", "comment-author");
-            const date = link(row.time, row.url, "comment-date"); date.dataset.external = "true";
+            const date = link(row.time, row.url, "comment-date"); date.dataset.threadId = row.threadID;
             author.append(avatar(row), link(row.title, row.author && row.author.url, "author"), date);
             if (row.url) author.append(externalLink(row));
+            appendCommentActions(author, row);
             container.append(author);
             if (row.bodyHTML != null) body.append(sanitize(row.bodyHTML)); else if (row.body) body.append(element("pre", "raw-markdown", row.body));
         }
@@ -467,6 +491,7 @@ button:disabled { cursor: default; opacity: .55; }
         if (open) {
             if (body.querySelector("math-renderer,.js-render-needs-enrichment")) container.append(element("p", "enrichment-note", "Math and diagrams can be viewed on GitHub."));
             appendReactions(container, row);
+            appendDeletionState(container, row);
             if (row.isThreadEnd) {
                 const footer = element("footer", "thread-actions");
                 if (row.hasMoreReplies) footer.append(button("Load more replies", "", () => post({kind: "replies", id: row.threadID})));
@@ -537,8 +562,8 @@ button:disabled { cursor: default; opacity: .55; }
             depths = new Map();
             for (const row of allRows) depths.set(row.id, row.parentID ? (depths.get(row.parentID) || 0) + 1 : 0);
             const changed = new Set(allRows.filter(row => !same(previous.get(row.id), row) || previousDepths.get(row.id) !== depths.get(row.id)).map(row => row.id));
-            // Keep the document height until the replacement summary is measured, so scroll restoration cannot clamp it.
-            for (const id of heights.keys()) if (!byID.has(id) || (changed.has(id) && id !== "summary")) heights.delete(id);
+            // Keep measured heights until replacement rows are measured, so restoration cannot clamp the scroll position.
+            for (const id of heights.keys()) if (!byID.has(id)) heights.delete(id);
             for (const id of pendingHeights.keys()) if (!byID.has(id) || changed.has(id)) pendingHeights.delete(id);
             for (const id of expanded) if (!byID.has(id)) expanded.delete(id);
             for (const [id, node] of mounted) if (!byID.has(id) || changed.has(id)) {
@@ -612,6 +637,7 @@ button:disabled { cursor: default; opacity: .55; }
         const link = event.target.closest("a");
         if (!link) return;
         event.preventDefault();
+        if (link.dataset.threadId) { post({kind: "diff-thread", id: link.dataset.threadId}); return; }
         const raw = link.getAttribute("href") || "";
         if (raw.startsWith("#")) {
             let id;

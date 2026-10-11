@@ -7,6 +7,7 @@ public protocol PullRequestDetailLoading: Sendable {
     func replies(threadID: String, after: String?) async throws -> PRConnection<PRComment>
     func addComment(pullRequestID: String, body: String) async throws -> PRComment
     func reply(threadID: String, body: String) async throws -> PRComment
+    func deleteComment(commentID: String) async throws
     func setResolved(threadID: String, resolved: Bool) async throws -> PRThreadResolution
     func setReaction(subjectID: String, content: PRReactionContent, added: Bool) async throws -> PRReactionSubject
     func setDescriptionTask(_ address: PullRequestAddress, offset: Int, checked: Bool, expectedBody: String) async throws -> PRDescriptionUpdate
@@ -16,9 +17,70 @@ public protocol PullRequestDetailLoading: Sendable {
     func merge(_ address: PullRequestAddress, request: PRMergeRequest) async throws -> PRMergeUpdate
 }
 
-public struct PullRequestDetailService: PullRequestDetailLoading {
+public struct PullRequestDetailService: PullRequestDetailLoading, PullRequestDiffLoading {
     private let client: any GitHubAPIClient
     public init(client: any GitHubAPIClient) { self.client = client }
+
+    public func diffSnapshot(_ address: PullRequestAddress, after: String? = nil) async throws -> PRDiffSnapshot {
+        let result: PRDiffSnapshot = try await pullRequest(address, after: after, fields: """
+        id baseRefOid headRefOid changedFiles
+        files(first: 100, after: $after) {
+          pageInfo { hasNextPage endCursor }
+          nodes { path additions deletions changeType viewerViewedState }
+        }
+        """)
+        _ = try result.files.pageInfo.nextCursor(after: after)
+        return result
+    }
+
+    public func addLineComment(_ address: PullRequestAddress, selection: PRDiffLineSelection, body: String, expected: PRDiffRevision) async throws -> PRComment {
+        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw GitHubAPIClientError.invalidResponse(message: "Write a comment before posting.") }
+        let current = try await diffRevision(address)
+        guard current == expected else { throw GitHubAPIClientError.invalidResponse(message: "This PR changed on GitHub. Refresh the diff before posting a line comment.") }
+        try Task.checkCancellation()
+        struct Thread: Encodable { let path: String; let line: Int; let side: PRDiffLineSelection.Side; let startLine: Int?; let startSide: PRDiffLineSelection.Side?; let body: String }
+        struct Input: Encodable { let pullRequestId: String; let commitOID: String; let event: String; let threads: [Thread] }
+        struct Variables: Encodable { let input: Input }
+        struct Result: Decodable { let addPullRequestReview: Payload? }
+        struct Payload: Decodable { let pullRequestReview: Review? }
+        struct Review: Decodable { let state: String; let comments: Comments }
+        struct Comments: Decodable { let nodes: [PRComment] }
+        let thread = Thread(path: selection.path, line: selection.end, side: selection.endSide, startLine: selection.isRange ? selection.start : nil, startSide: selection.isRange ? selection.startSide : nil, body: body)
+        let result: Result = try await client.graphQL(query: """
+        mutation PRDiffComment($input: AddPullRequestReviewInput!) {
+          addPullRequestReview(input: $input) { pullRequestReview { state comments(first: 1) { nodes { \(Self.reviewCommentFields) } } } }
+        }
+        """, variables: Variables(input: Input(pullRequestId: expected.id, commitOID: expected.headRefOid, event: "COMMENT", threads: [thread])))
+        guard let review = result.addPullRequestReview?.pullRequestReview, review.state == "COMMENTED", let comment = review.comments.nodes.first else { throw missingMutation() }
+        return comment
+    }
+
+    public func diffPatches(_ address: PullRequestAddress, page: Int) async throws -> [PRDiffPatch] {
+        guard (1...30).contains(page) else { throw GitHubAPIClientError.invalidResponse(message: "GitHub limits PR file diffs to 3,000 files.") }
+        return try await client.get("/repos/\(address.repository.fullName)/pulls/\(address.number)/files?per_page=\(PRDiffPatch.pageSize)&page=\(page)")
+    }
+
+    public func diffRevision(_ address: PullRequestAddress) async throws -> PRDiffRevision {
+        try await pullRequest(address, after: nil, fields: "id baseRefOid headRefOid")
+    }
+
+    public func setFileViewed(_ address: PullRequestAddress, path: String, viewed: Bool, expected: PRDiffRevision) async throws {
+        let current = try await diffRevision(address)
+        guard current == expected else { throw GitHubAPIClientError.invalidResponse(message: "This PR changed on GitHub. Refresh files before marking them viewed.") }
+        try Task.checkCancellation()
+        struct Input: Encodable { let pullRequestId: String; let path: String }
+        struct Variables: Encodable { let input: Input }
+        struct Result: Decodable { let action: Payload? }
+        struct Payload: Decodable { let pullRequest: PRDiffRevision? }
+        let mutation = viewed ? "markFileAsViewed" : "unmarkFileAsViewed"
+        let inputType = viewed ? "MarkFileAsViewedInput" : "UnmarkFileAsViewedInput"
+        let result: Result = try await client.graphQL(query: """
+        mutation PRFileViewed($input: \(inputType)!) {
+          action: \(mutation)(input: $input) { pullRequest { id baseRefOid headRefOid } }
+        }
+        """, variables: Variables(input: Input(pullRequestId: expected.id, path: path)))
+        guard result.action?.pullRequest == expected else { throw missingMutation() }
+    }
 
     public func summary(_ address: PullRequestAddress, checksAfter: String? = nil) async throws -> PRSummary {
         let result: PRSummary = try await pullRequest(address, after: checksAfter, fields: """
@@ -48,7 +110,7 @@ public struct PullRequestDetailService: PullRequestDetailLoading {
           pageInfo { hasNextPage endCursor }
           nodes {
             __typename
-            ... on IssueComment { \(Self.commentFields) }
+          ... on IssueComment { \(Self.deletableCommentFields) }
             ... on PullRequestReview { \(Self.commentFields) submittedAt state comments { totalCount } }
             ... on PullRequestCommit { commit { oid messageHeadline committedDate url author { name avatarUrl(size: 56) user { login avatarUrl(size: 56) url } } } }
             ... on MergedEvent { id createdAt actor { login avatarUrl(size: 56) url } }
@@ -67,7 +129,7 @@ public struct PullRequestDetailService: PullRequestDetailLoading {
         let result: ThreadsResult = try await pullRequest(address, after: after, fields: """
         reviewThreads(first: 25, after: $after) {
           pageInfo { hasNextPage endCursor }
-          nodes { id path line isResolved isOutdated viewerCanReply viewerCanResolve viewerCanUnresolve comments(first: 20) {
+          nodes { id path line diffSide startLine startDiffSide originalLine isResolved isOutdated viewerCanReply viewerCanResolve viewerCanUnresolve comments(first: 20) {
             pageInfo { hasNextPage endCursor }
             nodes { \(Self.reviewCommentFields) }
           } }
@@ -105,7 +167,7 @@ public struct PullRequestDetailService: PullRequestDetailLoading {
         let result: Result = try await client.graphQL(query: """
         mutation PRComment($id: ID!, $body: String!) {
           addComment(input: {subjectId: $id, body: $body}) {
-            commentEdge { node { \(Self.commentFields) } }
+            commentEdge { node { \(Self.deletableCommentFields) } }
           }
         }
         """, variables: Variables(id: pullRequestID, body: body))
@@ -126,6 +188,47 @@ public struct PullRequestDetailService: PullRequestDetailLoading {
         """, variables: Variables(id: threadID, body: body))
         guard let comment = result.addPullRequestReviewThreadReply?.comment else { throw missingMutation() }
         return comment
+    }
+
+    public func deleteComment(commentID: String) async throws {
+        struct PermissionVariables: Encodable { let id: String }
+        struct PermissionResult: Decodable { let node: Comment? }
+        struct Comment: Decodable {
+            let id: String
+            let __typename: String
+            let viewerDidAuthor: Bool?
+            let viewerCanDelete: Bool?
+        }
+        let permission: PermissionResult = try await client.graphQL(query: """
+        query PRDeleteCommentPermission($id: ID!) {
+          node(id: $id) {
+            id __typename
+            ... on IssueComment { viewerDidAuthor viewerCanDelete }
+            ... on PullRequestReviewComment { viewerDidAuthor viewerCanDelete }
+          }
+        }
+        """, variables: PermissionVariables(id: commentID))
+        guard let comment = permission.node, comment.id == commentID,
+              comment.viewerDidAuthor == true, comment.viewerCanDelete == true else {
+            throw GitHubAPIClientError.invalidResponse(message: "You can only delete your own comments when GitHub permits it. Refresh the conversation and try again.")
+        }
+        let mutation: String
+        switch comment.__typename {
+        case "IssueComment": mutation = "deleteIssueComment"
+        case "PullRequestReviewComment": mutation = "deletePullRequestReviewComment"
+        default: throw GitHubAPIClientError.invalidResponse(message: "This item is not a deletable comment.")
+        }
+        try Task.checkCancellation()
+        struct Variables: Encodable { let id: String; let token: String }
+        struct Result: Decodable { let action: Payload? }
+        struct Payload: Decodable { let clientMutationId: String? }
+        let token = UUID().uuidString
+        let result: Result = try await client.graphQL(query: """
+        mutation PRDeleteComment($id: ID!, $token: String!) {
+          action: \(mutation)(input: {id: $id, clientMutationId: $token}) { clientMutationId }
+        }
+        """, variables: Variables(id: commentID, token: token))
+        guard result.action?.clientMutationId == token else { throw missingMutation() }
     }
 
     public func setResolved(threadID: String, resolved: Bool) async throws -> PRThreadResolution {
@@ -307,14 +410,16 @@ public struct PullRequestDetailService: PullRequestDetailLoading {
 
     private static let reactionFields = "viewerCanReact reactionGroups { content viewerHasReacted reactors { totalCount } }"
     private static let commentFields = "id body bodyHTML url createdAt author { login avatarUrl(size: 56) url } \(reactionFields)"
-    private static let reviewCommentFields = "\(commentFields) pullRequestReview { id }"
+    private static let deletableCommentFields = "\(commentFields) viewerDidAuthor viewerCanDelete"
+    private static let reviewCommentFields = "\(deletableCommentFields) pullRequestReview { id }"
     private func missingMutation() -> GitHubAPIClientError {
         .invalidResponse(message: "GitHub did not confirm this action. Refresh the conversation before trying again.")
     }
 
     private func pullRequest<T: Decodable>(_ address: PullRequestAddress, after: String?, fields: String) async throws -> T {
+        let cursorDeclaration = fields.contains("$after") ? ", $after: String" : ""
         let result: RepositoryResult<T> = try await client.graphQL(query: """
-        query PRViewer($owner: String!, $name: String!, $number: Int!, $after: String) {
+        query PRViewer($owner: String!, $name: String!, $number: Int!\(cursorDeclaration)) {
           repository(owner: $owner, name: $name) { pullRequest(number: $number) { \(fields) } }
         }
         """, variables: Variables(owner: address.repository.owner, name: address.repository.name, number: address.number, after: after))

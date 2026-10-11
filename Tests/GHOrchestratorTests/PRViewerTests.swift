@@ -8,6 +8,79 @@ import XCTest
 
 @MainActor
 final class PRViewerTests: XCTestCase {
+    func testCommentDeletionPreservesFailuresAndRemovesConfirmedCommentsFromBothViews() async throws {
+        let recorder = PRViewerDeletionRecorder()
+        let model = makeModel(service: PRViewerFixtureService(deletionRecorder: recorder))
+        model.refresh()
+        try await wait { model.rows.contains { $0.id == "reply-0" } && model.activity.count > 0 }
+        for id in ["event-1", "reply-1", "missing"] {
+            model.requestCommentDeletion(id)
+            XCTAssertFalse(model.deleteConfirmationPresented, "Only the current user's deletable comments may show confirmation")
+        }
+        model.requestCommentDeletion("reply-0")
+        XCTAssertTrue(model.deleteConfirmationPresented)
+        model.cancelCommentDeletion()
+        let cancelledRequests = await recorder.requests
+        XCTAssertTrue(cancelledRequests.isEmpty)
+        await recorder.failNext()
+        model.requestCommentDeletion("reply-0")
+        model.deleteConfirmedComment()
+        model.requestCommentDeletion("reply-0")
+        model.deleteConfirmedComment()
+        XCTAssertTrue(model.isWriting)
+        XCTAssertTrue(model.threads.contains { $0.comments.nodes.contains { $0.id == "reply-0" } })
+        try await wait { model.errors["Delete:reply-0"] != nil && !model.isWriting }
+        try await wait { model.rows.first { $0.id == "reply-0" }?.deletionError != nil }
+        for id in ["reply-0", "event-0"] {
+            model.requestCommentDeletion(id)
+            model.deleteConfirmedComment()
+            try await wait { !model.isWriting && !model.rows.contains { $0.id == id } }
+            XCTAssertFalse(model.threads.contains { $0.comments.nodes.contains { $0.id == id } })
+            XCTAssertFalse(model.activity.contains { $0.id == id })
+        }
+        XCTAssertTrue(model.threads.contains { $0.comments.nodes.contains { $0.id == "reply-1" } }, "Deleting a starter must preserve other replies")
+        model.reloadThreads(); model.loadActivity()
+        try await wait { model.loading.isEmpty }
+        XCTAssertFalse(model.threads.contains { $0.comments.nodes.contains { $0.id == "reply-0" } }, "Stale page responses must not resurrect a deleted comment")
+        let requests = await recorder.requests
+        XCTAssertEqual(requests, ["reply-0", "reply-0", "event-0"])
+    }
+
+    func testDelayedSummaryKeepsConversationAtTopAndPreservesReadingPosition() async throws {
+        try await wait { NSRunningApplication.current.isFinishedLaunching }
+        let previousPolicy = NSApp.activationPolicy()
+        NSApp.setActivationPolicy(.regular)
+        defer { NSApp.setActivationPolicy(previousPolicy) }
+        let service = DelayedPRViewerService()
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/orbit/nova/pull/42")!))
+        let controller = PRViewerWindowController(address: address, service: service, openBrowser: { _ in }, onClose: {})
+        controller.present(url: address.url)
+        defer { controller.close(); Task { if await service.waitingCount > 0 { try? await service.completeFirst(title: "Cleanup") } } }
+        let model = controller.model, window = try XCTUnwrap(controller.window)
+        window.makeKeyAndOrderFront(nil); window.orderFrontRegardless(); NSApp.activate(ignoringOtherApps: true)
+        try await wait { window.isKeyWindow && NSApp.isActive }
+        try await wait { await service.waitingCount == 1 && !model.rows.isEmpty }
+        try await wait { self.descendant(WKWebView.self, in: window.contentView!) != nil }
+        let web = try XCTUnwrap(descendant(WKWebView.self, in: XCTUnwrap(window.contentView)))
+        try await wait { (try? await web.evaluateJavaScript("document.querySelector('[data-row-id=\"activity-heading\"]') !== null")) as? Bool == true }
+        try await service.completeFirst(title: "Delayed summary")
+        try await wait { (try? await web.evaluateJavaScript("document.querySelector('article.summary h1')?.textContent")) as? String == "Delayed summary" }
+        try await Task.sleep(for: .milliseconds(200))
+        let initialScroll = try await web.evaluateJavaScript("window.scrollY") as? Double
+        XCTAssertEqual(try XCTUnwrap(initialScroll), 0, accuracy: 1, "Inserting the summary above early activity must not move the viewer off the top")
+        model.focus(rowID: "reply-1")
+        try await wait { (try? await web.evaluateJavaScript("window.scrollY > 0 && document.querySelector('[data-row-id=\"reply-1\"]') !== null")) as? Bool == true }
+        try await Task.sleep(for: .milliseconds(200))
+        let before = try await web.evaluateJavaScript("document.querySelector('[data-row-id=\"reply-1\"]').getBoundingClientRect().top") as? Double
+        model.loadSummary()
+        try await wait { await service.waitingCount == 1 }
+        try await service.completeFirst(title: "Updated summary")
+        try await wait { model.summary?.title == "Updated summary" && model.loading.isEmpty }
+        try await Task.sleep(for: .milliseconds(200))
+        let after = try await web.evaluateJavaScript("document.querySelector('[data-row-id=\"reply-1\"]')?.getBoundingClientRect().top") as? Double
+        XCTAssertEqual(try XCTUnwrap(after), try XCTUnwrap(before), accuracy: 2, "Content updates must preserve the visible reading anchor even as measured heights replace estimates")
+    }
+
     func testNativeMergeConfirmationAndExplicitBypass() async throws {
         let recorder = PRViewerMergeRecorder()
         let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/orbit/nova/pull/42")!))
@@ -352,7 +425,7 @@ final class PRViewerTests: XCTestCase {
             ("CLOSED", "CONFLICTING", "Pull request closed"),
             ("MERGED", "CONFLICTING", "Pull request merged")
         ] {
-            let service = PRViewerFixtureService(eventCount: 0, threadCount: 0, mergeable: mergeable, state: state)
+            let service = PRViewerFixtureService(eventCount: 0, threadCount: 0, mergeable: mergeable, state: state, isDraft: false)
             var browserURLs: [URL] = []
             let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/orbit/nova/pull/42")!))
             let controller = PRViewerWindowController(address: address, service: service, openBrowser: { browserURLs.append($0) }, onClose: {})
@@ -363,6 +436,9 @@ final class PRViewerTests: XCTestCase {
             defer { controller.close() }
             try await wait { controller.model.summary != nil && controller.model.rows.count == 2 }
             window.contentView?.layoutSubtreeIfNeeded()
+            if mergeable == "CONFLICTING" {
+                XCTAssertNil(accessibilityButton("Squash and merge", in: window), "Conflicting PRs must hide the merge action")
+            }
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             try await Task.sleep(for: .milliseconds(200))
@@ -835,7 +911,7 @@ final class PRViewerTests: XCTestCase {
         try await wait("large review document ready") { (try? await web.evaluateJavaScript("window.prConversation !== undefined")) as? Bool == true }
         model.focus(rowID: "event-1")
         try await wait("large review header visible") { (try? await web.evaluateJavaScript("document.querySelector('article.review .disclosure') !== null")) as? Bool == true }
-        XCTAssertEqual(window.toolbar?.items.filter { $0.itemIdentifier != .flexibleSpace }.count, 4)
+        XCTAssertTrue(window.toolbar?.items.contains { $0.itemIdentifier.rawValue.contains("section") } == true, "Large conversations must retain section navigation in the toolbar")
         let initial = try await web.evaluateJavaScript("({open:document.querySelectorAll('article.card.expanded').length, children:document.querySelectorAll('article.thread').length, expanded:document.querySelector('article.review .disclosure').getAttribute('aria-expanded')})") as? [String: Any]
         XCTAssertGreaterThan(try XCTUnwrap(initial?["open"] as? Int), 0)
         XCTAssertGreaterThan(try XCTUnwrap(initial?["children"] as? Int), 0)
@@ -1112,6 +1188,15 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
     var isDraft = true
     var mergeBlocked: Bool? = nil
     var mergeRecorder: PRViewerMergeRecorder? = nil
+    var diffRecorder: PRDiffFixtureRecorder? = nil
+    var diffFileCount = 4
+    var diffFilePaths: [String]? = nil
+    var diffLinesPerFile = 0
+    var diffEmptyFiles = false
+    var diffReviewThreads = false
+    var diffThreadPath = "Sources/Video.SWIFT"
+    var pagedDiffs: PRDiffPagedFixtureService? = nil
+    var deletionRecorder: PRViewerDeletionRecorder? = nil
 
     func summary(_ address: PullRequestAddress, checksAfter: String?) async throws -> PRSummary {
         var result = try Self.makeSummary(title: title, completedChecksOnly: completedChecksOnly, mergeable: mergeable, state: state, descriptionTasks: descriptionTasks, canUpdateDescription: canUpdateDescription, headRefName: headRefName, isDraft: isDraft, mergeBlocked: mergeBlocked)
@@ -1182,6 +1267,8 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
             node["author"] = ["login": index % 4 == 0 ? "review-bot" : "morgan", "url": "https://github.com/morgan", "avatarUrl": "https://avatars.githubusercontent.com/u/583231?s=56"]
             node["state"] = "COMMENTED"
             node["viewerCanReact"] = true
+            node["viewerDidAuthor"] = index == 0
+            node["viewerCanDelete"] = true
             node["reactionGroups"] = [["content": "THUMBS_UP", "viewerHasReacted": false, "reactors": ["totalCount": 2]]]
             if index == 1 {
                 node["comments"] = ["totalCount": threadCount]
@@ -1200,6 +1287,15 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
     }
 
     func threads(_ address: PullRequestAddress, after: String?) async throws -> PRConnection<PRThread> {
+        if diffReviewThreads {
+            let nodes: [[String: Any]] = (0..<3).map { index in
+                ["id": "thread-\(index + 1)", "path": diffThreadPath, "line": index == 2 ? NSNull() : index == 1 ? 5_500 : 42,
+                 "diffSide": index == 1 ? "LEFT" : "RIGHT", "startLine": index == 0 ? 40 : NSNull(), "startDiffSide": "RIGHT", "originalLine": 600,
+                 "isResolved": index == 2, "isOutdated": index == 2, "viewerCanReply": true, "viewerCanResolve": index != 2, "viewerCanUnresolve": index == 2,
+                 "comments": ["nodes": [Self.comment(index * 3, body: index == 0 ? threadBody : "Inline thread \(index + 1)", reviewID: "event-1")], "pageInfo": ["hasNextPage": index == 0, "endCursor": "reply-page-2"]]]
+            }
+            return try Self.decode(["nodes": nodes, "pageInfo": ["hasNextPage": false]])
+        }
         let nodes: [[String: Any]] = (0..<threadCount).map { index in
             ["id": "thread-\(index + 1)", "path": "Sources/Audio/CallAudioSession.swift", "line": 586 + index, "isResolved": false, "isOutdated": false, "viewerCanReply": true, "viewerCanResolve": true, "viewerCanUnresolve": false,
              "comments": ["nodes": [Self.comment(index * 3, body: threadBody, reviewID: "event-1"), Self.comment(index * 3 + 1, body: "The final transport must be ready before capture starts.")], "pageInfo": ["hasNextPage": true, "endCursor": "reply-page-2"]]]
@@ -1219,6 +1315,9 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
         var result = Self.comment(98, body: body)
         if body == "Ready 👍🏽 👩‍💻 🇬🇷 👨‍👩‍👧‍👦 :rocket:" { result["bodyHTML"] = "<p dir=\"auto\">Ready 👍🏽 👩‍💻 🇬🇷 👨‍👩‍👧‍👦 🚀</p>" }
         return try Self.decode(result)
+    }
+    func deleteComment(commentID: String) async throws {
+        try await XCTUnwrap(deletionRecorder).delete(commentID)
     }
     func setResolved(threadID: String, resolved: Bool) async throws -> PRThreadResolution {
         try Self.decode(["id": threadID, "isResolved": resolved, "viewerCanResolve": !resolved, "viewerCanUnresolve": resolved])
@@ -1264,6 +1363,8 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
         var result: [String: Any] = ["id": "reply-\(index)", "body": body, "bodyHTML": "<p>\(body)</p>", "url": "https://github.com/orbit/nova/pull/42#discussion_r\(index)", "createdAt": "2026-10-08T02:00:00Z", "author": ["login": "morgan", "url": "https://github.com/morgan", "avatarUrl": "https://avatars.githubusercontent.com/u/583231?s=56"]]
         if let reviewID { result["pullRequestReview"] = ["id": reviewID] }
         result["viewerCanReact"] = index != 2
+        result["viewerDidAuthor"] = index == 0 || index == 2
+        result["viewerCanDelete"] = index != 6
         result["reactionGroups"] = [["content": "THUMBS_UP", "viewerHasReacted": false, "reactors": ["totalCount": 2]]]
         return result
     }
@@ -1277,6 +1378,17 @@ struct PRViewerFixtureService: PullRequestDetailLoading {
 actor PRViewerReactionRecorder {
     private(set) var contents: [PRReactionContent] = []
     func record(_ content: PRReactionContent) { contents.append(content) }
+}
+
+actor PRViewerDeletionRecorder {
+    private(set) var requests: [String] = []
+    private var fails = false
+    func failNext() { fails = true }
+    func delete(_ id: String) async throws {
+        requests.append(id)
+        try await Task.sleep(for: .milliseconds(200))
+        if fails { fails = false; throw GitHubAPIClientError.invalidResponse(message: "Could not delete comment") }
+    }
 }
 
 actor PRViewerDescriptionRecorder {
@@ -1323,6 +1435,7 @@ private actor DelayedPRViewerService: PullRequestDetailLoading {
     func replies(threadID: String, after: String?) async throws -> PRConnection<PRComment> { try await PRViewerFixtureService().replies(threadID: threadID, after: after) }
     func addComment(pullRequestID: String, body: String) async throws -> PRComment { try await PRViewerFixtureService().addComment(pullRequestID: pullRequestID, body: body) }
     func reply(threadID: String, body: String) async throws -> PRComment { try await PRViewerFixtureService().reply(threadID: threadID, body: body) }
+    func deleteComment(commentID: String) async throws { try await PRViewerFixtureService().deleteComment(commentID: commentID) }
     func setResolved(threadID: String, resolved: Bool) async throws -> PRThreadResolution { try await PRViewerFixtureService().setResolved(threadID: threadID, resolved: resolved) }
     func setReaction(subjectID: String, content: PRReactionContent, added: Bool) async throws -> PRReactionSubject { try await PRViewerFixtureService().setReaction(subjectID: subjectID, content: content, added: added) }
     func setDescriptionTask(_ address: PullRequestAddress, offset: Int, checked: Bool, expectedBody: String) async throws -> PRDescriptionUpdate { try await PRViewerFixtureService().setDescriptionTask(address, offset: offset, checked: checked, expectedBody: expectedBody) }

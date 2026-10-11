@@ -6,10 +6,13 @@ import Observation
 @Observable
 final class PRViewerModel {
     let address: PullRequestAddress
+    let diffs: PRDiffModel?
+    var showsDiffs = false
     private let service: any PullRequestDetailLoading
     private(set) var summary: PRSummary?
     private(set) var activity: [PRActivity] = []
-    private(set) var threads: [PRThread] = []
+    private(set) var threads: [PRThread] = [] { didSet { threadRevision += 1 } }
+    private(set) var threadRevision = 0
     private(set) var checks: [PRCheck] = []
     private(set) var rows: [PRViewerRow] = []
     private(set) var revision = 0
@@ -22,6 +25,9 @@ final class PRViewerModel {
     private(set) var focusRevision = 0
     private(set) var pendingCommentURL: URL?
     var composerPresented = false
+    var deleteConfirmationPresented = false
+    private(set) var pendingCommentDeletionID: String?
+    private var deletedCommentIDs: Set<String> = []
     var textEditorPresented = false
     var titleDraft = ""
     var descriptionDraft = ""
@@ -41,7 +47,7 @@ final class PRViewerModel {
         get { drafts[composerThreadID ?? "pull-request"] ?? "" }
         set { drafts[composerThreadID ?? "pull-request"] = newValue }
     }
-    var isWriting: Bool { loading.contains("Merge") || loading.contains("Description") || loading.contains("PR text") || loading.contains("Request review") || loading.contains("Comment") || loading.contains { $0.hasPrefix("Resolve:") || $0.hasPrefix("Reaction:") } }
+    var isWriting: Bool { diffs?.isWriting == true || loading.contains("Merge") || loading.contains("Description") || loading.contains("PR text") || loading.contains("Request review") || loading.contains("Comment") || loading.contains { $0.hasPrefix("Resolve:") || $0.hasPrefix("Reaction:") || $0.hasPrefix("Delete:") } }
     var canEditText: Bool { summary?.viewerCanUpdate == true && summary?.id != nil && !isWriting && !loading.contains("Summary") }
     var canSaveText: Bool {
         canEditText && !titleDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
@@ -68,10 +74,12 @@ final class PRViewerModel {
     init(address: PullRequestAddress, service: any PullRequestDetailLoading) {
         self.address = address
         self.service = service
+        diffs = (service as? any PullRequestDiffLoading).map { PRDiffModel(address: address, service: $0) }
     }
 
     func refresh() {
         guard !isWriting else { return }
+        let reloadDiffs = diffs?.started == true
         cancel()
         summary = nil
         activity = []
@@ -86,9 +94,12 @@ final class PRViewerModel {
         loadSummary()
         loadActivity()
         loadThreads()
+        if reloadDiffs { diffs?.refresh() }
     }
 
     func cancel() {
+        cancelCommentDeletion()
+        diffs?.cancel()
         generation = UUID()
         preparationID = UUID()
         tasks.values.forEach { $0.cancel() }
@@ -124,7 +135,7 @@ final class PRViewerModel {
             let next = try page.pageInfo.nextCursor()
             return { [self] in
                 let existing = Set(activity.map(\.id))
-                activity += page.nodes.filter { !existing.contains($0.id) }
+                activity += page.nodes.filter { !existing.contains($0.id) && !deletedCommentIDs.contains($0.id) }
                 activityCursor = next
             }
         }
@@ -137,10 +148,23 @@ final class PRViewerModel {
             let next = try page.pageInfo.nextCursor()
             return { [self] in
                 let existing = Set(threads.map(\.id))
-                threads += page.nodes.filter { !existing.contains($0.id) }
+                threads = cursor == nil ? page.nodes : threads + page.nodes.filter { !existing.contains($0.id) }
+                threads = threads.compactMap(withoutDeletedComments)
                 threadsCursor = next
             }
         }
+    }
+
+    func openDiffThread(_ id: String) {
+        guard let diffs, let thread = threads.first(where: { $0.id == id }) else { return }
+        diffs.openThread(thread)
+        showsDiffs = true
+    }
+
+    func reloadThreads() {
+        guard !loading.contains("Threads") else { return }
+        threadsCursor = nil
+        loadThreads()
     }
 
     func loadChecks() {
@@ -164,6 +188,7 @@ final class PRViewerModel {
             return { [self] in
                 guard let index = threads.firstIndex(where: { $0.id == threadID }) else { return }
                 threads[index].comments = PRConnection(nodes: threads[index].comments.nodes + page.nodes.filter { comment in !threads[index].comments.nodes.contains(where: { $0.id == comment.id }) }, pageInfo: page.pageInfo)
+                threads = threads.compactMap(withoutDeletedComments)
             }
         }
     }
@@ -200,6 +225,48 @@ final class PRViewerModel {
                 focus(url: comment.url)
             }
         }
+    }
+
+    func canDeleteComment(_ id: String) -> Bool {
+        activity.contains { $0.id == id && $0.canDelete } ||
+        threads.contains { $0.comments.nodes.contains { $0.id == id && $0.canDelete } }
+    }
+
+    func requestCommentDeletion(_ id: String) {
+        guard !isWriting, canDeleteComment(id) else { return }
+        pendingCommentDeletionID = id
+        deleteConfirmationPresented = true
+    }
+
+    func cancelCommentDeletion() {
+        deleteConfirmationPresented = false
+        pendingCommentDeletionID = nil
+    }
+
+    func deleteConfirmedComment() {
+        guard let id = pendingCommentDeletionID, !isWriting, canDeleteComment(id) else { cancelCommentDeletion(); return }
+        cancelCommentDeletion()
+        request("Delete:\(id)") { [self] in
+            try await service.deleteComment(commentID: id)
+            return { [self] in
+                let reviewID = threads.flatMap(\.comments.nodes).first { $0.id == id }?.pullRequestReview?.id
+                deletedCommentIDs.insert(id)
+                activity.removeAll { $0.id == id }
+                if let index = activity.firstIndex(where: { $0.id == reviewID }), let count = activity[index].reviewCommentCount {
+                    activity[index].reviewCommentCount = max(0, count - 1)
+                }
+                threads = threads.compactMap(withoutDeletedComments)
+                for thread in threads where thread.comments.nodes.isEmpty && thread.comments.pageInfo.hasNextPage { loadReplies(thread.id) }
+                diffs?.commentDeleted(id)
+            }
+        }
+        prepareRows()
+    }
+
+    private func withoutDeletedComments(_ thread: PRThread) -> PRThread? {
+        var thread = thread
+        thread.comments = PRConnection(nodes: thread.comments.nodes.filter { !deletedCommentIDs.contains($0.id) }, pageInfo: thread.comments.pageInfo)
+        return thread.comments.nodes.isEmpty && !thread.comments.pageInfo.hasNextPage ? nil : thread
     }
 
     func toggleResolved(_ threadID: String) {
@@ -393,12 +460,13 @@ final class PRViewerModel {
                 self.tasks[key] = nil
                 self.prepareRows()
                 if key == "Merge" { self.loadSummary() }
+                if key == "Threads", self.showsDiffs, self.threadsCursor != nil { self.loadThreads() }
             } catch {
                 guard let self, self.generation == token, !Task.isCancelled else { return }
                 self.errors[key] = error.localizedDescription
                 self.loading.remove(key)
                 self.tasks[key] = nil
-                if key.hasPrefix("Reaction:") || ["Description", "PR text", "Summary", "Merge"].contains(key) { self.prepareRows() }
+                if key.hasPrefix("Reaction:") || key.hasPrefix("Delete:") || ["Description", "PR text", "Summary", "Merge"].contains(key) { self.prepareRows() }
             }
         }
     }
@@ -407,9 +475,9 @@ final class PRViewerModel {
         preparation?.cancel()
         let token = UUID()
         preparationID = token
-        let summary = summary, activity = activity, threads = threads, address = address, loading = loading
+        let summary = summary, activity = activity, threads = threads, address = address, loading = loading, errors = errors
         let worker = Task.detached(priority: .userInitiated) {
-            PRViewerRow.prepare(address: address, summary: summary, activity: activity, threads: threads, loading: loading)
+            PRViewerRow.prepare(address: address, summary: summary, activity: activity, threads: threads, loading: loading, errors: errors)
         }
         preparation = Task { [weak self] in
             let prepared = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }

@@ -26,6 +26,9 @@ struct PRViewerRow: Encodable, Sendable {
     var canReact = false
     var reactionGroups: [PRReactionGroup] = []
     var isReacting = false
+    var canDelete = false
+    var isDeleting = false
+    var deletionError: String? = nil
     var defaultExpanded = false
     var descriptionTasks: [PRDescriptionTask] = []
     var canEditDescription = false
@@ -36,7 +39,7 @@ struct PRViewerRow: Encodable, Sendable {
         let base: String
     }
 
-    static func prepare(address: PullRequestAddress, summary: PRSummary?, activity: [PRActivity], threads: [PRThread], loading: Set<String> = []) -> [Self] {
+    static func prepare(address: PullRequestAddress, summary: PRSummary?, activity: [PRActivity], threads: [PRThread], loading: Set<String> = [], errors: [String: String] = [:]) -> [Self] {
         var rows: [Self] = []
         if let summary {
             let relative = RelativeDateTimeFormatter()
@@ -75,6 +78,9 @@ struct PRViewerRow: Encodable, Sendable {
                 row.canReact = comment.viewerCanReact == true
                 row.reactionGroups = comment.reactionGroups ?? []
                 row.isReacting = loading.contains("Reaction:\(comment.id)")
+                row.canDelete = comment.canDelete
+                row.isDeleting = loading.contains("Delete:\(comment.id)")
+                row.deletionError = errors["Delete:\(comment.id)"]
                 return row
             }
         }
@@ -96,6 +102,9 @@ struct PRViewerRow: Encodable, Sendable {
             row.canReact = item.viewerCanReact == true
             row.reactionGroups = item.reactionGroups ?? []
             row.isReacting = loading.contains("Reaction:\(item.id)")
+            row.canDelete = item.canDelete
+            row.isDeleting = loading.contains("Delete:\(item.id)")
+            row.deletionError = errors["Delete:\(item.id)"]
             let children = (groups[item.id] ?? []).sorted {
                 let left = $0.comments.nodes.first!.createdAt, right = $1.comments.nodes.first!.createdAt
                 return left == right ? $0.id < $1.id : left < right

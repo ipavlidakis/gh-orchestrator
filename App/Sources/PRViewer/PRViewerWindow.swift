@@ -3,15 +3,13 @@ import GHOrchestratorCore
 import SwiftUI
 
 @MainActor
-final class PRViewerWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSToolbarItemValidation {
+final class PRViewerWindowController: NSWindowController, NSWindowDelegate {
     let model: PRViewerModel
     private let onClose: () -> Void
-    private let openBrowser: (URL) -> Void
 
     init(address: PullRequestAddress, service: any PullRequestDetailLoading, openBrowser: @escaping (URL) -> Void, openContentURL: ((URL) -> Void)? = nil, onClose: @escaping () -> Void) {
         model = PRViewerModel(address: address, service: service)
         self.onClose = onClose
-        self.openBrowser = openBrowser
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "\(address.repository.fullName) #\(address.number)"
         window.titleVisibility = .hidden
@@ -20,12 +18,10 @@ final class PRViewerWindowController: NSWindowController, NSWindowDelegate, NSTo
         window.setFrameAutosaveName("PRViewer")
         window.center()
         super.init(window: window)
+        NotificationCenter.default.addObserver(self, selector: #selector(toolbarItemsChanged(_:)), name: NSToolbar.willAddItemNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(toolbarItemsChanged(_:)), name: NSToolbar.didRemoveItemNotification, object: nil)
         window.delegate = self
         window.contentView = NSHostingView(rootView: PRViewerWindowView(model: model, openBrowser: openBrowser, openContentURL: openContentURL))
-        let toolbar = NSToolbar(identifier: "PRViewer")
-        toolbar.delegate = self
-        toolbar.displayMode = .iconOnly
-        window.toolbar = toolbar
         window.toolbarStyle = .unified
     }
 
@@ -33,6 +29,7 @@ final class PRViewerWindowController: NSWindowController, NSWindowDelegate, NSTo
 
     func present(url: URL) {
         if model.rows.isEmpty && model.loading.isEmpty { model.refresh() }
+        model.diffs?.load()
         model.focus(url: url)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
@@ -44,41 +41,33 @@ final class PRViewerWindowController: NSWindowController, NSWindowDelegate, NSTo
         onClose()
     }
 
-    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [NSToolbarItem.Identifier("summary"), .flexibleSpace, NSToolbarItem.Identifier("refresh"), NSToolbarItem.Identifier("copy"), NSToolbarItem.Identifier("browser")]
-    }
-
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
-
-    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar: Bool) -> NSToolbarItem? {
-        let item = NSToolbarItem(itemIdentifier: identifier)
-        if identifier.rawValue == "summary" {
-            let view = NSHostingView(rootView: PRViewerSummary(model: model))
-            view.frame = NSRect(origin: .zero, size: view.fittingSize)
-            item.view = view
-            item.label = "Summary"
-        } else {
-            let title: String, symbol: String, action: Selector
-            switch identifier.rawValue {
-            case "refresh": (title, symbol, action) = ("Refresh pull request", "arrow.clockwise", #selector(refresh))
-            case "copy": (title, symbol, action) = ("Copy pull request link", "link", #selector(copyLink))
-            case "browser": (title, symbol, action) = ("Open in Browser", "arrow.up.right.square", #selector(openInBrowser))
-            default: return nil
+    @objc private func toolbarItemsChanged(_ notification: Notification) {
+        guard let toolbar = notification.object as? NSToolbar,
+              let item = notification.userInfo?["item"] as? NSToolbarItem else { return }
+        guard item is NSTrackingSeparatorToolbarItem || item is NSSearchToolbarItem || item.itemIdentifier == .flexibleSpace || item.itemIdentifier.rawValue == "browser" else { return }
+        // Finish split-view/search updates before adjusting the native toolbar.
+        Task { @MainActor [weak self, weak toolbar] in
+            guard let toolbar, toolbar === self?.window?.toolbar else { return }
+            if item is NSTrackingSeparatorToolbarItem { item.isHidden = true }
+            guard let actions = toolbar.items.firstIndex(where: { $0.itemIdentifier.rawValue == "refresh" }) else { return }
+            for space in toolbar.items.indices.reversed() where space > actions && toolbar.items[space].itemIdentifier == .flexibleSpace {
+                toolbar.removeItem(at: space)
             }
-            item.label = title; item.toolTip = title
-            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
-            item.target = self; item.action = action
+            if actions > 0, toolbar.items[actions - 1].itemIdentifier == .flexibleSpace { return }
+            toolbar.insertItem(withItemIdentifier: .flexibleSpace, at: actions)
         }
-        return item
     }
 
-    func validateToolbarItem(_ item: NSToolbarItem) -> Bool { item.itemIdentifier.rawValue != "refresh" || !model.isWriting }
-    @objc private func refresh() { if !model.isWriting { model.refresh() } }
-    @objc private func copyLink() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(model.address.url.absoluteString, forType: .string)
+}
+
+private struct PRViewerSectionPicker: View {
+    @Bindable var model: PRViewerModel
+    var body: some View {
+        Picker("Pull request section", selection: $model.showsDiffs) {
+            Text("Conversation").tag(false)
+            Text("Files changed").tag(true)
+        }.pickerStyle(.segmented).labelsHidden().fixedSize().focusEffectDisabled()
     }
-    @objc private func openInBrowser() { openBrowser(model.address.url) }
 }
 
 private struct PRViewerSummary: View {
@@ -108,25 +97,73 @@ struct PRViewerWindowView: View {
     @State private var reviewsExpanded = true
     @State private var checksExpanded = true
     @State private var showsAllChecks = false
+    @State private var diffColumnVisibility: NavigationSplitViewVisibility = .automatic
 
     var body: some View {
         VStack(spacing: 0) {
-            if model.rows.isEmpty && !model.loading.isEmpty {
-                ProgressView("Loading pull request…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            if model.showsDiffs, let diffs = model.diffs {
+                PRDiffView(model: diffs, columnVisibility: $diffColumnVisibility, openBrowser: openBrowser, reviewModel: model)
             } else {
-                PRConversationWebView(model: model, revision: model.revision, focusRevision: model.focusRevision, openURL: openContentURL ?? openBrowser, openBrowser: openBrowser)
+                VStack(spacing: 0) {
+                    if model.rows.isEmpty && !model.loading.isEmpty {
+                        ProgressView("Loading pull request…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        PRConversationWebView(model: model, revision: model.revision, focusRevision: model.focusRevision, openURL: openContentURL ?? openBrowser, openBrowser: openBrowser)
+                    }
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) { footer }
+                .inspector(isPresented: .constant(true)) { sidebar.inspectorColumnWidth(320) }
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { footer }
-        .background(.regularMaterial)
-        .inspector(isPresented: .constant(true)) { sidebar.inspectorColumnWidth(320) }
+        .toolbar {
+            ToolbarItem(id: "diffSidebar", placement: .navigation) {
+                if model.showsDiffs {
+                    Button(diffColumnVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left") {
+                        diffColumnVisibility = diffColumnVisibility == .detailOnly ? .all : .detailOnly
+                    }.help(diffColumnVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar")
+                }
+            }
+            ToolbarItem(id: "summary", placement: .navigation) { PRViewerSummary(model: model) }
+            ToolbarItem(id: "section", placement: .navigation) {
+                if model.diffs != nil { PRViewerSectionPicker(model: model) }
+            }
+            ToolbarItem(id: "postedComment") {
+                if model.showsDiffs, let comment = model.diffs?.postedComment {
+                    Button("View posted comment", systemImage: "bubble.left") { openBrowser(comment.url) }
+                        .help("View posted comment on GitHub")
+                }
+            }
+            ToolbarItem(id: "refresh", placement: .primaryAction) {
+                Button("Refresh pull request", systemImage: "arrow.clockwise") {
+                    if model.showsDiffs { model.diffs?.refresh(); model.reloadThreads() } else { model.refresh() }
+                }.disabled(model.isWriting || (model.showsDiffs && model.diffs?.loading == true))
+                    .help("Refresh pull request")
+            }
+            ToolbarItem(id: "browser", placement: .primaryAction) {
+                Button("Open in Browser", systemImage: "arrow.up.right.square") { openBrowser(model.address.url) }
+                    .help("Open in Browser")
+            }
+            ToolbarItem(id: "fileSettings", placement: .primaryAction) {
+                if model.showsDiffs, let diffs = model.diffs { PRDiffToolbarSettings(model: diffs) }
+            }
+        }
         .frame(minWidth: 860, minHeight: 560)
         .sheet(isPresented: $model.composerPresented) { composer }
         .sheet(isPresented: $model.textEditorPresented) { textEditor }
         .sheet(isPresented: $model.mergeConfirmationPresented) { mergeConfirmation }
+        .alert("Delete comment?", isPresented: $model.deleteConfirmationPresented) {
+            Button("Cancel", role: .cancel) { model.cancelCommentDeletion() }
+            Button("Delete", role: .destructive) { model.deleteConfirmedComment() }
+        } message: {
+            Text("This will permanently delete your comment from GitHub.")
+        }
+        .onChange(of: model.showsDiffs) { _, value in
+            if value { model.diffs?.load(); if model.threadsCursor != nil { model.loadThreads() } }
+        }
         .onKeyPress("r", phases: .down) { event in
             guard event.modifiers.contains(.command), !model.isWriting else { return .ignored }
-            model.refresh(); return .handled
+            if model.showsDiffs { model.diffs?.refresh(); model.reloadThreads() } else { model.refresh() }
+            return .handled
         }
     }
 
@@ -462,7 +499,7 @@ struct PRViewerWindowView: View {
                     Button("Resolve conflicts") { openBrowser(model.address.url.appendingPathComponent("conflicts")) }
                         .buttonStyle(.bordered).controlSize(.small).help("Open conflict resolution on GitHub")
                 }
-                if summary.state == "OPEN" && !summary.isDraft {
+                if summary.state == "OPEN" && !summary.isDraft && summary.mergeable != "CONFLICTING" {
                     if summary.isMergeQueueEnabled == true {
                         Text("This branch uses a merge queue.").font(.caption).foregroundStyle(.secondary)
                         Button("Open merge queue on GitHub") { openBrowser(model.address.url) }

@@ -27,7 +27,7 @@
 - Polling interval is configurable, defaults to `60` seconds, and must be clamped to `15...900`.
 - Step links use `job.html_url#step:<stepNumber>:1` and fall back to `job.html_url`.
 - Source builds without OAuth credentials show a not-configured state instead of crashing.
-- No third-party libraries or GitHub SDKs.
+- No third-party libraries or GitHub SDKs, except the user-authorized, locally bundled @pierre/diffs PR renderer and its required dependencies.
 
 ## Architecture Outline
 - App target: SwiftUI macOS app with `MenuBarExtra` and `Settings` scenes.
@@ -1599,6 +1599,7 @@
 - Keep failures user-visible and actionable, especially around GitHub login, missing OAuth configuration, and API or auth errors.
 
 ## Decision Log
+- 2026-10-10: The user selected diffs.com for PR code viewing. Permit a pinned, locally bundled @pierre/diffs renderer and build tooling for that resource only; all GitHub transport stays in Swift. Implementation and validation are tracked in PLAN-pr-viewer.md:PV17.
 - 2026-10-08: T72 removes manual repository registration and its Settings pane. Notifications and Actions Insights search an authenticated GitHub repository catalogue, keep saved repositories visible without searching, and retain existing local preferences independently of discovery. Newly discovered repositories are not automatically watched; workflow details load only after configuring/selecting a repository. Search and refresh belong in the native window toolbar, adopting system search behavior and Liquid Glass on macOS 26.
 - 2026-10-08: PLAN-menu-bar.md:T36 replaces repository-scoped Mine/All discovery with global Authored by me / Needs my review categories and a native category menu. Configured repositories remain available for repository-specific settings; global discovery, grouping, sorting and local repository filtering include newly discovered repositories.
 - 2026-10-08: the menu-bar dashboard scope and repository filter join its sorting preferences in the existing Application Support settings file. PLAN-menu-bar.md:T35 owns restoration before the first fetch, persistence across app/popover sessions, and clearing a removed repository filter.

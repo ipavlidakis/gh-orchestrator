@@ -120,6 +120,17 @@ struct PRConversationWebView: NSViewRepresentable {
                 }
             case "replies":
                 if let id = value["id"], model.rows.contains(where: { $0.threadID == id }) { model.loadReplies(id) }
+            case "diff-thread":
+                if let id = value["id"] { model.openDiffThread(id) }
+            case "comment-menu":
+                guard let id = value["id"], model.canDeleteComment(id), !model.isWriting,
+                      let x = value["x"].flatMap(Double.init), let y = value["y"].flatMap(Double.init),
+                      x.isFinite, y.isFinite, let web else { return }
+                let menu = NSMenu()
+                let delete = NSMenuItem(title: "Delete comment", action: #selector(deleteComment(_:)), keyEquivalent: "")
+                delete.target = self; delete.representedObject = id
+                menu.addItem(delete)
+                menu.popUp(positioning: nil, at: NSPoint(x: x, y: web.isFlipped ? y : web.bounds.height - y), in: web)
             case "reply":
                 if let id = value["id"] { model.compose(threadID: id) }
             case "resolve":
@@ -136,6 +147,10 @@ struct PRConversationWebView: NSViewRepresentable {
             case "edit-text": model.editText()
             default: break
             }
+        }
+
+        @objc private func deleteComment(_ sender: NSMenuItem) {
+            if let id = sender.representedObject as? String { model.requestCommentDeletion(id) }
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

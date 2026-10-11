@@ -3,6 +3,164 @@ import XCTest
 @testable import GHOrchestratorCore
 
 final class PullRequestDetailServiceTests: XCTestCase {
+    func testCommentDeletionRechecksOwnershipPermissionAndConfirmsEachSupportedMutation() async throws {
+        for kind in ["IssueComment", "PullRequestReviewComment"] {
+            for outcome in ["confirmed", "other-author", "denied", "missing", "unconfirmed", "server-error"] {
+                let transport = RoutingGitHubHTTPTransport { request in
+                    let payload = try XCTUnwrap(try JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+                    let query = try XCTUnwrap(payload["query"] as? String)
+                    let variables = try XCTUnwrap(payload["variables"] as? [String: Any])
+                    XCTAssertEqual(variables["id"] as? String, "C1")
+                    if query.contains("query PRDeleteCommentPermission") {
+                        let node: Any = outcome == "missing" ? NSNull() : ["id": "C1", "__typename": kind, "viewerDidAuthor": outcome != "other-author", "viewerCanDelete": outcome != "denied"]
+                        return try JSONSerialization.data(withJSONObject: ["data": ["node": node]])
+                    }
+                    XCTAssertTrue(query.contains(kind == "IssueComment" ? "deleteIssueComment" : "deletePullRequestReviewComment"))
+                    if outcome == "server-error" { return Data(#"{"errors":[{"message":"Deletion rejected"}]}"#.utf8) }
+                    let token: Any = outcome == "unconfirmed" ? NSNull() : try XCTUnwrap(variables["token"] as? String)
+                    return try JSONSerialization.data(withJSONObject: ["data": ["action": ["clientMutationId": token]]])
+                }
+                let service = PullRequestDetailService(client: URLSessionGitHubAPIClient(transport: transport, credentialStore: StubGitHubCredentialStore()))
+                do {
+                    try await service.deleteComment(commentID: "C1")
+                    XCTAssertEqual(outcome, "confirmed")
+                } catch {
+                    XCTAssertNotEqual(outcome, "confirmed", error.localizedDescription)
+                }
+                let requests = await transport.recordedRequests()
+                XCTAssertEqual(requests.count, ["other-author", "denied", "missing"].contains(outcome) ? 1 : 2, "Never write without ownership/permission or retry a destructive mutation")
+            }
+        }
+    }
+
+    func testReviewThreadsPreserveOldSideRangesAndOutdatedLocations() async throws {
+        let response = #"{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"id":"T1","path":"old.swift","line":53,"diffSide":"LEFT","startLine":50,"startDiffSide":"LEFT","originalLine":55,"isResolved":false,"isOutdated":false,"comments":{"nodes":[],"pageInfo":{"hasNextPage":false}}},{"id":"T2","path":"new.swift","line":null,"diffSide":"RIGHT","originalLine":12,"isResolved":true,"isOutdated":true,"comments":{"nodes":[],"pageInfo":{"hasNextPage":false}}}],"pageInfo":{"hasNextPage":true,"endCursor":"next-threads"}}}}}}"#
+        let transport = StubGitHubHTTPTransport(results: [.success(data: Data(response.utf8), response: makeHTTPResponse(url: "https://api.github.com/graphql", statusCode: 200))])
+        let service = PullRequestDetailService(client: URLSessionGitHubAPIClient(transport: transport, credentialStore: StubGitHubCredentialStore()))
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/a/b/pull/1")!))
+        let page = try await service.threads(address, after: "previous-threads")
+        XCTAssertEqual(page.nodes.first?.diffSide, "LEFT")
+        XCTAssertEqual(page.nodes.first?.startLine, 50)
+        XCTAssertEqual(page.nodes.first?.startDiffSide, "LEFT")
+        XCTAssertEqual(page.nodes.first?.line, 53)
+        XCTAssertNil(page.nodes.last?.line)
+        XCTAssertEqual(page.nodes.last?.originalLine, 12)
+        XCTAssertEqual(page.nodes.last?.isOutdated, true)
+        XCTAssertEqual(try page.pageInfo.nextCursor(after: "previous-threads"), "next-threads")
+        let requests = await transport.recordedRequests()
+        let payload = try XCTUnwrap(try JSONSerialization.jsonObject(with: XCTUnwrap(requests.first?.httpBody)) as? [String: Any])
+        let query = try XCTUnwrap(payload["query"] as? String)
+        for field in ["diffSide", "startLine", "startDiffSide", "originalLine"] { XCTAssertTrue(query.contains(field), "The server must be asked for review coordinates") }
+        XCTAssertEqual((payload["variables"] as? [String: Any])?["after"] as? String, "previous-threads")
+    }
+
+    func testRevisionQueryDoesNotDeclareAnUnusedPaginationVariable() async throws {
+        let current = #"{"data":{"repository":{"pullRequest":{"id":"PR1","baseRefOid":"base","headRefOid":"head"}}}}"#
+        let transport = StubGitHubHTTPTransport(results: [.success(data: Data(current.utf8), response: makeHTTPResponse(url: "https://api.github.com/graphql", statusCode: 200))])
+        let service = PullRequestDetailService(client: URLSessionGitHubAPIClient(transport: transport, credentialStore: StubGitHubCredentialStore()))
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/a/b/pull/1")!))
+        _ = try await service.diffRevision(address)
+        let requests = await transport.recordedRequests()
+        let payload = try XCTUnwrap(try JSONSerialization.jsonObject(with: XCTUnwrap(requests.first?.httpBody)) as? [String: Any])
+        let query = try XCTUnwrap(payload["query"] as? String)
+        XCTAssertFalse(query.contains("$after"), "GitHub rejects revision checks with an unused pagination variable before viewed/comment mutations can run")
+    }
+
+    func testLineCommentsEncodeOldAndNewRangesAndRefuseStaleWrites() async throws {
+        let current = #"{"data":{"repository":{"pullRequest":{"id":"PR1","baseRefOid":"base","headRefOid":"head"}}}}"#
+        let confirmation = #"{"data":{"addPullRequestReview":{"pullRequestReview":{"state":"COMMENTED","comments":{"nodes":[{"id":"C1","body":"Please rename","bodyHTML":"<p>Please rename</p>","url":"https://github.com/a/b/pull/1#discussion_r1","createdAt":"2026-10-10T00:00:00Z"}]}}}}}"#
+        let stale = current.replacingOccurrences(of: "\"head\"", with: "\"new-head\"")
+        let responses = [current, confirmation, current, confirmation, stale, current, #"{"data":{"addPullRequestReview":null}}"#]
+        let transport = StubGitHubHTTPTransport(results: responses.map {
+            .success(data: Data($0.utf8), response: makeHTTPResponse(url: "https://api.github.com/graphql", statusCode: 200))
+        })
+        let service = PullRequestDetailService(client: URLSessionGitHubAPIClient(transport: transport, credentialStore: StubGitHubCredentialStore()))
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/a/b/pull/1")!))
+        let revision = PRDiffRevision(id: "PR1", baseRefOid: "base", headRefOid: "head")
+        let oneLine = try XCTUnwrap(PRDiffLineSelection(path: "Test.swift", start: 2, end: 2, startSide: .left, endSide: .left))
+        let range = try XCTUnwrap(PRDiffLineSelection(path: "Test.swift", start: 2, end: 4, startSide: .right, endSide: .right))
+        for selection in [oneLine, range] {
+            let comment = try await service.addLineComment(address, selection: selection, body: "Please rename", expected: revision)
+            XCTAssertEqual(comment.id, "C1")
+        }
+        for message in ["changed on GitHub", "did not confirm"] {
+            do { _ = try await service.addLineComment(address, selection: range, body: "Please rename", expected: revision); XCTFail("Expected \(message)") }
+            catch { XCTAssertTrue(error.localizedDescription.contains(message), error.localizedDescription) }
+        }
+        let requests = await transport.recordedRequests()
+        XCTAssertEqual(requests.count, 7, "Stale writes stop before mutation and submissions never retry")
+        for (index, side) in [(1, "LEFT"), (3, "RIGHT")] {
+            let payload = try XCTUnwrap(try JSONSerialization.jsonObject(with: XCTUnwrap(requests[index].httpBody)) as? [String: Any])
+            let variables = try XCTUnwrap(payload["variables"] as? [String: Any])
+            let input = try XCTUnwrap(variables["input"] as? [String: Any])
+            XCTAssertEqual(input["commitOID"] as? String, "head")
+            XCTAssertEqual(input["event"] as? String, "COMMENT")
+            let thread = try XCTUnwrap((input["threads"] as? [[String: Any]])?.first)
+            XCTAssertEqual(thread["side"] as? String, side)
+            XCTAssertEqual(thread["line"] as? Int, index == 1 ? 2 : 4)
+            XCTAssertEqual(thread["startLine"] as? Int, index == 1 ? nil : 2)
+            XCTAssertEqual(thread["startSide"] as? String, index == 1 ? nil : "RIGHT")
+        }
+    }
+
+    func testPatchLimitsAndLineSelectionRejectInvalidCoordinates() throws {
+        for patch in [String(repeating: "x", count: 1_048_577), String(repeating: "+x\n", count: 20_001), String(repeating: "+x\r\n", count: 20_001)] {
+            let data = try JSONSerialization.data(withJSONObject: ["filename": "large.txt", "sha": "blob", "patch": patch])
+            let value = try JSONDecoder().decode(PRDiffPatch.self, from: data)
+            XCTAssertNil(value.patch); XCTAssertNotNil(value.unavailable)
+        }
+        XCTAssertNil(PRDiffLineSelection(path: "", start: 1, end: 2, startSide: .right, endSide: .right))
+        XCTAssertNil(PRDiffLineSelection(path: "x", start: 0, end: 2, startSide: .right, endSide: .right))
+        XCTAssertNil(PRDiffLineSelection(path: "x", start: 4, end: 2, startSide: .left, endSide: .left))
+    }
+
+    func testDiffFilesLoadViewedStateAndRESTPatchPagination() async throws {
+        let snapshot = #"{"data":{"repository":{"pullRequest":{"id":"PR1","baseRefOid":"base","headRefOid":"head","changedFiles":1,"files":{"nodes":[{"path":"Sources/Test.swift","additions":1,"deletions":1,"changeType":"RENAMED","viewerViewedState":"VIEWED"}],"pageInfo":{"hasNextPage":false}}}}}}"#
+        let patches = #"[{"filename":"Sources/Test.swift","previous_filename":"Old.swift","sha":"blob","patch":"@@ -1 +1 @@\n-old\n+new"}]"#
+        let transport = StubGitHubHTTPTransport(results: [snapshot, patches].map {
+            .success(data: Data($0.utf8), response: makeHTTPResponse(url: "https://api.github.com/graphql", statusCode: 200))
+        })
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/a/b/pull/1")!))
+        let service = PullRequestDetailService(client: URLSessionGitHubAPIClient(transport: transport, credentialStore: StubGitHubCredentialStore()))
+        let state = try await service.diffSnapshot(address, after: nil)
+        XCTAssertTrue(try XCTUnwrap(state.files.nodes.first).isViewed)
+        let files = try await service.diffPatches(address, page: 2)
+        XCTAssertEqual(files.first?.previousFilename, "Old.swift")
+        XCTAssertTrue(files.first?.patch?.contains("+new") == true)
+        let requests = await transport.recordedRequests()
+        let url = try XCTUnwrap(requests.last?.url)
+        XCTAssertEqual(url.path, "/repos/a/b/pulls/1/files")
+        XCTAssertEqual(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems, [URLQueryItem(name: "per_page", value: "100"), URLQueryItem(name: "page", value: "2")])
+    }
+
+    func testFileViewedWritesConfirmGitHubAndRejectStaleOrUnconfirmedState() async throws {
+        let current = #"{"data":{"repository":{"pullRequest":{"id":"PR1","baseRefOid":"base","headRefOid":"head"}}}}"#
+        let confirmation = #"{"data":{"action":{"pullRequest":{"id":"PR1","baseRefOid":"base","headRefOid":"head"}}}}"#
+        let stale = current.replacingOccurrences(of: "\"head\"", with: "\"new-head\"")
+        let transport = StubGitHubHTTPTransport(results: [current, confirmation, current, confirmation, current, #"{"data":{"action":null}}"#, stale].map {
+            .success(data: Data($0.utf8), response: makeHTTPResponse(url: "https://api.github.com/graphql", statusCode: 200))
+        })
+        let service = PullRequestDetailService(client: URLSessionGitHubAPIClient(transport: transport, credentialStore: StubGitHubCredentialStore()))
+        let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/a/b/pull/1")!))
+        let revision = PRDiffRevision(id: "PR1", baseRefOid: "base", headRefOid: "head")
+        try await service.setFileViewed(address, path: "Sources/Test.swift", viewed: true, expected: revision)
+        try await service.setFileViewed(address, path: "Sources/Test.swift", viewed: false, expected: revision)
+        for message in ["did not confirm", "changed on GitHub"] {
+            do { try await service.setFileViewed(address, path: "Sources/Test.swift", viewed: true, expected: revision); XCTFail("Expected \(message)") }
+            catch { XCTAssertTrue(error.localizedDescription.contains(message), error.localizedDescription) }
+        }
+        let requests = await transport.recordedRequests()
+        XCTAssertEqual(requests.count, 7, "No write retries or writes after a stale revision")
+        for (index, operation) in [(1, "markFileAsViewed"), (3, "unmarkFileAsViewed")] {
+            let body = try XCTUnwrap(try JSONSerialization.jsonObject(with: XCTUnwrap(requests[index].httpBody)) as? [String: Any])
+            XCTAssertTrue((body["query"] as? String)?.contains(operation) == true)
+            let variables = try XCTUnwrap(body["variables"] as? [String: Any])
+            let input = try XCTUnwrap(variables["input"] as? [String: Any])
+            XCTAssertEqual(input["path"] as? String, "Sources/Test.swift")
+            XCTAssertEqual(input["pullRequestId"] as? String, "PR1")
+        }
+    }
+
     func testRepoOnlyTokenLoadsSummaryAndConfirmsReviewerRequestsWithoutTeamScopes() async throws {
         let address = try XCTUnwrap(PullRequestAddress(url: URL(string: "https://github.com/a/b/pull/1")!))
         let reviewRequests: [String: Any] = [

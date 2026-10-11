@@ -100,6 +100,9 @@ public struct PRComment: Decodable, Identifiable, Equatable, Sendable {
     public let createdAt: Date
     public let author: PRActor?
     public let pullRequestReview: ReviewReference?
+    public let viewerDidAuthor: Bool?
+    public let viewerCanDelete: Bool?
+    public var canDelete: Bool { viewerDidAuthor == true && viewerCanDelete == true }
     public var viewerCanReact: Bool?
     public var reactionGroups: [PRReactionGroup]?
 
@@ -130,6 +133,10 @@ public struct PRThread: Decodable, Identifiable, Sendable {
     public let id: String
     public let path: String
     public let line: Int?
+    public let diffSide: String?
+    public let startLine: Int?
+    public let startDiffSide: String?
+    public let originalLine: Int?
     public var isResolved: Bool
     public let isOutdated: Bool
     public let viewerCanReply: Bool?
@@ -318,11 +325,14 @@ public struct PRActivity: Decodable, Identifiable, Equatable, Sendable {
     public let createdAt: Date
     public let author: PRActor?
     public let state: String?
-    public let reviewCommentCount: Int?
+    public var reviewCommentCount: Int?
+    public let viewerDidAuthor: Bool?
+    public let viewerCanDelete: Bool?
+    public var canDelete: Bool { kind == "IssueComment" && viewerDidAuthor == true && viewerCanDelete == true }
     public var viewerCanReact: Bool?
     public var reactionGroups: [PRReactionGroup]?
 
-    private enum CodingKeys: String, CodingKey { case id, __typename, body, bodyHTML, url, createdAt, submittedAt, author, actor, state, commit, comments, viewerCanReact, reactionGroups }
+    private enum CodingKeys: String, CodingKey { case id, __typename, body, bodyHTML, url, createdAt, submittedAt, author, actor, state, commit, comments, viewerCanReact, reactionGroups, viewerDidAuthor, viewerCanDelete }
     private struct ReviewComments: Decodable { let totalCount: Int }
     private struct Commit: Decodable {
         let oid: String
@@ -356,6 +366,8 @@ public struct PRActivity: Decodable, Identifiable, Equatable, Sendable {
         }
         state = try c.decodeIfPresent(String.self, forKey: .state)
         reviewCommentCount = try c.decodeIfPresent(ReviewComments.self, forKey: .comments)?.totalCount
+        viewerDidAuthor = try c.decodeIfPresent(Bool.self, forKey: .viewerDidAuthor)
+        viewerCanDelete = try c.decodeIfPresent(Bool.self, forKey: .viewerCanDelete)
         viewerCanReact = try c.decodeIfPresent(Bool.self, forKey: .viewerCanReact)
         reactionGroups = try c.decodeIfPresent([PRReactionGroup].self, forKey: .reactionGroups)
     }
@@ -364,5 +376,6 @@ public struct PRActivity: Decodable, Identifiable, Equatable, Sendable {
         id = comment.id; kind = "IssueComment"; body = comment.body; bodyHTML = comment.bodyHTML
         url = comment.url; createdAt = comment.createdAt; author = comment.author; state = nil; reviewCommentCount = nil
         viewerCanReact = comment.viewerCanReact; reactionGroups = comment.reactionGroups
+        viewerDidAuthor = comment.viewerDidAuthor; viewerCanDelete = comment.viewerCanDelete
     }
 }
